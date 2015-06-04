@@ -40,18 +40,27 @@ typedef enum BE_Log_Message_Class_T
 #define BE_Cross_SwapGroup32LE(a, b, c, d) d, c, b, a,
 #endif
 
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline char *BE_Cross_ultoa_dec(uint32_t n, char *buffer)
 {
 	sprintf(buffer, "%"PRIu32, n);
 	return buffer;
 }
 
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline char *BE_Cross_ltoa_dec(int32_t n, char *buffer)
 {
 	sprintf(buffer, "%"PRId32, n);
 	return buffer;
 }
 
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline char *BE_Cross_itoa_dec(int16_t n, char *buffer)
 {
 	sprintf(buffer, "%"PRId16, n);
@@ -62,10 +71,16 @@ inline char *BE_Cross_itoa_dec(int16_t n, char *buffer)
 void BE_Cross_LogMessage(BE_Log_Message_Class_T msgClass, const char *format, ...);
 // More (possibly semi) standard C functions emulated,
 // taking English locale into account (and more, but NOT all)
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline int BE_Cross_toupper(int c)
 {
 	return ((c >= 'a') && (c <= 'z')) ? (c - 'a' + 'A') : c;
 }
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline int BE_Cross_tolower(int c)
 {
 	return ((c >= 'A') && (c <= 'Z')) ? (c - 'A' + 'a') : c;
@@ -81,6 +96,9 @@ int BE_Cross_strcasecmp(const char *s1, const char *s2);
  * ASSUMPTIONS: The pointers do point to valid buffers, there's enough room for
  * a null terminator, and the source and destination buffers do NOT overlap.
  */
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline char *BE_Cross_safeandfastcstringcopy(char *dest, char *destEnd, const char *src)
 {
 	char ch;
@@ -97,11 +115,17 @@ inline char *BE_Cross_safeandfastcstringcopy(char *dest, char *destEnd, const ch
 }
 
 // A few convenience functions for concatenating multiple strings together
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline char *BE_Cross_safeandfastcstringcopy_2strs(char *dest, char *destEnd, const char *src0, const char *src1)
 {
 	return BE_Cross_safeandfastcstringcopy(BE_Cross_safeandfastcstringcopy(dest, destEnd, src0), destEnd, src1);
 }
 
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline char *BE_Cross_safeandfastcstringcopy_3strs(char *dest, char *destEnd, const char *src0, const char *src1, const char *src2)
 {
 	return BE_Cross_safeandfastcstringcopy(BE_Cross_safeandfastcstringcopy(BE_Cross_safeandfastcstringcopy(dest, destEnd, src0), destEnd, src1), destEnd, src2);
@@ -112,9 +136,21 @@ inline char *BE_Cross_safeandfastcstringcopy_3strs(char *dest, char *destEnd, co
 // this one is given a different name so it's easy to swap in case of a need
 typedef FILE * BE_FILE_T;
 
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline BE_FILE_T BE_Cross_IsFileValid(BE_FILE_T fp) { return fp; }
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline int BE_Cross_seek(BE_FILE_T fp, long int offset, int origin) { return fseek(fp, offset, origin); }
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline int BE_Cross_putc(int character, BE_FILE_T fp) { return putc(character, fp); }
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline int BE_Cross_getc(BE_FILE_T fp) { return getc(fp); }
 
 int32_t BE_Cross_FileLengthFromHandle(BE_FILE_T fp);
@@ -122,6 +158,9 @@ int32_t BE_Cross_FileLengthFromHandle(BE_FILE_T fp);
 // Semi cross-platform file opening wrappers, hiding search paths
 BE_FILE_T BE_Cross_open_for_reading(const char *filename);
 BE_FILE_T BE_Cross_open_for_overwriting(const char *filename);
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline void BE_Cross_close(BE_FILE_T fp) { fclose(fp); }
 
 // Outputs a list of file names matching given name suffix from a corresponding
@@ -213,6 +252,9 @@ void BE_Cross_Brandomize(void);
 int16_t BE_Cross_Brandom(int16_t num);
 
 // Hack for Catacomb Abyss' INTRO and LOADSCN
+#if defined(__AROS__) || defined(__AMIGA__)
+static
+#endif
 inline int32_t BE_Mem_FarCoreLeft(void)
 {
 	return 500000;

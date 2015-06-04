@@ -603,6 +603,14 @@ static void BEL_Cross_mkdir(const char *path)
 	/*** TODO - Any reason to save (cache) DIR handles? ***/
 	DIR *dir;
 	struct dirent *direntry;
+#if defined(__AROS__) || defined(__AMIGA__)
+	char *cwdstr[1024];
+	if (!strncmp(searchdir, ".", sizeof(cwdstr)))
+		getcwd(cwdstr, sizeof(cwdstr));
+	else
+		strncpy(cwdstr, searchdir, sizeof(cwdstr));
+	#define searchdir cwdstr
+#endif
 	dir = opendir(searchdir);
 	if (!dir)
 		return NULL;
@@ -645,6 +653,9 @@ static void BEL_Cross_mkdir(const char *path)
 	// These work in case fullpathPtr == fullpathEnd, and also if not
 	--fullpathPtr;
 	*fullpathPtr = '\0';
+#if defined(__AROS__) || defined(__AMIGA__)
+	#undef searchdir
+#endif
 
 	return fopen(fullpath, "wb");
 }
@@ -790,7 +801,16 @@ int BE_Cross_GetSortedFilenames(char *outFilenames, int maxNum, int strLenBound,
 	// For the sake of consistency we go over all search paths (relevant for existing files)
 	for (int loopvar = 0; loopvar < g_be_searchpaths_num; ++loopvar)
 	{
+#if defined(__AROS__) || defined(__AMIGA__)
+		char *cwdstr[1024];
+		if (!strncmp(g_be_searchpaths[loopvar], ".", sizeof(cwdstr)))
+			getcwd(cwdstr, sizeof(cwdstr));
+		else
+			strncpy(cwdstr, g_be_searchpaths[loopvar], sizeof(cwdstr));
+		dir = opendir(cwdstr);
+#else
 		dir = opendir(g_be_searchpaths[loopvar]);
+#endif
 		if (!dir)
 		{
 			continue;

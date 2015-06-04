@@ -4,7 +4,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#if defined(__AROS__) || defined(__AMIGA__)
+#include <stdarg.h>
+//#include "be_st_amiga.h"
+#else
 #include "be_st_sdl.h"
+#endif
 
 // Direct accesses to any of these functions should be minimized
 

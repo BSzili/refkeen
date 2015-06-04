@@ -4,11 +4,18 @@
 #define __REFKEEN_CONFIG_H__
 
 // BIG ***FIXME*** - Should probably be externally generated instead
+
+#ifdef __AROS__
+#define REFKEEN_ARCH_LITTLE_ENDIAN
+#elif defined(__AMIGA__)
+#define REFKEEN_ARCH_BIG_ENDIAN
+#else
 #include "SDL_endian.h"
 #if SDL_BYTEORDER == SDL_LIL_ENDIAN
 #define REFKEEN_ARCH_LITTLE_ENDIAN
 #elif SDL_BYTEORDER == SDL_BIG_ENDIAN
 #define REFKEEN_ARCH_BIG_ENDIAN
+#endif
 #endif
 
 #ifdef _WIN32 // Should also cover _WIN64
