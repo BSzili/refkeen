@@ -94,7 +94,7 @@ static int BEL_ST_ConvertEGASignalToEGAEntry(int color)
 
 static void BEL_ST_SetPalette(int colors, int firstcolor, const uint8_t *palette)
 {
-	ULONG palette32[256 * 3 + 2];
+	ULONG palette32[16 * 3 + 2];
 	int paletteColor;
 	int entry;
 

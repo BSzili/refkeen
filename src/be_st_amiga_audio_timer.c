@@ -38,7 +38,7 @@ static void MySoundUserHook(void)
 	g_sdlTimeCount++;
 }
 
-#if defined(__AMIGA__)
+
 APTR g_timerIntHandle = NULL;
 
 static void BEL_ST_TimerInterrupt(register APTR *data __asm("a1"))
@@ -68,76 +68,6 @@ static void BEL_ST_RemTimerInt(void)
 	g_timerIntHandle = NULL;
 }
 
-#else
-
-BOOL g_runThread = FALSE;
-struct Task *task;
-
-static void timerThreadFunc(void)
-{
-	struct MsgPort *timerMsgPort;
-	struct timerequest *timerIO;
-
-	if ((timerMsgPort = CreateMsgPort()))
-	{
-		if ((timerIO = (struct timerequest *)CreateIORequest(timerMsgPort, sizeof(struct timerequest))))
-		{
-			if (!OpenDevice("timer.device", UNIT_MICROHZ, (struct IORequest *)timerIO, 0))
-			{
-				timerIO->tr_node.io_Command = TR_ADDREQUEST;
-
-				while (g_runThread)
-				{
-					g_sdlCallbackSDFuncPtr();
-
-					timerIO->tr_time.tv_secs = 0;
-					timerIO->tr_time.tv_micro = g_timerDelay;
-					DoIO((struct IORequest *)timerIO);
-				}
-
-				CloseDevice((struct IORequest *)timerIO);
-			}
-			DeleteIORequest((struct IORequest *)timerIO);
-		}
-		DeleteMsgPort(timerMsgPort);
-	}
-}
-
-static BOOL BEL_ST_AddTimerInt(void)
-{
-	struct TagItem processTags[] =
-	{
-		{NP_Entry, (IPTR)timerThreadFunc},
-#ifdef __MORPHOS__
-		{NP_CodeType, CODETYPE_PPC},
-#endif
-		{NP_Priority, 10},
-		{TAG_DONE, 0}
-	};
-
-	if (g_runThread)
-		return TRUE;
-
-	g_runThread = TRUE;
-
-	if ((task = (struct Task *)CreateNewProc(processTags)))
-	{
-		//StartTimer();
-		return TRUE;
-	}
-
-	printf("Couldn't start the timer\n");
-
-	return FALSE;
-}
-
-static void BEL_ST_RemTimerInt(void)
-{
-	g_runThread = FALSE;
-	Delay(50);
-	SD_SetUserHook(NULL);
-}
-#endif
 
 void BE_ST_InitAudio(void)
 {
