@@ -790,7 +790,11 @@ void Quit (const id0_char_t *error, ...)
 void	TEDDeath(void)
 {
 	ShutdownId();
+#if defined(__AMIGA__)
+#warning FIXME
+#else
 	execlp("TED5.EXE","TED5.EXE","/LAUNCH",NULL);
+#endif
 }
 
 //===========================================================================
