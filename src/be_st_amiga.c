@@ -221,25 +221,8 @@ static void BEL_ST_HandleEmuKeyboardEvent(bool isPressed, emulatedDOSKeyEvent ke
 	}
 }
 
-#ifdef __MORPHOS__
-static struct InputEvent *IN_KeyboardHandlerFunc(void);
-static struct EmulLibEntry BEL_ST_InputHandler =
-{
-	TRAP_LIB, 0, (void (*)(void))IN_KeyboardHandlerFunc
-};
-
-static struct InputEvent *IN_KeyboardHandlerFunc()
-{
-	struct InputEvent *moo = (struct InputEvent *)REG_A0;
-	//APTR id = (APTR)REG_A1;
-#elif defined(__AMIGA__)
 static struct InputEvent * __saveds BEL_ST_InputHandler(register struct InputEvent *moo __asm("a0"), register APTR id __asm("a1"))
 {
-#else
-AROS_UFH2(struct InputEvent *, BEL_ST_InputHandler, AROS_UFHA(struct InputEvent *, moo, A0), AROS_UFHA(APTR, id, A1))
-{
-	AROS_USERFUNC_INIT
-#endif
 	struct InputEvent *coin;
 	int scanCode, isPressed;
 
@@ -288,9 +271,6 @@ AROS_UFH2(struct InputEvent *, BEL_ST_InputHandler, AROS_UFHA(struct InputEvent 
 	} while (coin);
 
 	return moo;
-#if defined(__AROS__)
-	AROS_USERFUNC_EXIT
-#endif
 }
 
 void BE_ST_InitAll(void)

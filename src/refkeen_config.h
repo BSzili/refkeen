@@ -5,9 +5,7 @@
 
 // BIG ***FIXME*** - Should probably be externally generated instead
 
-#ifdef __AROS__
-#define REFKEEN_ARCH_LITTLE_ENDIAN
-#elif defined(__AMIGA__)
+#ifdef __AMIGA__
 #define REFKEEN_ARCH_BIG_ENDIAN
 #else
 #include "SDL_endian.h"

@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#if defined(__AROS__) || defined(__AMIGA__)
+#ifdef __AMIGA__
 #include <stdarg.h>
 //#include "be_st_amiga.h"
 #else
