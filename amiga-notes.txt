@@ -66,11 +66,40 @@ cat3d_exe_main
 				ThreeDRefresh
 					DrawWallList
 						ScaleWalls
+							ExecuteCompScale
+								BE_ST_EGAUpdateGFXPixel4bpp
 					DrawScaleds
 						ScaleShape
+							ExecuteCompShape
+								ExecuteCompScale
+									BE_ST_EGAUpdateGFXPixel4bpp
+					DrawHand
+						VW_MaskBlock
+							BE_ST_EGAUpdateGFXByte
+							BE_ST_EGAFetchGFXByte
 
-ExecuteCompScale
-	BE_ST_EGAUpdateGFXPixel4bpp
+RedrawStatusWindow
+	DrawNum
+		DrawChar
+			BE_ST_EGAUpdateGFXByteScrToScr
+	DrawHealth
+		VW_DrawPic
+			VW_MemToScreen
+				BE_ST_EGAUpdateGFXBuffer
+		LatchDrawPic
+			BE_ST_EGAUpdateGFXBufferScrToScr
+	DrawRadar
+		LatchDrawPic
+			BE_ST_EGAUpdateGFXBufferScrToScr
+		RadarBlip
+			BE_ST_EGAUpdateGFXPixel4bpp
+		DrawNSEWIcons
+			VW_MaskBlock
+				BE_ST_EGAUpdateGFXByte
+				BE_ST_EGAFetchGFXByte
+	DrawGems
+		LatchDrawPic
+			BE_ST_EGAUpdateGFXBufferScrToScr
 
 // drawing functions
 void BE_ST_EGAUpdateGFXByte(uint16_t destOff, uint8_t srcVal, uint16_t planeMask)
@@ -108,7 +137,10 @@ id0_unsigned_t screenloc[3]= {0x900,0x2000,0x3700};
 // functions to be optimized
 VW_MaskBlock
 ExecuteCompScale
-BuildCompScale 
+ExecuteCompShape
+BuildCompScale
+BuildCompShape
+ExecuteCompScale
 ClearScreen
 VW_Bar
 FixedByFrac
@@ -118,3 +150,50 @@ GE_SaveGame
 	USL_SaveGame
 		SaveTheGame
 id0_boolean_t	LoadTheGame(BE_FILE_T file);
+loadedgame
+ex_loadedgame
+USL_WriteConfig(void)
+USL_DoSaveGame
+BE_Cross_open_for_overwriting
+
+SetupGameLevel
+	CA_CacheMap
+
+FizzleOut
+GameLoop
+	DrawEnterScreen
+
+VerifyGateExit
+playstate == ex_warped
+
+DEBUG_OVERHEAD
+
+// key choices
+BE_ST_AltControlScheme_Push();
+BE_ST_AltControlScheme_Pop();
+BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes
+USL_CtlDialog // cat3d
+GetKeyChoice
+sc_N
+Keyboard[49]
+sc_Y
+Keyboard[21]
+BE_ST_ShortSleep
+
+// 32-bit (fixed) obj fields
+distance
+	100
+	#define GLOBAL1		(1l<<16)
+	#define TILEGLOBAL  GLOBAL1
+	#define TILESHIFT	16l
+	MoveObj
+
+viewheight, viewx OK, DRAW
+	TransformActor
+
+xl, xh, yl, yh OK
+	CalcBounds
+	 ob->x - ob->size; 
+	 
+size
+	MINDIST
