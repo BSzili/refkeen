@@ -303,6 +303,13 @@ void BE_ST_InitAll(void)
 	BE_ST_ShutdownAll();
 }
 
+void __chkabort(void)
+{
+#ifdef DEBUG
+	BE_ST_ShutdownAll();
+#endif
+}
+
 void BE_ST_ShutdownAll(void)
 {
 	if (g_inputReq)
