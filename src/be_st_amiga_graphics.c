@@ -33,6 +33,8 @@
 #define IPTR ULONG
 #endif
 
+#define ENABLE_TEXT
+
 extern struct Custom custom;
 
 
@@ -40,7 +42,7 @@ extern struct Custom custom;
 // (well, not on change between modes 0xD and 0xE, both sharing planar A000:0000)
 union bufferType {
 	uint8_t egaGfx[4][0x10000]; // Contents of A000:0000 (4 planes)
-	uint8_t text[TXT_COLS_NUM*TXT_ROWS_NUM*2]; // Textual contents of B800:0000
+	//uint8_t text[TXT_COLS_NUM*TXT_ROWS_NUM*2]; // Textual contents of B800:0000
 };
 
 // EGA 16-color palette in LoadRGB32 friendly format
@@ -67,6 +69,7 @@ struct Screen *g_amigaScreen = NULL;
 struct Window *g_amigaWindow = NULL;
 
 static union bufferType *g_sdlVidMem;
+static uint8_t g_textMemory[TXT_COLS_NUM*TXT_ROWS_NUM*2];
 static int g_sdlScreenMode = 3;
 static int g_sdlTexWidth, g_sdlTexHeight;
 static int16_t g_sdlSplitScreenLine = -1;
@@ -75,9 +78,20 @@ static struct BitMap g_screenBitMaps[4];
 static int g_bitMapOffsets[4] = {0, PAGE1START, PAGE2START, PAGE3START};
 static struct DBufInfo *dbuf = NULL;
 static struct UCopList *ucl = NULL;
+#ifdef ENABLE_TEXT
+static UWORD *g_vgaFont = NULL;
+static int g_sdlTxtCursorPosX, g_sdlTxtCursorPosY;
+static bool g_sdlTxtCursorEnabled = true;
+static int g_sdlTxtColor = 7, g_sdlTxtBackground = 0;
+extern const uint8_t g_vga_8x16TextFont[256*8*16];
+#endif
 
+void BEL_ST_UpdateHostDisplay(void);
 void BE_ST_MarkGfxForUpdate(void)
 {
+#ifdef ENABLE_TEXT
+	BEL_ST_UpdateHostDisplay();
+#endif
 }
 
 /* Gets a value represeting 6 EGA signals determining a color number and
@@ -190,7 +204,9 @@ static BOOL BEL_ST_ReopenScreen(void)
 
 #warning HACK!
 	if (g_sdlTexWidth > GFX_TEX_WIDTH)
-		ns.ViewModes = HIRES;
+		ns.ViewModes |= HIRES;
+	if (g_sdlTexHeight > GFX_TEX_HEIGHT)
+		ns.ViewModes |= LACE;
 
 	if ((g_amigaScreen = OpenScreenTagList(&ns, screenTags)))
 	{
@@ -222,6 +238,26 @@ static BOOL BEL_ST_ReopenScreen(void)
 void BE_ST_InitGfx(void)
 {
 	g_sdlVidMem = AllocVec(sizeof(*g_sdlVidMem), MEMF_CHIP | MEMF_CLEAR);
+#ifdef ENABLE_TEXT
+	g_vgaFont = AllocVec(16*16*256, MEMF_CHIP | MEMF_CLEAR);
+	UWORD *ptr = g_vgaFont;
+
+	const uint8_t *currCharFontPtr;
+	int currCharPixX, currCharPixY;
+
+	for (int currChar = 0; currChar < 256; currChar++)
+	{
+		currCharFontPtr = g_vga_8x16TextFont + currChar*16*8;
+		for (currCharPixY = 0; currCharPixY < 16; ++currCharPixY)
+		{
+			for (currCharPixX = 0; currCharPixX < 8; ++currCharPixX, ++currCharFontPtr)
+			{
+				*ptr |= *currCharFontPtr << (15 - currCharPixX);
+			}
+			ptr++;
+		}
+	}
+#endif
 
 	BE_ST_SetScreenMode(3);
 }
@@ -230,6 +266,9 @@ void BE_ST_ShutdownGfx(void)
 {
 	BEL_ST_CloseScreen();
 	FreeVec(g_sdlVidMem);
+#ifdef ENABLE_TEXT
+	FreeVec(g_vgaFont);
+#endif
 }
 
 static int BEL_ST_AddressToBitMap(uint16_t crtc)
@@ -275,7 +314,7 @@ void BE_ST_SetScreenStartAddress(uint16_t crtc)
 
 uint8_t *BE_ST_GetTextModeMemoryPtr(void)
 {
-	return g_sdlVidMem->text;
+	return g_textMemory;
 }
 
 void BE_ST_SetBorderColor(uint8_t color)
@@ -637,7 +676,20 @@ void BE_ST_SetScreenMode(int mode)
 	switch (mode)
 	{
 	case 3:
+#ifdef ENABLE_TEXT
+		g_sdlTxtColor = 7;
+		g_sdlTxtBackground = 0;
+		g_sdlTxtCursorPosX = g_sdlTxtCursorPosY = 0;
+		BE_ST_clrscr();
+		g_sdlTexWidth = GFX_TEX_WIDTH;
+		g_sdlTexHeight = 2*GFX_TEX_HEIGHT;
+		g_sdlSplitScreenLine = -1;
+		// TODO should the contents of A0000 be backed up?
+		memset(g_sdlVidMem->egaGfx, 0, sizeof(g_sdlVidMem->egaGfx));
+		BEL_ST_ReopenScreen();
+#else
 		BEL_ST_CloseScreen();
+#endif
 		break;
 	case 4:
 		// CGA? yuck!
@@ -671,34 +723,164 @@ void BE_ST_SetScreenMode(int mode)
 
 void BE_ST_textcolor(int color)
 {
+	g_sdlTxtColor = color;
 }
 
 void BE_ST_textbackground(int color)
 {
+	g_sdlTxtBackground = color;
 }
 
 void BE_ST_clrscr(void)
 {
+	uint8_t *currMemByte = g_textMemory;
+	for (int i = 0; i < 2*TXT_COLS_NUM*TXT_ROWS_NUM; ++i)
+	{
+		*(currMemByte++) = ' ';
+		*(currMemByte++) = g_sdlTxtColor | (g_sdlTxtBackground << 4);
+	}
+	BEL_ST_UpdateHostDisplay();
 }
 
 void BE_ST_MoveTextCursorTo(int x, int y)
 {
+	g_sdlTxtCursorPosX = x;
+	g_sdlTxtCursorPosY = y;
+	BEL_ST_UpdateHostDisplay();
 }
 
 void BE_ST_ToggleTextCursor(bool isEnabled)
 {
+	g_sdlTxtCursorEnabled = isEnabled;
+}
+
+static uint8_t *BEL_ST_printchar(uint8_t *currMemByte, char ch, bool iscolored, bool requirecrchar)
+{
+	if (ch == '\t')
+	{
+		int nextCursorPosX = (g_sdlTxtCursorPosX & ~7) + 8;
+		for (; g_sdlTxtCursorPosX != nextCursorPosX; ++g_sdlTxtCursorPosX)
+		{
+			*(currMemByte++) = ' ';
+			*currMemByte = iscolored ? (g_sdlTxtColor | (g_sdlTxtBackground << 4)) : *currMemByte;
+			++currMemByte;
+		}
+	}
+	else if (ch == '\r')
+	{
+		if (!requirecrchar)
+			return currMemByte; // Do nothing
+
+		g_sdlTxtCursorPosX = 0; // Carriage return
+		currMemByte = g_textMemory + 2*TXT_COLS_NUM*g_sdlTxtCursorPosY;
+	}
+	else if (ch == '\n')
+	{
+		if (!requirecrchar)
+		{
+			g_sdlTxtCursorPosX = 0; // Carriage return
+		}
+		++g_sdlTxtCursorPosY;
+		currMemByte = g_textMemory + 2*(g_sdlTxtCursorPosX+TXT_COLS_NUM*g_sdlTxtCursorPosY);
+	}
+	else
+	{
+		*(currMemByte++) = ch;
+		*currMemByte = iscolored ? (g_sdlTxtColor | (g_sdlTxtBackground << 4)) : *currMemByte;
+		++currMemByte;
+		++g_sdlTxtCursorPosX;
+	}
+
+	// Go to next line
+	if (g_sdlTxtCursorPosX == TXT_COLS_NUM)
+	{
+		g_sdlTxtCursorPosX = 0; // Carriage return
+		++g_sdlTxtCursorPosY; // Line feed
+		currMemByte = g_textMemory + 2*TXT_COLS_NUM*g_sdlTxtCursorPosY;
+	}
+	// Shift screen by one line
+	if (g_sdlTxtCursorPosY == TXT_ROWS_NUM)
+	{
+		--g_sdlTxtCursorPosY;
+		// Scroll one line down
+		uint8_t lastAttr = g_textMemory[sizeof(g_textMemory)-1];
+		memmove(g_textMemory, g_textMemory+2*TXT_COLS_NUM, sizeof(g_textMemory)-2*TXT_COLS_NUM);
+		currMemByte = g_textMemory+sizeof(g_textMemory)-2*TXT_COLS_NUM;
+		// New empty line
+		for (int i = 0; i < TXT_COLS_NUM; ++i)
+		{
+			*(currMemByte++) = ' ';
+			*(currMemByte++) = lastAttr;
+		}
+		currMemByte -= 2*TXT_COLS_NUM; // Go back to beginning of line
+	}
+
+	return currMemByte;
 }
 
 void BE_ST_puts(const char *str)
 {
+#ifdef ENABLE_TEXT
+	uint8_t *currMemByte = g_textMemory + 2*(g_sdlTxtCursorPosX+TXT_COLS_NUM*g_sdlTxtCursorPosY);
+	for (; *str; ++str)
+	{
+		currMemByte = BEL_ST_printchar(currMemByte, *str, true, false);
+	}
+	BEL_ST_printchar(currMemByte, '\n', true, false);
+
+	BEL_ST_UpdateHostDisplay();
+#else
 	puts(str);
+#endif
+}
+
+static void BEL_ST_vprintf_impl(const char *format, va_list args, bool iscolored, bool requirecrchar)
+{
+#ifdef ENABLE_TEXT
+	vprintf(format, args);
+#else
+	uint8_t *currMemByte = g_textMemory + 2*(g_sdlTxtCursorPosX+TXT_COLS_NUM*g_sdlTxtCursorPosY);
+	while (*format)
+	{
+		if (*format == '%')
+		{
+			switch (*(++format))
+			{
+			case '%':
+				currMemByte = BEL_ST_printchar(currMemByte, '%', iscolored, requirecrchar);
+				break;
+			case 's':
+			{
+				for (const char *str = va_arg(args, char *); *str; ++str)
+				{
+					currMemByte = BEL_ST_printchar(currMemByte, *str, iscolored, requirecrchar);
+				}
+				break;
+			}
+			default:
+			{
+				// Do NOT constify this cause of hack...
+				char errorMsg[] = "BEL_ST_vprintf_impl: Unsupported format specifier flag: X\n";
+				errorMsg[strlen(errorMsg)-2] = *format; // Hack
+				BE_ST_ExitWithErrorMsg(errorMsg);
+			}
+			}
+		}
+		else
+		{
+			currMemByte = BEL_ST_printchar(currMemByte, *format, iscolored, requirecrchar);
+		}
+		++format;
+	}
+	BEL_ST_UpdateHostDisplay();
+#endif
 }
 
 void BE_ST_printf(const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
-	vprintf(format, args);
+	BEL_ST_vprintf_impl(format, args, false, false);
 	va_end(args);
 }
 
@@ -706,15 +888,56 @@ void BE_ST_cprintf(const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
-	vprintf(format, args);
+	BEL_ST_vprintf_impl(format, args, true, true);
 	va_end(args);
 }
 
 void BE_ST_vprintf(const char *format, va_list args)
 {
-	vprintf(format, args);
+	BEL_ST_vprintf_impl(format, args, false, false);
 }
+
+#ifdef ENABLE_TEXT
+static void BEL_ST_DrawChar(struct RastPort *rp, int x, int y, bool cursor)
+{
+	uint8_t TmpChar;
+	uint8_t TmpFGColor;
+	uint8_t TmpBGColor;
+	int sX, sY;
+	uint8_t *ptr;
+
+	ptr = &g_textMemory[(y * TXT_COLS_NUM + x)*2];
+	TmpChar = *ptr++;
+	TmpFGColor = *ptr & 0x0f;
+	TmpBGColor = (*ptr >> 4) & 0x07;
+	sX = x * 8;
+	sY = y * 16;
+
+	SetABPenDrMd(rp, TmpFGColor, TmpBGColor, JAM2);
+	BltTemplate(&g_vgaFont[TmpChar * 16], 0, 2, rp, sX, sY, 8, 16);
+
+	if (cursor)
+	{
+		Move(rp, sX, sY + 14);
+		Draw(rp, sX + 7, sY + 14);
+		Move(rp, sX, sY + 15);
+		Draw(rp, sX + 7, sY + 15);
+	}
+}
+#endif
 
 void BEL_ST_UpdateHostDisplay(void)
 {
+#ifdef ENABLE_TEXT
+	if (g_sdlScreenMode == 3) // Text mode
+	{
+		for (int currCharY = 0; currCharY < TXT_ROWS_NUM; ++currCharY)
+		{
+			for (int currCharX = 0; currCharX < TXT_COLS_NUM; ++currCharX)
+			{
+				BEL_ST_DrawChar(&g_amigaScreen->RastPort, currCharX, currCharY, (currCharX == g_sdlTxtCursorPosX && currCharY == g_sdlTxtCursorPosY));
+			}
+		}
+	}
+#endif
 }
