@@ -520,6 +520,12 @@ void BE_ST_EGAFetchGFXBuffer(uint8_t *destPtr, uint16_t srcOff, uint16_t num, ui
 
 void BE_ST_EGAUpdateGFXPixel4bpp(uint16_t destOff, uint8_t color, uint8_t bitsMask)
 {
+#if 1
+	g_sdlVidMem->egaGfx[0][destOff] = (g_sdlVidMem->egaGfx[0][destOff] & ~bitsMask) | (-(color & 1) & bitsMask);
+	g_sdlVidMem->egaGfx[1][destOff] = (g_sdlVidMem->egaGfx[1][destOff] & ~bitsMask) | (-((color & 2) >> 1) & bitsMask);
+	g_sdlVidMem->egaGfx[2][destOff] = (g_sdlVidMem->egaGfx[2][destOff] & ~bitsMask) | (-((color & 4) >> 2) & bitsMask);
+	g_sdlVidMem->egaGfx[3][destOff] = (g_sdlVidMem->egaGfx[3][destOff] & ~bitsMask) | (-((color & 8) >> 3) & bitsMask);
+#else
 	for (int currBitNum = 0, currBitMask = 1; currBitNum < 8; ++currBitNum, currBitMask <<= 1)
 	{
 		if (bitsMask & currBitMask)
@@ -534,6 +540,7 @@ void BE_ST_EGAUpdateGFXPixel4bpp(uint16_t destOff, uint8_t color, uint8_t bitsMa
 			g_sdlVidMem->egaGfx[3][destOff] |= (((color & 8) >> 3) << currBitNum);
 		}
 	}
+#endif
 }
 
 void BE_ST_EGAUpdateGFXPixel4bppRepeatedly(uint16_t destOff, uint8_t color, uint16_t count, uint8_t bitsMask)
@@ -548,21 +555,10 @@ void BE_ST_EGAUpdateGFXPixel4bppRepeatedly(uint16_t destOff, uint8_t color, uint
 	uint32_t *plane2 = (uint32_t *)&g_sdlVidMem->egaGfx[2][destOff];
 	uint32_t *plane3 = (uint32_t *)&g_sdlVidMem->egaGfx[3][destOff];
 
-	for (int currBitNum = 0; currBitNum < 8; ++currBitNum)
-	{
-		plane0color |= ((color & 1) << currBitNum);
-		plane1color |= (((color & 2) >> 1) << currBitNum);
-		plane2color |= (((color & 4) >> 2) << currBitNum);
-		plane3color |= (((color & 8) >> 3) << currBitNum);
-	}
-	plane0color |= plane0color << 8;
-	plane0color |= plane0color << 16;
-	plane1color |= plane1color << 8;
-	plane1color |= plane1color << 16;
-	plane2color |= plane2color << 8;
-	plane2color |= plane2color << 16;
-	plane3color |= plane3color << 8;
-	plane3color |= plane3color << 16;
+	plane0color = -(color & 1);
+	plane1color = -((color & 2) >> 1);
+	plane2color = -((color & 4) >> 2);
+	plane3color = -((color & 8) >> 3);
 
 	for (int loopVar = 0; loopVar < count / 4; ++loopVar)
 	{
