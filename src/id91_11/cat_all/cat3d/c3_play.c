@@ -584,6 +584,7 @@ nextactor:;
 		ThreeDRefresh ();
 
 		CheckKeys();
+#ifndef __AMIGA__
 		// (REFKEEN) SPECIAL - Without this the game
 		// can run very fast, even if it's not noticeable
 		// (a lot of PlayLoop iterations and consumed CPU power)
@@ -600,6 +601,7 @@ nextactor:;
 		// the debug key modifier is held.
 		BE_ST_TimeCountWaitFromSrc(SD_GetTimeCount(), 1);
 		//
+#endif
 		if (singlestep)
 		{
 			VW_WaitVBL(14);
