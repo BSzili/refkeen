@@ -85,6 +85,13 @@ inline int BE_Cross_tolower(int c)
 {
 	return ((c >= 'A') && (c <= 'Z')) ? (c - 'A' + 'a') : c;
 }
+#ifdef __AMIGA__
+static
+#endif
+inline int BE_Cross_isupper(int c)
+{
+	return ((c >= 'A') && (c <= 'Z'));
+}
 int BE_Cross_strcasecmp(const char *s1, const char *s2);
 
 /* A safe(r) string copying function that:
