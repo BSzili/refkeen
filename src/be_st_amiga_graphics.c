@@ -64,6 +64,7 @@ static const uint32_t g_amigaEGAPalette[] = {
 };
 
 struct Screen *g_amigaScreen = NULL;
+struct Window *g_amigaWindow = NULL;
 
 static union bufferType *g_sdlVidMem;
 static int g_sdlScreenMode = 3;
@@ -129,6 +130,12 @@ static void BEL_ST_CloseScreen(void)
 {
 	bug("%s()\n", __FUNCTION__);
 
+	if (g_amigaWindow)
+	{
+		CloseWindow(g_amigaWindow);
+		g_amigaWindow = NULL;
+	}
+	
 	if (g_amigaScreen)
 	{
 		CloseScreen(g_amigaScreen);
@@ -196,7 +203,16 @@ static BOOL BEL_ST_ReopenScreen(void)
 
 			BEL_ST_SetPalette(16, 0, NULL);
 
-			return TRUE;
+			if ((g_amigaWindow = OpenWindowTags(NULL,
+				WA_Flags, WFLG_BACKDROP | WFLG_REPORTMOUSE | WFLG_BORDERLESS | WFLG_ACTIVATE | WFLG_RMBTRAP,
+				WA_InnerWidth, g_sdlTexWidth,
+				WA_InnerHeight, g_sdlTexHeight,
+				WA_CustomScreen, (IPTR)g_amigaScreen,
+				TAG_DONE)))
+			{
+
+				return TRUE;
+			}
 		}
 	}
 
