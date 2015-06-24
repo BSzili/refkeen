@@ -76,6 +76,7 @@ BEOBJECTS=$(BEOBJ)/actual_main.o \
           $(BEOBJ)/be_st_amiga.o \
           $(BEOBJ)/be_st_amiga_audio_timer.o \
           $(BEOBJ)/be_st_amiga_graphics.o \
+          $(BEOBJ)/be_textmode_fonts.o \
           $(BEOBJ)/crc32.o \
           $(BEOBJ)/unlzexe.o
 
