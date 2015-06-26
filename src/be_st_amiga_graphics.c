@@ -308,7 +308,8 @@ void BE_ST_SetScreenStartAddress(uint16_t crtc)
 
 	D(bug("changing to bitmap %d\n", curbm));
 
-	WaitBlit();
+	//WaitBlit();
+	WaitTOF();
 	ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[curbm], dbuf);
 }
 
