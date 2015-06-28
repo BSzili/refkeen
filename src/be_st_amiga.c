@@ -341,6 +341,9 @@ void BE_ST_ShutdownAll(void)
 
 void BE_ST_HandleExit(int status)
 {
+#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
+	BE_ST_BiosScanCode(0);
+#endif
 	BE_ST_ShutdownAll();
 	exit(0);
 }
