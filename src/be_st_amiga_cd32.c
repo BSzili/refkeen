@@ -138,8 +138,7 @@ static ULONG BEL_ST_NVSize(size_t size)
 	ULONG length;
 
 	// size in the units of tens of bytes
-	length = size / 10;
-	length += (length % 10);
+	length = (size + 9) / 10;
 
 	return length;
 }
