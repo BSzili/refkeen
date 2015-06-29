@@ -386,6 +386,19 @@ uint16_t BE_ST_GetMouseButtons(void)
 }
 
 
+static ULONG BEL_ST_PortIndex(uint16_t joy)
+{
+	switch (joy)
+	{
+		case 0:
+			return 1;
+		case 1:
+			return 0;
+	}
+
+	return joy;
+} 
+
 void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 {
 	uint16_t jx = 0;
@@ -394,9 +407,9 @@ void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 
 	D(bug("%s(%u)\n", __FUNCTION__, joy));
 
-	portstate = ReadJoyPort(joy);
+	portstate = ReadJoyPort(BEL_ST_PortIndex(joy));
 
-	if (portstate & (JP_TYPE_GAMECTLR | JP_TYPE_JOYSTK))
+	if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
 	{
 		jx = jy = 1; // center for the joystick detection
 
@@ -424,9 +437,9 @@ uint16_t BE_ST_GetJoyButtons(uint16_t joy)
 
 	D(bug("%s(%u)\n", __FUNCTION__, joy));
 
-	portstate = ReadJoyPort(joy);
+	portstate = ReadJoyPort(BEL_ST_PortIndex(joy));
 
-	if (portstate & (JP_TYPE_GAMECTLR | JP_TYPE_JOYSTK))
+	//if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
 	{
 		if (portstate & JPF_BUTTON_BLUE) result |= 1 << 0;
 		if (portstate & JPF_BUTTON_RED) result |= 1 << 1;
