@@ -85,6 +85,7 @@ static bool g_sdlTxtCursorEnabled = true;
 static int g_sdlTxtColor = 7, g_sdlTxtBackground = 0;
 extern const uint8_t g_vga_8x16TextFont[256*8*16];
 #endif
+static UWORD *g_pointerMem = NULL;
 
 void BEL_ST_UpdateHostDisplay(void);
 void BE_ST_MarkGfxForUpdate(void)
@@ -226,7 +227,7 @@ static BOOL BEL_ST_ReopenScreen(void)
 				WA_CustomScreen, (IPTR)g_amigaScreen,
 				TAG_DONE)))
 			{
-
+				SetPointer(g_amigaWindow, g_pointerMem, 16, 16, 0, 0);
 				return TRUE;
 			}
 		}
@@ -258,6 +259,7 @@ void BE_ST_InitGfx(void)
 		}
 	}
 #endif
+	g_pointerMem = (UWORD *)AllocVec(16 * 16, MEMF_CLEAR | MEMF_CHIP);
 
 	BE_ST_SetScreenMode(3);
 }
@@ -269,6 +271,7 @@ void BE_ST_ShutdownGfx(void)
 #ifdef ENABLE_TEXT
 	FreeVec(g_vgaFont);
 #endif
+	FreeVec(g_pointerMem);
 }
 
 static int BEL_ST_AddressToBitMap(uint16_t crtc)

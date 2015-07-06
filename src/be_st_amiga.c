@@ -38,7 +38,6 @@ int16_t g_my = 0;
 static struct Interrupt g_inputHandler;
 static struct MsgPort *g_inputPort = NULL;
 static struct IOStdReq *g_inputReq = NULL;
-//UWORD *g_pointerMem = NULL;
 
 void BE_ST_InitGfx(void);
 void BE_ST_InitAudio(void);
@@ -275,8 +274,6 @@ static struct InputEvent * __saveds BEL_ST_InputHandler(register struct InputEve
 
 void BE_ST_InitAll(void)
 {
-	//g_pointerMem = (UWORD *)AllocVec(16 * 16, MEMF_CLEAR | MEMF_CHIP);
-
 	if ((g_inputPort = CreateMsgPort()))
 	{
 		if ((g_inputReq = (struct IOStdReq *)CreateIORequest(g_inputPort, sizeof(*g_inputReq))))
@@ -327,13 +324,6 @@ void BE_ST_ShutdownAll(void)
 		DeleteMsgPort(g_inputPort);
 		g_inputPort = NULL;
 	}
-
-	/*if (g_pointerMem)
-	{
-		ClearPointer(awindow);
-		FreeVec(g_pointerMem);
-		g_pointerMem = NULL;
-	}*/
 
 	BE_ST_ShutdownAudio();
 	BE_ST_ShutdownGfx();
