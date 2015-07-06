@@ -284,7 +284,7 @@ void BE_ST_InitAll(void)
 			if (!OpenDevice((STRPTR)"input.device", 0, (struct IORequest *)g_inputReq, 0))
 			{
 				g_inputHandler.is_Node.ln_Type = NT_INTERRUPT;
-				g_inputHandler.is_Node.ln_Pri = 16;
+				g_inputHandler.is_Node.ln_Pri = 100;
 				g_inputHandler.is_Node.ln_Name = (STRPTR)"Catacomb 3-D input handler";
 				g_inputHandler.is_Code = (void (*)())&BEL_ST_InputHandler;
 				g_inputReq->io_Data = (void *)&g_inputHandler;
