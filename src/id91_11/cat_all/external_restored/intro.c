@@ -28,71 +28,25 @@
 #include "ext_heads.h"
 #include "ext_gelib.h"
 
-#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
-
-#define FRAMETOP_STR  "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n"
-
-#define TITLE_STR     "\xB3 GAMER'S EDGE Catacomb Abyss Introduction Program \xB3\r\n"
-#define AUTHOR_STR    "\xB3 by Nolan Martin                                  \xB3\r\n"
-#define COPYRIGHT_STR "\xB3 Copyright 1992 - Softdisk Publishing             \xB3\r\n"
-
-#define FRAMEBOT_STR  "\xD4\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBE\r\n"
-
-#define VERSION_TITLE_STR "THE CATACOMB ABYSS INTRODUCTION PROGRAM"
-#define VERSION_REV_STR " VERSION 1.01   QA[0]"
-
+#ifdef REFKEEN_VER_CATABYSS
 #define GAMEEXE_MAIN_FUNCNAME abysgame_exe_main
-//#define GAMEEXE_FILENAME "CATABYSS.EXE"
-
-#elif defined REFKEEN_VER_CATABYSS
-
-#define FRAMETOP_STR  "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n"
-
-#define TITLE_STR     "\xB3 Catacomb Abyss 3-D Introduction Program  \xB3\r\n"
-#define AUTHOR_STR    "\xB3 by Nolan Martin                          \xB3\r\n"
-#define COPYRIGHT_STR "\xB3 Copyright 1992-1993 Softdisk Publishing  \xB3\r\n"
-
-#define FRAMEBOT_STR  "\xD4\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBE\r\n"
-
-#define VERSION_TITLE_STR "The Catacomb Abyss 3-D Introduction Program"
-#define VERSION_REV_STR " version 1.06  (Rev 1) "
-
-#define GAMEEXE_MAIN_FUNCNAME abysgame_exe_main
-//#define GAMEEXE_FILENAME "ABYSGAME.EXE"
-
+//#define GAMEEXE_FILENAME "ABYSGAME.EXE" // "CATABYSS.EXE for v1.13
 #elif defined REFKEEN_VER_CATARM
-
-#define FRAMETOP_STR  "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n"
-
-#define TITLE_STR     "\xB3 Catacomb Armageddon 3-D Introduction Program \xB3\r\n"
-#define AUTHOR_STR    "\xB3 by Nolan Martin                              \xB3\r\n"
-#define COPYRIGHT_STR "\xB3 Copyright 1992-93 - Softdisk Publishing      \xB3\r\n"
-
-#define FRAMEBOT_STR  "\xD4\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBE\r\n"
-
-#define VERSION_TITLE_STR "THE CATACOMB ARMAGEDDON 3-D INTRODUCTION PROGRAM"
-#define VERSION_REV_STR " VERSION 1.04   (REV 1)"
-
 #define GAMEEXE_MAIN_FUNCNAME armgame_exe_main
 //#define GAMEEXE_FILENAME "ARMGAME.EXE"
-
 #elif defined REFKEEN_VER_CATAPOC
-
-#define FRAMETOP_STR  "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n"
-
-#define TITLE_STR     "\xB3 Catacomb Apocalypse 3-D Introduction Program \xB3\r\n"
-#define AUTHOR_STR    "\xB3 by Nolan Martin                              \xB3\r\n"
-#define COPYRIGHT_STR "\xB3 Copyright 1992-93 - Softdisk Publishing      \xB3\r\n"
-
-#define FRAMEBOT_STR  "\xD4\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBE\r\n"
-
-#define VERSION_TITLE_STR "THE CATACOMB APOCALYPSE 3-D INTRODUCTION PROGRAM"
-#define VERSION_REV_STR " VERSION 1.05 rev 1"
-
 #define GAMEEXE_MAIN_FUNCNAME apocgame_exe_main
 //#define GAMEEXE_FILENAME "APOCGAME.EXE"
-
 #endif
+
+// (REFKEEN) Used for patching version-specific stuff
+extern const char *refkeen_compat_intro_frametop_str;
+extern const char *refkeen_compat_intro_title_str;
+extern const char *refkeen_compat_intro_author_str;
+extern const char *refkeen_compat_intro_copyright_str;
+extern const char *refkeen_compat_intro_framebot_str;
+extern const char *refkeen_compat_intro_version_title_str;
+extern const char *refkeen_compat_intro_version_rev_str;
 
 static void SetScreenMode (id0_int_t mode);
 static void SetLineWidth (id0_int_t width);
@@ -137,25 +91,16 @@ void intro_exe_main(void)
 	id0_boolean_t leave_init_sequence = false, leave_pre_skill_selection = false, leave_skill_selection = false, select_saved_game = false;
 	id0_int_t general_loop_var, init_sequence_iters_upperbound;
 	id0_int_t current_page = 0, last_key;
-	// (REFKEEN) DIFFERENCE FROM VANILLA CATACOMB ADVENTURES:
-	// Use this to skip the intro EXE and continue into the game
-	// immediately (with the code that makes it possible to play at all)
-	if (!BE_Cross_strcasecmp(id0_argv[1], "/SKIPINTRO"))
-	{
-		id0_argv[1] = "^(a@&r`";
-		GAMEEXE_MAIN_FUNCNAME ();
-		BE_ST_HandleExit(0);
-	}
 	if (!BE_Cross_strcasecmp(id0_argv[1], "/?"))
 	{
 		BE_ST_clrscr();
 		BE_ST_textcolor(15);
 		BE_ST_textbackground(1);
-		BE_ST_cprintf(FRAMETOP_STR);
-		BE_ST_cprintf(TITLE_STR);
-		BE_ST_cprintf(AUTHOR_STR);
-		BE_ST_cprintf(COPYRIGHT_STR);
-		BE_ST_cprintf(FRAMEBOT_STR);
+		BE_ST_cprintf(refkeen_compat_intro_frametop_str);
+		BE_ST_cprintf(refkeen_compat_intro_title_str);
+		BE_ST_cprintf(refkeen_compat_intro_author_str);
+		BE_ST_cprintf(refkeen_compat_intro_copyright_str);
+		BE_ST_cprintf(refkeen_compat_intro_framebot_str);
 		BE_ST_printf("\n");
 		BE_ST_printf("/VER  - version number\n");
 		BE_ST_printf("/?    - this help\n");
@@ -166,13 +111,13 @@ void intro_exe_main(void)
 		BE_ST_clrscr();
 		BE_ST_textcolor(15);
 		BE_ST_textbackground(1);
-		BE_ST_cprintf(FRAMETOP_STR);
-		BE_ST_cprintf(TITLE_STR);
-		BE_ST_cprintf(AUTHOR_STR);
-		BE_ST_cprintf(COPYRIGHT_STR);
-		BE_ST_cprintf(FRAMEBOT_STR);
+		BE_ST_cprintf(refkeen_compat_intro_frametop_str);
+		BE_ST_cprintf(refkeen_compat_intro_title_str);
+		BE_ST_cprintf(refkeen_compat_intro_author_str);
+		BE_ST_cprintf(refkeen_compat_intro_copyright_str);
+		BE_ST_cprintf(refkeen_compat_intro_framebot_str);
 		BE_ST_printf("\n");
-		BE_ST_printf("%s %s\n", VERSION_TITLE_STR, VERSION_REV_STR);
+		BE_ST_printf("%s %s\n", refkeen_compat_intro_version_title_str, refkeen_compat_intro_version_rev_str);
 		BE_ST_printf("\n");
 		BE_ST_printf("This program requires an EGA monitor or better,\n");
 		BE_ST_printf("                640K, and MS-DOS 3.0 or better.\n");
@@ -184,13 +129,16 @@ void intro_exe_main(void)
 		havebeep = false;
 #endif
 	// REFKEEN difference from vanilla Catacomb Abyss (Shareware release):
-	// Role of ^(a@&r` for INTRO.EXE has been filled. No need to pass it
+	// Role of ^(a@&r` for INTRO.EXE has been flipped. No need to pass it
 	// (or use start), but if ^(a@&r` is added then you get this message.
-#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
-	if (!BE_Cross_strcasecmp(id0_argv[1], "^(a@&r`"))
+#ifdef REFKEEN_VER_CATABYSS
+	if (refkeen_current_gamever == BE_GAMEVER_CATABYSS113)
 	{
-		// Yeah, no mistake, it originally said Apocalypse, NOT Abyss.
-		TrashProg("You must type START [ENTER] to run CATACOMB APOCALYPSE!\n");
+		if (!BE_Cross_strcasecmp(id0_argv[1], "^(a@&r`"))
+		{
+			// Yeah, no mistake, it originally said Apocalypse, NOT Abyss.
+			TrashProg("You must type START [ENTER] to run CATACOMB APOCALYPSE!\n");
+		}
 	}
 #endif
 	videocard = VideoID();
@@ -302,20 +250,14 @@ void intro_exe_main(void)
 		id0_argv[id0_argc] = NULL;
 	}
 
-	BE_ST_AltControlScheme_Push(); // REFKEEN - Alternative controllers support
+	// REFKEEN - Alternative controllers support
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_intro;
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_intro_skillselection;
+	BE_ST_AltControlScheme_Push();
 
 	do
 	{
-		// REFKEEN - Alternative controllers support
-		BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes(
-		(const char [])
-		{0x1C/*Enter*/, 0x1/*Escape*/, 0x3E/*F4*/
-#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
-			, 0x44/*F10*/
-#endif
-			, 0
-		}
-		);
+		BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_intro);
 
 		for (leave_init_sequence = false; !leave_init_sequence;)
 		{
@@ -406,26 +348,31 @@ void intro_exe_main(void)
 
 					FreeAllShapes();
 					SetScreenMode(1);
-#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
-					id0_argc = 2;
-					id0_argv[1] = "LAST.SHL";
-					id0_argv[2] = "ENDSCN.SCN";
-					id0_argv[3] = NULL;
-
-					id0_argv[0] = "LOADSCN.EXE";
-					void id0_loadscn_exe_main(void);
-					id0_loadscn_exe_main();
-#if 0
-					if (execv("LOADSCN.EXE", id0_argv) == -1)
+#ifdef REFKEEN_VER_CATABYSS
+					if (refkeen_current_gamever == BE_GAMEVER_CATABYSS113)
 					{
-						SetScreenMode(1);
-						BE_ST_puts("Couldn't find executable LOADSCN.EXE.\n");
-						BE_ST_HandleExit(1);
+						id0_argc = 2;
+						id0_argv[1] = "LAST.SHL";
+						id0_argv[2] = "ENDSCN.SCN";
+						id0_argv[3] = NULL;
+
+						id0_argv[0] = "LOADSCN.EXE";
+						void id0_loadscn_exe_main(void);
+						id0_loadscn_exe_main();
+#if 0
+						if (execv("LOADSCN.EXE", id0_argv) == -1)
+						{
+							SetScreenMode(1);
+							BE_ST_puts("Couldn't find executable LOADSCN.EXE.\n");
+							BE_ST_HandleExit(1);
+						}
+#endif
 					}
+					else
 #endif
-#else
-					BE_ST_HandleExit(0);
-#endif
+					{
+						BE_ST_HandleExit(0);
+					}
 				}
 				else if (last_key == 0x1C/*0x1C0D*/) // Enter
 				{
@@ -438,15 +385,22 @@ void intro_exe_main(void)
 					select_saved_game = true;
 					general_loop_var = 600;
 				}
-#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
-				else if (last_key == 0x44/*0x4400*/) // F10 (Demo)
+#ifdef REFKEEN_VER_CATABYSS
+				else if ((refkeen_current_gamever == BE_GAMEVER_CATABYSS113) && (last_key == 0x44/*0x4400*/)) // F10 (Demo)
 				{
+					// REFKEEN - Alternative controllers support
+					BE_ST_AltControlScheme_Pop();
+
 					SetScreenMode(1);
 					// REFKEEN: This is currently unsupported
 					BE_ST_printf("ERROR : Can't find executable.\nOr rather, the \"Demo\" feature is unsupported in this source port.\n");
 					BE_ST_BiosScanCode(0);
 					SetScreenMode(3);
 					general_loop_var = 600;
+
+					// REFKEEN - Alternative controllers support
+					BE_ST_AltControlScheme_Push();
+					BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_intro);
 #if 0
 					if (execv("DEMOCAT.EXE", id0_argv) == -1)
 					{
@@ -500,7 +454,7 @@ void intro_exe_main(void)
 				//Beep();
 
 				// REFKEEN - Alternative controllers support
-				BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes((const char []){0x31/*N*/, 0x11/*W*/, 0});
+				BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_intro_skillselection);
 
 				for (leave_skill_selection = false; !leave_skill_selection; )
 				{
@@ -591,8 +545,8 @@ void intro_exe_main(void)
 					{
 						leave_pre_skill_selection = true;
 						leave_skill_selection = true;
-#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
-						current_page = 1;
+#ifdef REFKEEN_VER_CATABYSS
+						current_page = (refkeen_current_gamever == BE_GAMEVER_CATABYSS113) ? 1 : 2;
 #else
 						current_page = 2;
 #endif
@@ -617,14 +571,17 @@ void intro_TrashProg (const id0_char_t *OutMsg, ...)
 
 	if (!OutMsg)
 	{
+		// REFKEEN difference from vanilla Catacomb Adventures:
+		// Role of ^(a@&r` for game EXE has been flipped. No need to pass it
+		// (or use start/intro EXE), but if ^(a@&r` is added then you may get some message.
 		if (!id0_argv[1])
 		{
-			id0_argv[id0_argc++] = "^(a@&r`";
+			id0_argv[id0_argc++] = "z"/*"^(a@&r`"*/;
 		}
 		else
 		{
 			id0_argv[id0_argc++] = id0_argv[1];
-			id0_argv[1] = "^(a@&r`";
+			id0_argv[1] = "z"/*"^(a@&r`"*/;
 		}
 		id0_argv[id0_argc++] = "/NODR";
 		id0_argv[id0_argc] = NULL;
@@ -754,4 +711,75 @@ static void FreeAllShapes()
 	ext_FreeShape(&novice_choice_shape);
 	ext_FreeShape(&warrior_choice_shape);
 	ext_FreeShape(&after_loadgame_choice_shape);
+}
+
+
+// (REFKEEN) Used for patching version-specific stuff
+const char *refkeen_compat_intro_frametop_str;
+const char *refkeen_compat_intro_title_str;
+const char *refkeen_compat_intro_author_str;
+const char *refkeen_compat_intro_copyright_str;
+const char *refkeen_compat_intro_framebot_str;
+const char *refkeen_compat_intro_version_title_str;
+const char *refkeen_compat_intro_version_rev_str;
+
+void RefKeen_Patch_intro(void)
+{
+	switch (refkeen_current_gamever)
+	{
+#ifdef REFKEEN_VER_CATABYSS
+	case BE_GAMEVER_CATABYSS113:
+		refkeen_compat_intro_frametop_str = "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n";
+
+		refkeen_compat_intro_title_str = "\xB3 GAMER'S EDGE Catacomb Abyss Introduction Program \xB3\r\n";
+		refkeen_compat_intro_author_str = "\xB3 by Nolan Martin                                  \xB3\r\n";
+		refkeen_compat_intro_copyright_str = "\xB3 Copyright 1992 - Softdisk Publishing             \xB3\r\n";
+
+		refkeen_compat_intro_framebot_str = "\xD4\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBE\r\n";
+
+		refkeen_compat_intro_version_title_str = "THE CATACOMB ABYSS INTRODUCTION PROGRAM";
+		refkeen_compat_intro_version_rev_str = " VERSION 1.01   QA[0]";
+		break;
+	case BE_GAMEVER_CATABYSS124:
+		refkeen_compat_intro_frametop_str = "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n";
+
+		refkeen_compat_intro_title_str = "\xB3 Catacomb Abyss 3-D Introduction Program  \xB3\r\n";
+		refkeen_compat_intro_author_str = "\xB3 by Nolan Martin                          \xB3\r\n";
+		refkeen_compat_intro_copyright_str = "\xB3 Copyright 1992-1993 Softdisk Publishing  \xB3\r\n";
+
+		refkeen_compat_intro_framebot_str = "\xD4\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBE\r\n";
+
+		refkeen_compat_intro_version_title_str = "The Catacomb Abyss 3-D Introduction Program";
+		refkeen_compat_intro_version_rev_str = " version 1.06  (Rev 1) ";
+		break;
+#endif
+#ifdef REFKEEN_VER_CATARM
+	case BE_GAMEVER_CATARM102:
+		refkeen_compat_intro_frametop_str = "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n";
+
+		refkeen_compat_intro_title_str = "\xB3 Catacomb Armageddon 3-D Introduction Program \xB3\r\n";
+		refkeen_compat_intro_author_str = "\xB3 by Nolan Martin                              \xB3\r\n";
+		refkeen_compat_intro_copyright_str = "\xB3 Copyright 1992-93 - Softdisk Publishing      \xB3\r\n";
+
+		refkeen_compat_intro_framebot_str = "\xD4\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBE\r\n";
+
+		refkeen_compat_intro_version_title_str = "THE CATACOMB ARMAGEDDON 3-D INTRODUCTION PROGRAM";
+		refkeen_compat_intro_version_rev_str = " VERSION 1.04   (REV 1)";
+		break;
+#endif
+#ifdef REFKEEN_VER_CATAPOC
+	case BE_GAMEVER_CATAPOC101:
+		refkeen_compat_intro_frametop_str = "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n";
+
+		refkeen_compat_intro_title_str = "\xB3 Catacomb Apocalypse 3-D Introduction Program \xB3\r\n";
+		refkeen_compat_intro_author_str = "\xB3 by Nolan Martin                              \xB3\r\n";
+		refkeen_compat_intro_copyright_str = "\xB3 Copyright 1992-93 - Softdisk Publishing      \xB3\r\n";
+
+		refkeen_compat_intro_framebot_str = "\xD4\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBE\r\n";
+
+		refkeen_compat_intro_version_title_str = "THE CATACOMB APOCALYPSE 3-D INTRODUCTION PROGRAM";
+		refkeen_compat_intro_version_rev_str = " VERSION 1.05 rev 1";
+		break;
+#endif
+	}
 }

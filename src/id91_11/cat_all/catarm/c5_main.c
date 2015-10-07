@@ -267,7 +267,7 @@ static id0_boolean_t LoadObject(BE_FILE_T file, objtype *o)
 		return false;
 	}
 	o->active = (activetype)activeint;
-	o->state = (statetype *)BE_Cross_Compat_GetObjStatePtrFromDOSPointer(statedosfarptr);
+	o->state = RefKeen_GetObjStatePtrFromDOSPointer(statedosfarptr);
 	// HACK: All we need to know is if next was originally NULL or not
 	o->next = isnext ? o : NULL;
 	return true;
@@ -468,7 +468,7 @@ id0_boolean_t	LoadTheGame(BE_FILE_T file)
 	// Don't do this check, we've already opened the file anyway
 	// and this can lead to unexpected behaviors!
 #if 0
-	if (!FindFile(Filename,"SAVE GAME",-1))
+	if (!FindRewritableFile(Filename,"SAVE GAME",-1))
 		Quit("Error: Can't find saved game file!");
 #endif
 
@@ -790,11 +790,9 @@ void Quit (const id0_char_t *error, ...)
 void	TEDDeath(void)
 {
 	ShutdownId();
-#if defined(__AMIGA__)
-#warning FIXME
-#else
-	execlp("TED5.EXE","TED5.EXE","/LAUNCH",NULL);
-#endif
+	// REFKEEN - DISABLED
+	BE_ST_ExitWithErrorMsg("Sorry, but TED5.EXE cannot be launched from game in this source port.");
+	//execlp("TED5.EXE","TED5.EXE","/LAUNCH",NULL);
 }
 
 //===========================================================================
@@ -1162,7 +1160,11 @@ void armgame_exe_main (void)
 		}
 	}
 
-	if (BE_Cross_strcasecmp(id0_argv[1], "^(a@&r`"))
+	// REFKEEN difference from vanilla Catacomb Adventures:
+	// Role of ^(a@&r` for game EXE has been flipped. No need to pass it
+	// (or use start/intro EXE), but if ^(a@&r` is added then you may get some message.
+	if (!BE_Cross_strcasecmp(id0_argv[1], "^(a@&r`"))
+	//if (BE_Cross_strcasecmp(id0_argv[1], "^(a@&r`"))
 		Quit("You must type CATARM to run CATACOMB ARMAGEDDON 3-D\n");
 
 	MainHelpText.xl = 0;

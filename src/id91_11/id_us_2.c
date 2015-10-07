@@ -608,8 +608,9 @@ USL_ConfirmComm(UComm comm)
 	// (WARNING: Technically this belongs to USL_CtlDialog, but this is the only place where its returned value is actually checked)
 	if (dialog)
 	{
+		extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu_confirm;
 		BE_ST_AltControlScheme_Push();
-		BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes((const char []){sc_Y, sc_N, 0});
+		BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_menu_confirm);
 		confirm = USL_CtlDialog(s1,s2,s3);
 		BE_ST_AltControlScheme_Pop();
 	}
@@ -1032,7 +1033,7 @@ USL_DoLoadGame(UserItem id0_far *item)
 
 	err = 0;
 	filename = USL_GiveSaveName(n);
-	if (BE_Cross_IsFileValid(file = BE_Cross_open_for_reading(filename)))
+	if (BE_Cross_IsFileValid(file = BE_Cross_open_rewritable_for_reading(filename)))
 	//if ((file = open(filename,O_BINARY | O_RDONLY)) != -1)
 	{
 		// REFKEEN Cross Platform file I/O
@@ -1131,7 +1132,7 @@ USL_DoSaveGame(UserItem id0_far *item)
 	game = &Games[n];
 	fontcolor = HiliteColor;
 	VWB_Bar(item->x + 1,item->y + 2,CtlPanelW - 12 - 2,7,BackColor);
-	game->oldtestoffset = COMPAT_US_PRINTX_OFFSET;
+	game->oldtestoffset = refkeen_compat_id_us_printx_offset;
 	//game->oldtest = &PrintX;
 	ok = US_LineInput(item->x + 2,item->y + 2,
 						game->name,game->present? game->name : id0_nil_t,
@@ -1145,7 +1146,7 @@ USL_DoSaveGame(UserItem id0_far *item)
 
 		filename = USL_GiveSaveName(n);
 		err = 0;
-		file = BE_Cross_open_for_overwriting(filename);
+		file = BE_Cross_open_rewritable_for_overwriting(filename);
 		//file = open(filename,O_CREAT | O_BINARY | O_WRONLY,
 		//			S_IREAD | S_IWRITE | S_IFREG);
 		if (BE_Cross_IsFileValid(file))
@@ -1736,9 +1737,10 @@ USL_TearDownCtlPanel(void)
 void
 US_ControlPanel(void)
 {
-	// REFKEEN - Alternative controllers support	
+	// REFKEEN - Alternative controllers support
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu;	
 	BE_ST_AltControlScheme_Push();
-	BE_ST_AltControlScheme_PrepareMenuControls();
+	BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_menu);
 
 extern void HelpScreens(void);
 

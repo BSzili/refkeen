@@ -52,6 +52,8 @@ id0_char_t Filename[FILENAME_LEN+1], ID[sizeof(GAMENAME)], VER[sizeof(SAVEVER_DA
 id0_short_t wall_anim_delay,wall_anim_time = 7;
 BufferedIO lzwBIO;
 
+// REFKEEN - Alternative controllers support
+extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_waitforspace;
 
 
 
@@ -258,21 +260,44 @@ void ColoredPalette()
 	screenfaded = false;
 }
 
+// (REFKEEN) Split Verify to separate handlers, possibly using different paths
+// - Change Verify to an internal static function with a few changes
+
 ////////////////////////////////////////////////////////////////////////////
 //
 // Verify()
 //
-id0_long_t Verify(const id0_char_t *filename)
+static id0_long_t Verify(const id0_char_t *filename,bool rewritable)
 {
 	BE_FILE_T handle;
 	id0_long_t size;
 
-	if (!BE_Cross_IsFileValid(handle=BE_Cross_open_for_reading(filename)))
+	if (rewritable)
+	{
+		if (!BE_Cross_IsFileValid(handle=BE_Cross_open_rewritable_for_reading(filename)))
+			return 0;
+	}
+	else
+	{
+		if (!BE_Cross_IsFileValid(handle=BE_Cross_open_readonly_for_reading(filename)))
+			return 0;
+	}
 	//if ((handle=open(filename,O_BINARY))==-1)
-		return (0);
+	//	return (0);
 	size=BE_Cross_FileLengthFromHandle(handle);
 	BE_Cross_close(handle);
 	return(size);
+}
+
+// (REFKEEN) Split Verify function
+id0_long_t VerifyReadOnly(const id0_char_t *filename)
+{
+	return Verify(filename, false);
+}
+
+id0_long_t VerifyRewritable(const id0_char_t *filename)
+{
+	return Verify(filename, true);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -332,7 +357,7 @@ void GE_SaveGame()
 			memcpy(chptr, ".SAV", strlen(".SAV")); // Minor optimization...
 			//strcat(Filename,".SAV");
 			GettingFilename = false;
-			if (Verify(Filename))								// FILE EXISTS
+			if (VerifyRewritable(Filename))								// FILE EXISTS
 			{
 				US_CenterWindow(22,4);
 				US_CPrintLine("That file already exists...", NULL);
@@ -341,29 +366,33 @@ void GE_SaveGame()
 				VW_UpdateScreen();
 
 				// REFKEEN - Alternative controllers support
+				extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_saveoverwriteconfirm;
 				BE_ST_AltControlScheme_Push();
-				BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes((const char []){21, 49, 27, 0});
+				BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_saveoverwriteconfirm);
 
 				while((!Keyboard[21]) && (!Keyboard[49]) && !Keyboard[27])
 				{
 					BE_ST_ShortSleep();
 				}
 
-				// REFKEEN - Alternative controllers support
-				BE_ST_AltControlScheme_Pop();
-
 				if (Keyboard[27])
+				// REFKEEN - Alternative controllers support
+				{
+					BE_ST_AltControlScheme_Pop(); // MUST be done here, not before the last check of key
 					goto EXIT_FUNC;
+				}
 				if (Keyboard[49])
 				{
 					GettingFilename = true;
 					VW_UpdateScreen();
 				}
+				// REFKEEN - Alternative controllers support
+				BE_ST_AltControlScheme_Pop();
 			}
 		}
 	}
 
-	handle = BE_Cross_open_for_overwriting(Filename);
+	handle = BE_Cross_open_rewritable_for_overwriting(Filename);
 	//handle = open(Filename,O_RDWR|O_CREAT|O_BINARY,S_IREAD|S_IWRITE);
 
 	/* REFKEEN - Refactoring: EXIT_FUNC label relocated below error
@@ -402,7 +431,8 @@ void GE_SaveGame()
 		VW_UpdateScreen();
 		// REFKEEN - Alternative controllers support
 		BE_ST_AltControlScheme_Push();
-		BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes((const char []){57, 0});
+		BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_waitforspace);
+
 		while (!Keyboard[57])
 		{
 			BE_ST_ShortSleep();
@@ -466,7 +496,7 @@ id0_boolean_t GE_LoadGame()
 		//strcat(Filename,".SAV");
 		GettingFilename = false;
 
-		if (!Verify(Filename))								// FILE DOESN'T EXIST
+		if (!VerifyRewritable(Filename))								// FILE DOESN'T EXIST
 		{
 			US_CenterWindow(22,3);
 			US_CPrintLine(" That file doesn't exist....", NULL);
@@ -474,7 +504,7 @@ id0_boolean_t GE_LoadGame()
 			VW_UpdateScreen();
 			// REFKEEN - Alternative controllers support
 			BE_ST_AltControlScheme_Push();
-			BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes((const char []){57, 0});
+			BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_waitforspace);
 
 			while (!Keyboard[57])
 			{
@@ -491,7 +521,7 @@ id0_boolean_t GE_LoadGame()
 		}
 	}
 
-	handle = BE_Cross_open_for_reading(Filename);
+	handle = BE_Cross_open_rewritable_for_reading(Filename);
 	//handle = open(Filename,O_RDWR|O_BINARY);
 
 	/* REFKEEN - Refactoring: EXIT_FUNC label relocated below error
@@ -515,7 +545,8 @@ id0_boolean_t GE_LoadGame()
 			VW_UpdateScreen();
 			// REFKEEN - Alternative controllers support
 			BE_ST_AltControlScheme_Push();
-			BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes((const char []){57, 0});
+			BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_waitforspace);
+
 			while (!Keyboard[57])
 			{
 				BE_ST_ShortSleep();
@@ -551,7 +582,8 @@ id0_boolean_t GE_LoadGame()
 		US_CPrintLine("Press SPACE to continue.", NULL);
 		// REFKEEN - Alternative controllers support
 		BE_ST_AltControlScheme_Push();
-		BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes((const char []){57, 0});
+		BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_waitforspace);
+
 		while (!Keyboard[57])
 		{
 			BE_ST_ShortSleep();
@@ -1166,9 +1198,43 @@ id0_char_t GetKeyChoice(const id0_char_t *choices,id0_boolean_t clear)
 	id0_boolean_t waiting;
 	const id0_char_t *s/*,*ss*/;
 
-	// REFKEEN - Alternative controllers support	
+	// REFKEEN - Alternative controllers support
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_keychoice;
+	// This one is a bit tricky... Also reusing s variable here
+	int controllerbutton;
+	for (controllerbutton = BE_ST_CTRL_BUT_A, s = choices; controllerbutton < BE_ST_CTRL_BUT_A + 4; ++controllerbutton)
+	{
+		while (*s == sc_Escape)
+			++s;
+
+		if (*s)
+		{
+			g_ingame_altcontrol_mapping_keychoice.buttons[controllerbutton].mapClass = BE_ST_CTRL_MAP_KEYSCANCODE;
+			g_ingame_altcontrol_mapping_keychoice.buttons[controllerbutton].val = *s;
+			++s;
+		}
+		else
+		{
+			g_ingame_altcontrol_mapping_keychoice.buttons[controllerbutton].mapClass = BE_ST_CTRL_MAP_NONE;
+		}
+	}
+	for (controllerbutton = BE_ST_CTRL_BUT_DPAD_UP; controllerbutton < BE_ST_CTRL_BUT_DPAD_UP + 4; ++controllerbutton)
+	{
+		if (*s)
+		{
+			if (*s != sc_Escape)
+			{
+				g_ingame_altcontrol_mapping_keychoice.buttons[controllerbutton].mapClass = BE_ST_CTRL_MAP_KEYSCANCODE;
+				g_ingame_altcontrol_mapping_keychoice.buttons[controllerbutton].val = *s;
+				++s;
+				continue;
+			}
+			++s;
+		}
+		g_ingame_altcontrol_mapping_keychoice.buttons[controllerbutton].mapClass = BE_ST_CTRL_MAP_NONE;
+	}
 	BE_ST_AltControlScheme_Push();
-	BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes(choices);
+	BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_keychoice);
 
 	IN_ClearKeysDown();
 
@@ -1529,7 +1595,7 @@ void DisplayGameList(id0_short_t winx, id0_short_t winy, id0_short_t list_width,
 //
 void ReadGameList()
 {
-	NumGames = BE_Cross_GetSortedFilenames((id0_char_t *)GameListNames, MAX_GAMELIST_NAMES+1, FNAME_LEN, ".sav");
+	NumGames = BE_Cross_GetSortedRewritableFilenames_AsUpperCase((id0_char_t *)GameListNames, MAX_GAMELIST_NAMES+1, FNAME_LEN, ".sav");
 #if 0
 	struct ffblk ffblk;
 	id0_short_t done,len;
@@ -2084,10 +2150,13 @@ void DoFullScreenAnim(id0_char_t *filename, void (*SpawnAll)(), id0_short_t (*Ch
 
 #endif
 
+// (REFKEEN) Split FindFile to separate handlers, possibly using different paths
+// - Change FindFile to an internal static function with a few changes
+
 //--------------------------------------------------------------------------
 // FindFile()
 //--------------------------------------------------------------------------
-id0_boolean_t FindFile(const id0_char_t *filename,const id0_char_t *disktext,id0_char_t disknum)
+static id0_boolean_t FindFile(const id0_char_t *filename,const id0_char_t *disktext,id0_char_t disknum,bool rewritable)
 {
 	extern id0_boolean_t splitscreen;
 
@@ -2105,7 +2174,7 @@ id0_boolean_t FindFile(const id0_char_t *filename,const id0_char_t *disktext,id0
 	drive[1] = 0;
 	while (rt_code == 2)
 	{
-		if (Verify(filename))
+		if (Verify(filename,rewritable))
 			rt_code = true;
 		else
 		{
@@ -2181,16 +2250,27 @@ id0_boolean_t FindFile(const id0_char_t *filename,const id0_char_t *disktext,id0
 	return(rt_code);
 }
 
+// (REFKEEN) Split FindFile function
+id0_boolean_t FindReadOnlyFile(const id0_char_t *filename,const id0_char_t *disktext,id0_char_t disknum)
+{
+	return FindFile(filename,disktext,disknum,false);
+}
+
+id0_boolean_t FindRewritableFile(const id0_char_t *filename,const id0_char_t *disktext,id0_char_t disknum)
+{
+	return FindFile(filename,disktext,disknum,true);
+}
+
 #if 0
 //--------------------------------------------------------------------------
 // CacheAll()
 //--------------------------------------------------------------------------
 void CacheAV(id0_char_t *title)
 {
-	if (Verify("EGAGRAPH."EXT))
+	if (VerifyReadOnly("EGAGRAPH."EXT))
 	{
 		CA_CacheMarks(title);
-		if (!FindFile("EGAGRAPH."EXT,AUDIO_DISK))
+		if (!FindReadOnlyFile("EGAGRAPH."EXT,AUDIO_DISK))
 			TrashProg("Can't find graphics files.");
 
 // cache in audio
@@ -2202,7 +2282,7 @@ void CacheAV(id0_char_t *title)
 
 // cache in audio
 
-		if (!FindFile("EGAGRAPH."EXT,VIDEO_DISK))
+		if (!FindReadOnlyFile("EGAGRAPH."EXT,VIDEO_DISK))
 			TrashProg("Can't find audio files.");
 		CA_CacheMarks(title);
 

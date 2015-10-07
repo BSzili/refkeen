@@ -199,8 +199,9 @@ void VW_DrawTile8(id0_unsigned_t xcoord, id0_unsigned_t ycoord, id0_unsigned_t t
 	// This one is really weird, but looks like STARTTILE8 is really 314,
 	// rather than 315, in the case of the original Catacomb Abyss
 	// Shareware v1.13 EXE (only in ID_VW_AE.ASM, not e.g., C code).
+	// There's a similar difference in the v1.24 EXE.
 	// In practice, though, it looks like STARTTILE8 is never used anyway...
-#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
+#ifdef REFKEEN_VER_CATABYSS
 	id0_byte_t *tilePtr = (id0_byte_t *)grsegs[STARTTILE8-1]+(tile<<5);
 #else
 	id0_byte_t *tilePtr = (id0_byte_t *)grsegs[STARTTILE8]+(tile<<5);
@@ -1186,26 +1187,16 @@ void VWL_UpdateScreenBlocks (void)
 		id0_word_t tileLoc = blockstarts[rowScanStartPtr-updateptr-1]; // start of tile location
 		id0_word_t egaSrcOff = tileLoc+bufferofs;
 		id0_word_t egaDestOff = tileLoc+displayofs;
-		id0_word_t bytesToSkip = linewidth-bytesPerRow;
 		for (int loopVar = 15; loopVar; --loopVar)
 		{
-			iterationsToDo = bytesPerRow;
-			for (; iterationsToDo; --iterationsToDo)
-			{
-				BE_ST_EGAUpdateGFXByteScrToScr(egaDestOff++, egaSrcOff++);
-			}
-			egaSrcOff += bytesToSkip;
-			egaDestOff += bytesToSkip;
+			BE_ST_EGAUpdateGFXBufferScrToScr(egaDestOff, egaSrcOff, bytesPerRow);
+			egaSrcOff += linewidth;
+			egaDestOff += linewidth;
 		}
-		iterationsToDo = bytesPerRow;
-		for (; iterationsToDo; --iterationsToDo)
-		{
-			BE_ST_EGAUpdateGFXByteScrToScr(egaDestOff++, egaSrcOff++);
-		}
-		iterationsToDo = 0;
-		// was 0, now 0xFFFF for above loop
-		// WARNING: This should be UNSIGNED, or else we get undefined behaviors
-		--iterationsToDo;
+		BE_ST_EGAUpdateGFXBufferScrToScr(egaDestOff, egaSrcOff, bytesPerRow);
+		// was originally 0 at this point, then "decremented" by 1 to 0xFFFF for the loop above
+		// WARNING: iterationsToDo should be UNSIGNED in order to work properly
+		iterationsToDo = 0xFFFF;
 	} while (true);
 }
 

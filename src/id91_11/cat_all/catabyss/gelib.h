@@ -25,19 +25,20 @@
 #define SAVEVER_DATA "0.93"
 #define FILENAME_LEN 15
 
-#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
+// REFKEEN - Replace with variables that can be dynamically exchanged
+extern const char *refkeen_compat_gelib_gamename;
+extern const char *refkeen_compat_gelib_version;
+extern const char *refkeen_compat_gelib_revision;
+// This includes the null terminator
+extern size_t refkeen_compat_gelib_gamename_strbufflen;
+// A few strings that include gamename
+extern char refkeen_compat_gelib_c4_debug_str_with_gamename[];
+extern char refkeen_compat_gelib_str_with_gamename[];
 
-#define  GAMENAME               "CATACOMB ABYSS  "
-#define VERSION         "V1.13   "
-#define  REVISION               "QA [0]"
-
-#else
-
-#define  GAMENAME               "CATACOMB ABYSS 3-D"
-#define VERSION         "V1.24   "
-#define  REVISION               "1"
-
-#endif
+// REFKEEN - Compatibility/Reference stuff (where possible)
+#define GAMENAME refkeen_compat_gelib_gamename
+#define VERSION refkeen_compat_gelib_version
+#define REVISION refkeen_compat_gelib_revision
 
 //#define BOBLIST 1                          //SP - Undefine if not using BOBList
 
@@ -124,7 +125,10 @@ void DisplayText(textinfo *textinfo);
 id0_long_t LoadTextFile(const id0_char_t *filename,textinfo *textinfo);
 void FreeTextFile(textinfo *textinfo);
 void InitTextFile(textinfo *textinfo);
-id0_long_t Verify(const id0_char_t *filename);
+// (REFKEEN) Split Verify to separate handlers, possibly using different paths
+id0_long_t VerifyReadOnly(const id0_char_t *filename);
+id0_long_t VerifyRewritable(const id0_char_t *filename);
+//id0_long_t Verify(const id0_char_t *filename);
 void GE_SaveGame(void);
 id0_boolean_t GE_LoadGame(void);
 id0_int_t GE_HardError(id0_word_t errval,id0_int_t ax,id0_int_t bp,id0_int_t si);
@@ -178,7 +182,10 @@ void cachein(id0_short_t s,id0_short_t e);
 void cacheout(id0_short_t s,id0_short_t e);
 void FizzleFade (id0_unsigned_t source, id0_unsigned_t dest,id0_unsigned_t width,id0_unsigned_t height, id0_boolean_t abortable);
 void mprintf(id0_char_t *msg, ...);
-id0_boolean_t FindFile(const id0_char_t *filename,const id0_char_t *disktext,id0_char_t disknum);
+// (REFKEEN) Split FindFile to separate handlers, possibly using different paths
+id0_boolean_t FindReadOnlyFile(const id0_char_t *filename,const id0_char_t *disktext,id0_char_t disknum);
+id0_boolean_t FindRewritableFile(const id0_char_t *filename,const id0_char_t *disktext,id0_char_t disknum);
+//id0_boolean_t FindFile(const id0_char_t *filename,const id0_char_t *disktext,id0_char_t disknum);
 void CacheAV(id0_char_t *title);
 void BlackPalette(void);
 void ColoredPalette(void);

@@ -234,7 +234,9 @@ id0_boolean_t CA_LoadFile (const id0_char_t *filename, memptr *ptr)
 	BE_FILE_T handle;
 	id0_long_t size;
 
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading(filename)))
+	// (REFKEEN) - Currently usable only with read-only files like game
+	// data files, but this is the only place where this may be used now
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading(filename)))
 	//if ((handle = open(filename,O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		return false;
 
@@ -496,12 +498,12 @@ void CAL_SetupGrFile (void)
 //
 
 #ifdef REFKEEN_VER_KDREAMS_CGA_ALL
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading(GREXT"DICT."EXTENSION)))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading(GREXT"DICT."EXTENSION)))
 	//if ((handle = open(GREXT"DICT."EXTENSION,
 	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open "GREXT"DICT."EXTENSION"!");
 #elif defined REFKEEN_VER_KDREAMS_ANYEGA_ALL
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading("KDREAMS.EGA")))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading("KDREAMS.EGA")))
 	//if ((handle = open("KDREAMS.EGA",
 	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open KDREAMS.EGA!");
@@ -523,7 +525,7 @@ void CAL_SetupGrFile (void)
 //
 	MM_GetPtr ((memptr *)&grstarts,(NUMCHUNKS+1)*4);
 
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading(GREXT"HEAD."EXTENSION)))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading(GREXT"HEAD."EXTENSION)))
 	//if ((handle = open(GREXT"HEAD."EXTENSION,
 	//	 O_RDONLY | O_BINARY, /*S_IREAD*/S_IRUSR)) == -1)
 		Quit ("Can't open "GREXT"HEAD."EXTENSION"!");
@@ -540,13 +542,13 @@ void CAL_SetupGrFile (void)
 // Open the graphics file, leaving it open until the game is finished
 //
 #ifdef REFKEEN_VER_KDREAMS_CGA_ALL
-	grhandle = BE_Cross_open_for_reading(GREXT"GRAPH."EXTENSION);
+	grhandle = BE_Cross_open_readonly_for_reading(GREXT"GRAPH."EXTENSION);
 	//grhandle = open(GREXT"GRAPH."EXTENSION, O_RDONLY | O_BINARY);
 	if (!BE_Cross_IsFileValid(grhandle))
 	//if (grhandle == -1)
 		Quit ("Cannot open "GREXT"GRAPH."EXTENSION"!");
 #elif defined REFKEEN_VER_KDREAMS_ANYEGA_ALL
-	grhandle = BE_Cross_open_for_reading("KDREAMS.EGA");
+	grhandle = BE_Cross_open_readonly_for_reading("KDREAMS.EGA");
 	//grhandle = open("KDREAMS.EGA", O_RDONLY | O_BINARY);
 	if (!BE_Cross_IsFileValid(grhandle))
  	//if (grhandle == -1)
@@ -641,12 +643,12 @@ void CAL_SetupMapFile (void)
 //
 #ifndef MAPHEADERLINKED
 #ifdef REFKEEN_VER_KDREAMS_CGA_ALL
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading("MAPHEAD."EXTENSION)))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading("MAPHEAD."EXTENSION)))
 	//if ((handle = open("MAPHEAD."EXTENSION,
 	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open MAPHEAD."EXTENSION"!");
 #elif defined REFKEEN_VER_KDREAMS_ANYEGA_ALL
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading("KDREAMS.MAP")))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading("KDREAMS.MAP")))
 	//if ((handle = open("KDREAMS.MAP",
  	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open KDREAMS.MAP!");
@@ -678,18 +680,18 @@ void CAL_SetupMapFile (void)
 //
 #ifdef MAPHEADERLINKED
 #ifdef REFKEEN_VER_KDREAMS_CGA_ALL
-	if (!BE_Cross_IsFileValid(maphandle = BE_Cross_open_for_reading("GAMEMAPS."EXTENSION)))
+	if (!BE_Cross_IsFileValid(maphandle = BE_Cross_open_readonly_for_reading("GAMEMAPS."EXTENSION)))
 	//if ((maphandle = open("GAMEMAPS."EXTENSION,
 	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open GAMEMAPS."EXTENSION"!");
 #elif defined REFKEEN_VER_KDREAMS_ANYEGA_ALL
-	if (!BE_Cross_IsFileValid(maphandle = BE_Cross_open_for_reading("KDREAMS.MAP")))
+	if (!BE_Cross_IsFileValid(maphandle = BE_Cross_open_readonly_for_reading("KDREAMS.MAP")))
 	//if ((maphandle = open("KDREAMS.MAP",
  	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open KDREAMS.MAP!");
 #endif // VERSION
 #else
-	if (!BE_Cross_IsFileValid(maphandle = BE_Cross_open_for_reading("MAPTEMP."EXTENSION)))
+	if (!BE_Cross_IsFileValid(maphandle = BE_Cross_open_readonly_for_reading("MAPTEMP."EXTENSION)))
 	//if ((maphandle = open("MAPTEMP."EXTENSION,
 	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open MAPTEMP."EXTENSION"!");
@@ -719,7 +721,7 @@ void CAL_SetupAudioFile (void)
 // load maphead.ext (offsets and tileinfo for map file)
 //
 #ifndef AUDIOHEADERLINKED
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading("AUDIOHED."EXTENSION)))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading("AUDIOHED."EXTENSION)))
 	//if ((handle = open("AUDIOHED."EXTENSION,
 	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open AUDIOHED."EXTENSION"!");
@@ -738,18 +740,18 @@ void CAL_SetupAudioFile (void)
 // open the data file
 //
 #ifndef AUDIOHEADERLINKED
-	if (!BE_Cross_IsFileValid(audiohandle = BE_Cross_open_for_reading("AUDIOT."EXTENSION)))
+	if (!BE_Cross_IsFileValid(audiohandle = BE_Cross_open_readonly_for_reading("AUDIOT."EXTENSION)))
 	//if ((audiohandle = open("AUDIOT."EXTENSION,
 	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open AUDIOT."EXTENSION"!");
 #else
 #ifdef REFKEEN_VER_KDREAMS_CGA_ALL
-	if (!BE_Cross_IsFileValid(audiohandle = BE_Cross_open_for_reading("AUDIO."EXTENSION)))
+	if (!BE_Cross_IsFileValid(audiohandle = BE_Cross_open_readonly_for_reading("AUDIO."EXTENSION)))
 	//if ((audiohandle = open("AUDIO."EXTENSION,
 	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open AUDIO."EXTENSION"!");
 #elif defined REFKEEN_VER_KDREAMS_ANYEGA_ALL
-	if (!BE_Cross_IsFileValid(audiohandle = BE_Cross_open_for_reading("KDREAMS.AUD")))
+	if (!BE_Cross_IsFileValid(audiohandle = BE_Cross_open_readonly_for_reading("KDREAMS.AUD")))
 	//if ((audiohandle = open("KDREAMS.AUD",
  	//	 O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		Quit ("Can't open KDREAMS.AUD!");
@@ -1828,3 +1830,69 @@ void CA_CacheMarks (const id0_char_t *title, id0_boolean_t cachedownlevel)
 		}
 }
 
+// (REFKEEN) Used for patching version-specific stuff
+#ifdef REFKEEN_VER_KDREAMS_CGA_ALL
+id0_long_t	*CGAhead;
+id0_byte_t	*CGAdict;
+#else
+id0_long_t	*EGAhead;
+id0_byte_t	*EGAdict;
+#endif
+id0_byte_t	*maphead;
+id0_byte_t	*mapdict;
+id0_byte_t	*audiohead;
+id0_byte_t	*audiodict;
+
+void RefKeen_Patch_id_ca(void)
+{
+	int audiodictsize, audioheadsize, GFXdictsize, GFXheadsize, mapdictsize, mapheadsize;
+#ifdef REFKEEN_VER_KDREAMS_CGA_ALL
+	id0_byte_t **GFXdictptr = &CGAdict;
+	id0_long_t **GFXheadptr = &CGAhead;
+#else
+	id0_byte_t **GFXdictptr = &EGAdict;
+	id0_long_t **GFXheadptr = &EGAhead;
+#endif
+	// Just in case these may ever be reloaded
+	BE_Cross_free_mem_loaded_embedded_rsrc(audiodict);
+	BE_Cross_free_mem_loaded_embedded_rsrc(audiohead);
+	BE_Cross_free_mem_loaded_embedded_rsrc(*GFXdictptr);
+	BE_Cross_free_mem_loaded_embedded_rsrc(*GFXheadptr);
+	BE_Cross_free_mem_loaded_embedded_rsrc(mapdict);
+	BE_Cross_free_mem_loaded_embedded_rsrc(maphead);
+	// Don't use CA_LoadFile for (sort-of) compatibility; It also doesn't work!
+	if (((audiodictsize = BE_Cross_load_embedded_rsrc_to_mem("AUDIODCT."EXTENSION, (memptr *)&audiodict)) < 0) ||
+	    ((audioheadsize = BE_Cross_load_embedded_rsrc_to_mem("AUDIOHHD."EXTENSION, (memptr *)&audiohead)) < 0) ||
+#ifdef REFKEEN_VER_KDREAMS_CGA_ALL
+	    ((GFXdictsize = BE_Cross_load_embedded_rsrc_to_mem("CGADICT."EXTENSION, (memptr *)GFXdictptr)) < 0) ||
+	    ((GFXheadsize = BE_Cross_load_embedded_rsrc_to_mem("CGAHEAD."EXTENSION, (memptr *)GFXheadptr)) < 0) ||
+#else
+	    ((GFXdictsize = BE_Cross_load_embedded_rsrc_to_mem("EGADICT."EXTENSION, (memptr *)GFXdictptr)) < 0) ||
+	    ((GFXheadsize = BE_Cross_load_embedded_rsrc_to_mem("EGAHEAD."EXTENSION, (memptr *)GFXheadptr)) < 0) ||
+#endif
+	    ((mapdictsize = BE_Cross_load_embedded_rsrc_to_mem("MAPDICT."EXTENSION, (memptr *)&mapdict)) < 0) ||
+	    ((mapheadsize = BE_Cross_load_embedded_rsrc_to_mem("MAPHEAD."EXTENSION, (memptr *)&maphead)) < 0)
+	)
+		// Similarly we don't use Quit
+		BE_ST_ExitWithErrorMsg("RefKeen_Patch_id_ca - Failed to load at least one file.");
+
+#ifdef REFKEEN_ARCH_BIG_ENDIAN
+	for (uint16_t *dictptr = (uint16_t *)audiodict; audiodictsize >= 2; ++dictptr, audiodictsize -= 2)
+		*dictptr = BE_Cross_Swap16LE(*dictptr);
+	for (uint32_t *headptr = (uint32_t *)audiohead; audioheadsize >= 4; ++headptr, audioheadsize -= 4)
+		*headptr = BE_Cross_Swap32LE(*headptr);
+	for (uint16_t *dictptr = (uint16_t *)(*GFXdictptr); GFXdictsize >= 2; ++dictptr, GFXdictsize -= 2)
+		*dictptr = BE_Cross_Swap16LE(*dictptr);
+	for (uint32_t *headptr = (uint32_t *)(*GFXheadptr); GFXheadsize >= 4; ++headptr, GFXheadsize -= 4)
+		*headptr = BE_Cross_Swap32LE(*headptr);
+	for (uint16_t *dictptr = (uint16_t *)mapdict; mapdictsize >= 2; ++dictptr, mapdictsize -= 2)
+		*dictptr = BE_Cross_Swap16LE(*dictptr);
+
+	mapfiletype *tinfasmapfile = (mapfiletype *)mapdict;
+	tinfasmapfile->RLEWtag = BE_Cross_Swap16LE(tinfasmapfile->RLEWtag);
+	for (int i = 0; i < sizeof(tinfasmapfile->headeroffsets)/sizeof(*(tinfasmapfile->headeroffsets)); ++i)
+	{
+		tinfasmapfile->headeroffsets[i] = BE_Cross_Swap32LE(tinfasmapfile->headeroffsets[i]);
+	}
+#endif
+}

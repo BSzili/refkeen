@@ -1,8 +1,10 @@
-#ifndef __BE_CROSS_H__
-#define __BE_CROSS_H__
+#ifndef _BE_CROSS_H_
+#define _BE_CROSS_H_
 
 #include <stdbool.h>
 #include <stdio.h>
+
+#define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
 // WARNING: It's actually safer to include this earlier (e.g., for endianness
@@ -45,7 +47,7 @@ static
 #endif
 inline char *BE_Cross_ultoa_dec(uint32_t n, char *buffer)
 {
-	sprintf(buffer, "%"PRIu32, n);
+	sprintf(buffer, "%" PRIu32, n);
 	return buffer;
 }
 
@@ -54,7 +56,7 @@ static
 #endif
 inline char *BE_Cross_ltoa_dec(int32_t n, char *buffer)
 {
-	sprintf(buffer, "%"PRId32, n);
+	sprintf(buffer, "%" PRId32, n);
 	return buffer;
 }
 
@@ -63,7 +65,7 @@ static
 #endif
 inline char *BE_Cross_itoa_dec(int16_t n, char *buffer)
 {
-	sprintf(buffer, "%"PRId16, n);
+	sprintf(buffer, "%" PRId16, n);
 	return buffer;
 }
 
@@ -96,7 +98,7 @@ int BE_Cross_strcasecmp(const char *s1, const char *s2);
 
 /* A safe(r) string copying function that:
  * - Gets a pointer to the destination buffer's end (little performance bit).
- * - Returns the END of the written string. (This differs from stdcpy!)
+ * - Returns the END of the written string. (This differs from strcpy!)
  * - Is ALLOWED to write past the written string's end, if there's room
  * (e.g., any additional null terminator).
  *
@@ -139,6 +141,20 @@ inline char *BE_Cross_safeandfastcstringcopy_3strs(char *dest, char *destEnd, co
 }
 
 
+// This one should be called early
+void BE_Cross_PrepareAppPaths(void);
+
+// Game installations stuff
+
+#define BE_CROSS_MAX_GAME_INSTALLATIONS 4
+
+const char *BE_Cross_GetGameInstallationDescription(int num);
+int BE_Cross_GetGameVerFromInstallation(int num);
+extern int g_be_gameinstallations_num;
+
+// gameVer should be BE_GAMEVER_LAST if no specific version is desired
+void BE_Cross_StartGame(int gameVerVal, int argc, char **argv, int misc);
+
 // Often used as a replacement for file handles of type "int",
 // this one is given a different name so it's easy to swap in case of a need
 typedef FILE * BE_FILE_T;
@@ -163,12 +179,25 @@ inline int BE_Cross_getc(BE_FILE_T fp) { return getc(fp); }
 int32_t BE_Cross_FileLengthFromHandle(BE_FILE_T fp);
 
 // Semi cross-platform file opening wrappers, hiding search paths
-BE_FILE_T BE_Cross_open_for_reading(const char *filename);
-BE_FILE_T BE_Cross_open_for_overwriting(const char *filename);
+BE_FILE_T BE_Cross_open_readonly_for_reading(const char *filename); // For e.g., read-only gamedata files like EGAGRAPH
+BE_FILE_T BE_Cross_open_rewritable_for_reading(const char *filename); // For e.g., rewritable files like saved games
+BE_FILE_T BE_Cross_open_rewritable_for_overwriting(const char *filename); // For the same rewritable files
+// Used for NEW files not originating from the originals (like RefKeen cfg)
+BE_FILE_T BE_Cross_open_additionalfile_for_reading(const char *filename);
+BE_FILE_T BE_Cross_open_additionalfile_for_overwriting(const char *filename);
+// Should be shared
 #ifdef __AMIGA__
 static
 #endif
 inline void BE_Cross_close(BE_FILE_T fp) { fclose(fp); }
+
+// Loads a file originally embedded into the EXE (for DOS) to a newly allocated
+// chunk of memory. Should be freed with BE_Cross_free_mem_loaded_embedded_rsrc.
+// Returns chunk size if successful, or a negative number in case of failure.
+int BE_Cross_load_embedded_rsrc_to_mem(const char *filename, void **ptr);
+
+// Frees file loaded using BE_Cross_load_embedded_rsrc_to_mem. Accepts a NULL pointer.
+void BE_Cross_free_mem_loaded_embedded_rsrc(void *ptr);
 
 // Outputs a list of file names matching given name suffix from a corresponding
 // "search path" (used by an implementation of gelib.c:ReadGameList), sorted
@@ -183,11 +212,10 @@ inline void BE_Cross_close(BE_FILE_T fp) { fclose(fp); }
 // maxNum*strLenBound;
 //
 // Returns: Number of filled entries.
-int BE_Cross_GetSortedFilenames(char *outFilenames, int maxNum, int strLenBound, const char *suffix);
+int BE_Cross_GetSortedRewritableFilenames_AsUpperCase(char *outFilenames, int maxNum, int strLenBound, const char *suffix);
 
-// Used preparing game installations and search paths
+// Used for preparing game installations and search paths
 void BE_Cross_PrepareGameInstallations(void);
-void BE_Cross_PrepareSearchPaths(void);
 
 // Semi cross-platform binary (non-textual) file I/O, where it can be used directly (config file)
 size_t BE_Cross_readInt8LE(BE_FILE_T fp, void *ptr);

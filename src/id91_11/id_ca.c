@@ -41,7 +41,7 @@ loaded into the data segment
 
 // REFKEEN - Using this from gelib for some reason
 #ifdef REFKEEN_VER_CATADVENTURES
-id0_boolean_t FindFile(const id0_char_t *filename,const id0_char_t *disktext,id0_char_t disknum);
+id0_boolean_t FindReadOnlyFile(const id0_char_t *filename,const id0_char_t *disktext,id0_char_t disknum);
 #endif
 
 /*
@@ -99,12 +99,13 @@ void	(*finishcachebox)	(void);
 =============================================================================
 */
 
-extern	id0_long_t	*CGAhead;
+// REFKEEN - Comment out what's unused
+//extern	id0_long_t	*CGAhead;
 extern	id0_long_t	*EGAhead;
-extern	id0_byte_t	*CGAdict;
+//extern	id0_byte_t	*CGAdict;
 extern	id0_byte_t	*EGAdict;
 extern	id0_byte_t	*maphead;
-extern	id0_byte_t	*mapdict;
+//extern	id0_byte_t	*mapdict;
 extern	id0_byte_t	*audiohead;
 extern	id0_byte_t	*audiodict;
 
@@ -296,6 +297,8 @@ id0_boolean_t CA_FarWrite (BE_FILE_T handle, id0_byte_t id0_far *source, id0_lon
 }
 
 
+// (REFKEEN) UNUSED FUNCTION
+#if 0
 /*
 ==========================
 =
@@ -308,22 +311,22 @@ id0_boolean_t CA_FarWrite (BE_FILE_T handle, id0_byte_t id0_far *source, id0_lon
 
 id0_boolean_t CA_ReadFile (const id0_char_t *filename, memptr *ptr)
 {
-	BE_FILE_T handle;
-	id0_long_t size;
+	int handle;
+	long size;
 
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading(filename)))
-	//if ((handle = open(filename,O_RDONLY | O_BINARY, S_IRUSR)) == -1)
+	if ((handle = open(filename,O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		return false;
 
-	size = BE_Cross_FileLengthFromHandle (handle);
-	if (!CA_FarRead (handle,(id0_byte_t *)(*ptr),size))
+	size = filelength (handle);
+	if (!CA_FarRead (handle,*ptr,size))
 	{
-		BE_Cross_close (handle);
+		close (handle);
 		return false;
 	}
-	BE_Cross_close (handle);
+	close (handle);
 	return true;
 }
+#endif
 
 
 
@@ -342,7 +345,9 @@ id0_boolean_t CA_LoadFile (const id0_char_t *filename, memptr *ptr)
 	BE_FILE_T handle;
 	id0_long_t size;
 
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading(filename)))
+	// (REFKEEN) - Currently usable only with read-only files like game
+	// data files, but this is the only place where this may be used now
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading(filename)))
 	//if ((handle = open(filename,O_RDONLY | O_BINARY, S_IREAD)) == -1)
 		return false;
 
@@ -685,7 +690,7 @@ void CAL_SetupGrFile (void)
 // load ???dict.ext (huffman dictionary for graphics files)
 //
 
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading(GREXT"DICT."EXTENSION)))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading(GREXT"DICT."EXTENSION)))
 	//if ((handle = open(GREXT"DICT."EXTENSION,
 	//	 O_RDONLY | O_BINARY, /*S_IREAD*/S_IRUSR)) == -1)
 		Quit ("Can't open "GREXT"DICT."EXTENSION"!");
@@ -706,7 +711,7 @@ void CAL_SetupGrFile (void)
 //
 	MM_GetPtr (&(memptr)grstarts,(NUMCHUNKS+1)*FILEPOSSIZE);
 
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading(GREXT"HEAD."EXTENSION)))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading(GREXT"HEAD."EXTENSION)))
 	//if ((handle = open(GREXT"HEAD."EXTENSION,
 	//	 O_RDONLY | O_BINARY, /*S_IREAD*/S_IRUSR)) == -1)
 		Quit ("Can't open "GREXT"HEAD."EXTENSION"!");
@@ -727,7 +732,7 @@ void CAL_SetupGrFile (void)
 //
 // Open the graphics file, leaving it open until the game is finished
 //
-	grhandle = BE_Cross_open_for_reading(GREXT"GRAPH."EXTENSION);
+	grhandle = BE_Cross_open_readonly_for_reading(GREXT"GRAPH."EXTENSION);
 	//grhandle = open(GREXT"GRAPH."EXTENSION, O_RDONLY | O_BINARY);
 	if (!BE_Cross_IsFileValid(grhandle))
 		Quit ("Cannot open "GREXT"GRAPH."EXTENSION"!");
@@ -819,7 +824,7 @@ void CAL_SetupMapFile (void)
 // load maphead.ext (offsets and tileinfo for map file)
 //
 #ifndef MAPHEADERLINKED
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading("MAPHEAD."EXTENSION)))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading("MAPHEAD."EXTENSION)))
 	//if ((handle = open("MAPHEAD."EXTENSION,
 	//	 O_RDONLY | O_BINARY, /*S_IREAD*/S_IRUSR)) == -1)
 		Quit ("Can't open MAPHEAD."EXTENSION"!");
@@ -847,12 +852,12 @@ void CAL_SetupMapFile (void)
 // open the data file
 //
 #ifdef MAPHEADERLINKED
-	if (!BE_Cross_IsFileValid(maphandle = BE_Cross_open_for_reading("GAMEMAPS."EXTENSION)))
+	if (!BE_Cross_IsFileValid(maphandle = BE_Cross_open_readonly_for_reading("GAMEMAPS."EXTENSION)))
 	//if ((maphandle = open("GAMEMAPS."EXTENSION,
 	//	 O_RDONLY | O_BINARY, /*S_IREAD*/S_IRUSR)) == -1)
 		Quit ("Can't open GAMEMAPS."EXTENSION"!");
 #else
-	if (!BE_Cross_IsFileValid(maphandle = BE_Cross_open_for_reading("MAPTEMP."EXTENSION)))
+	if (!BE_Cross_IsFileValid(maphandle = BE_Cross_open_readonly_for_reading("MAPTEMP."EXTENSION)))
 	//if ((maphandle = open("MAPTEMP."EXTENSION,
 	//	 O_RDONLY | O_BINARY, /*S_IREAD*/S_IRUSR)) == -1)
 		Quit ("Can't open MAPTEMP."EXTENSION"!");
@@ -882,7 +887,7 @@ void CAL_SetupAudioFile (void)
 // load maphead.ext (offsets and tileinfo for map file)
 //
 #ifndef AUDIOHEADERLINKED
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading("AUDIOHED."EXTENSION)))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading("AUDIOHED."EXTENSION)))
 	//if ((handle = open("AUDIOHED."EXTENSION,
 	//	 O_RDONLY | O_BINARY, /*S_IREAD*/S_IRUSR)) == -1)
 		Quit ("Can't open AUDIOHED."EXTENSION"!");
@@ -901,12 +906,12 @@ void CAL_SetupAudioFile (void)
 // open the data file
 //
 #ifndef AUDIOHEADERLINKED
-	if (!BE_Cross_IsFileValid(audiohandle = BE_Cross_open_for_reading("AUDIOT."EXTENSION)))
+	if (!BE_Cross_IsFileValid(audiohandle = BE_Cross_open_readonly_for_reading("AUDIOT."EXTENSION)))
 	//if ((audiohandle = open("AUDIOT."EXTENSION,
 	//	 O_RDONLY | O_BINARY, /*S_IREAD*/S_IRUSR)) == -1)
 		Quit ("Can't open AUDIOT."EXTENSION"!");
 #else
-	if (!BE_Cross_IsFileValid(audiohandle = BE_Cross_open_for_reading("AUDIO."EXTENSION)))
+	if (!BE_Cross_IsFileValid(audiohandle = BE_Cross_open_readonly_for_reading("AUDIO."EXTENSION)))
 	//if ((audiohandle = open("AUDIO."EXTENSION,
 	//	 O_RDONLY | O_BINARY, /*S_IREAD*/S_IRUSR)) == -1)
 		Quit ("Can't open AUDIO."EXTENSION"!");
@@ -937,7 +942,7 @@ void CA_Startup (void)
 
 // MDM begin - (GAMERS EDGE)
 //
-	if (!FindFile("AUDIO."EXTENSION,NULL,2))
+	if (!FindReadOnlyFile("AUDIO."EXTENSION,NULL,2))
 		Quit("CA_Startup(): Can't find audio files.");
 //
 // MDM end
@@ -949,9 +954,9 @@ void CA_Startup (void)
 // MDM begin - (GAMERS EDGE)
 //
 #ifdef REFKEEN_VER_CATABYSS
-	if (!FindFile("GAMEMAPS."EXTENSION,NULL,2))
+	if (!FindReadOnlyFile("GAMEMAPS."EXTENSION,NULL,2))
 #else
-	if (!FindFile("GAMEMAPS."EXTENSION,NULL,1))
+	if (!FindReadOnlyFile("GAMEMAPS."EXTENSION,NULL,1))
 #endif
 		Quit("CA_Startup(): Can't find level files.");
 //
@@ -967,7 +972,7 @@ void CA_Startup (void)
 
 // MDM begin - (GAMERS EDGE)
 //
-	if (!FindFile("EGAGRAPH."EXTENSION,NULL,2))
+	if (!FindReadOnlyFile("EGAGRAPH."EXTENSION,NULL,2))
 		Quit("CA_Startup(): Can't find graphics files.");
 //
 // MDM end
@@ -1048,7 +1053,7 @@ void CA_CacheAudioChunk (id0_int_t chunk)
 
 // MDM begin - (GAMERS EDGE)
 //
-	if (!FindFile("AUDIO."EXTENSION,NULL,2))
+	if (!FindReadOnlyFile("AUDIO."EXTENSION,NULL,2))
 		Quit("CA_CacheAudioChunk(): Can't find audio files.");
 //
 // MDM end
@@ -1561,7 +1566,7 @@ void CA_CacheGrChunk (id0_int_t chunk)
 
 // MDM begin - (GAMERS EDGE)
 //
-	if (!FindFile("EGAGRAPH."EXTENSION,NULL,2))
+	if (!FindReadOnlyFile("EGAGRAPH."EXTENSION,NULL,2))
 		Quit("CA_CacheGrChunk(): Can't find graphics files.");
 //
 // MDM end
@@ -1632,9 +1637,9 @@ void CA_CacheMap (id0_int_t mapnum)
 // MDM begin - (GAMERS EDGE)
 //
 #ifdef REFKEEN_VER_CATABYSS
-	if (!FindFile("GAMEMAPS."EXTENSION,NULL,2))
+	if (!FindReadOnlyFile("GAMEMAPS."EXTENSION,NULL,2))
 #else
-	if (!FindFile("GAMEMAPS."EXTENSION,NULL,1))
+	if (!FindReadOnlyFile("GAMEMAPS."EXTENSION,NULL,1))
 #endif
 		Quit("CA_CacheMap(): Can't find level files.");
 //
@@ -2074,7 +2079,7 @@ void CA_CacheMarks (const id0_char_t *title)
 
 // MDM begin - (GAMERS EDGE)
 //
-	if (!FindFile("EGAGRAPH."EXTENSION,NULL,2))
+	if (!FindReadOnlyFile("EGAGRAPH."EXTENSION,NULL,2))
 		Quit("CA_CacheMarks(): Can't find graphics files.");
 //
 // MDM end
@@ -2182,3 +2187,60 @@ void CA_CacheMarks (const id0_char_t *title)
 			finishcachebox();
 }
 
+// (REFKEEN) Used for patching version-specific stuff
+id0_long_t	*EGAhead;
+id0_byte_t	*EGAdict;
+id0_byte_t	*maphead;
+id0_byte_t	*audiohead;
+id0_byte_t	*audiodict;
+
+void RefKeen_Patch_id_ca(void)
+{
+	int audiodictsize, audioheadsize, GFXdictsize, GFXheadsize, mapheadsize;
+	// Basically covering the possibility of CGA support
+	id0_byte_t **GFXdictptr = &EGAdict;
+	id0_long_t **GFXheadptr = &EGAhead;
+	// Just in case these may ever be reloaded
+	BE_Cross_free_mem_loaded_embedded_rsrc(audiodict);
+	BE_Cross_free_mem_loaded_embedded_rsrc(audiohead);
+	BE_Cross_free_mem_loaded_embedded_rsrc(EGAdict);
+	BE_Cross_free_mem_loaded_embedded_rsrc(EGAhead);
+	BE_Cross_free_mem_loaded_embedded_rsrc(maphead);
+	// Don't use CA_LoadFile for (sort-of) compatibility; It also doesn't work!
+	if (((audiodictsize = BE_Cross_load_embedded_rsrc_to_mem("AUDIODCT."EXTENSION, (memptr *)&audiodict)) < 0) ||
+	    ((audioheadsize = BE_Cross_load_embedded_rsrc_to_mem("AUDIOHHD."EXTENSION, (memptr *)&audiohead)) < 0) ||
+	    ((GFXdictsize = BE_Cross_load_embedded_rsrc_to_mem("EGADICT."EXTENSION, (memptr *)GFXdictptr)) < 0) ||
+	    ((GFXheadsize = BE_Cross_load_embedded_rsrc_to_mem("EGAHEAD."EXTENSION, (memptr *)GFXheadptr)) < 0) ||
+	    ((mapheadsize = BE_Cross_load_embedded_rsrc_to_mem("MTEMP.TMP", (memptr *)&maphead)) < 0)
+	)
+		// Similarly we don't use Quit
+		BE_ST_ExitWithErrorMsg("RefKeen_Patch_id_ca - Failed to load at least one file.");
+
+#ifdef REFKEEN_ARCH_BIG_ENDIAN
+	for (uint16_t *dictptr = (uint16_t *)audiodict; audiodictsize >= 2; ++dictptr, audiodictsize -= 2)
+		*dictptr = BE_Cross_Swap16LE(*dictptr);
+	for (uint32_t *headptr = (uint32_t *)audiohead; audioheadsize >= 4; ++headptr, audioheadsize -= 4)
+		*headptr = BE_Cross_Swap32LE(*headptr);
+	for (uint16_t *dictptr = (uint16_t *)(*GFXdictptr); GFXdictsize >= 2; ++dictptr, GFXdictsize -= 2)
+		*dictptr = BE_Cross_Swap16LE(*dictptr);
+#ifdef THREEBYTEGRSTARTS
+	for (uint8_t *headptr = (uint8_t *)(*GFXheadptr); GFXheadsize >= 3; headptr += 3, GFXheadsize -= 3)
+	{
+		// We want a 24-bit swap i.e., swap bytes no. 0 and 2
+		uint8_t temp = *headptr;
+		*(headptr+2) = temp;
+		*headptr = *(headptr+2);
+	}
+#else
+	for (uint32_t *headptr = (uint32_t *)(*GFXheadptr); GFXheadsize >= 4; ++headptr, GFXheadsize -= 4)
+		*headptr = BE_Cross_Swap32LE(*headptr);
+#endif
+
+	mapfiletype id0_seg *tinfasmapfile = (mapfiletype id0_seg *)mapdict;
+	tinfasmapfile->RLEWtag = BE_Cross_Swap16LE(tinfasmapfile->RLEWtag);
+	for (int i = 0; i < sizeof(tinfasmapfile->headeroffsets)/sizeof(*(tinfasmapfile->headeroffsets)); ++i)
+	{
+		tinfasmapfile->headeroffsets[i] = BE_Cross_Swap32LE(tinfasmapfile->headeroffsets[i]);
+	}
+#endif
+}

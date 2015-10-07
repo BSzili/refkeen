@@ -958,8 +958,9 @@ void
 IN_AckBack(void)
 {
 	// REFKEEN - Alternative controllers support
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback;
 	BE_ST_AltControlScheme_Push();
-	BE_ST_AltControlScheme_PrepareInputWaitControls();
+	BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_inackback);
 
 	id0_word_t	i;
 
@@ -973,6 +974,8 @@ IN_AckBack(void)
 				{
 					BE_ST_ShortSleep();
 				}
+				// REFKEEN - Alternative controllers support
+				BE_ST_AltControlScheme_Pop();
 				return;
 			}
 		}
@@ -987,6 +990,8 @@ IN_AckBack(void)
 					{
 						BE_ST_ShortSleep();
 					}
+					// REFKEEN - Alternative controllers support
+					BE_ST_AltControlScheme_Pop();
 					return;
 				}
 			}

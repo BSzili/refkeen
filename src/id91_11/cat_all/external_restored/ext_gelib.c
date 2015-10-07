@@ -50,8 +50,8 @@ void TrashProg (const id0_char_t *OutMsg, ...)
 	va_list ap;
 	va_start(ap, OutMsg);
 
-#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
-	if (strcmp(id0_argv[0], "INTRO.EXE"))
+#ifdef REFKEEN_VER_CATABYSS
+	if ((refkeen_current_gamever == BE_GAMEVER_CATABYSS113) && strcmp(id0_argv[0], "INTRO.EXE"))
 	{
 		void loadscn_TrashProg (const id0_char_t *OutMsg, ...);
 		loadscn_TrashProg(OutMsg, ap);
@@ -162,8 +162,7 @@ id0_long_t Verify(const id0_char_t *filename)
 	int handle;
 	id0_long_t size;
 
-	if ((handle=BE_Cross_open_for_reading(filename))==-1)
-	//if ((handle=open(filename,O_RDONLY))!=-1)
+	if ((handle=open(filename,O_RDONLY))!=-1)
 	{
 		size=BE_Cross_FileLengthFromHandle(handle);
 		close(handle);

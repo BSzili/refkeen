@@ -282,10 +282,10 @@ USL_ReadConfig(void)
 	ControlType	ctl;
 
 #ifdef REFKEEN_VER_KDREAMS_CGA_ALL
-	if (BE_Cross_IsFileValid(file = BE_Cross_open_for_reading("CONFIG."EXTENSION)))
+	if (BE_Cross_IsFileValid(file = BE_Cross_open_rewritable_for_reading("CONFIG."EXTENSION)))
 	//if ((file = open("CONFIG."EXTENSION,O_BINARY | O_RDONLY)) != -1)
 #elif defined REFKEEN_VER_KDREAMS_ANYEGA_ALL
-	if (BE_Cross_IsFileValid(file = BE_Cross_open_for_reading("KDREAMS.CFG")))
+	if (BE_Cross_IsFileValid(file = BE_Cross_open_rewritable_for_reading("KDREAMS.CFG")))
 	//if ((file = open("KDREAMS.CFG",O_BINARY | O_RDONLY)) != -1)
 #endif
 	{
@@ -342,11 +342,11 @@ USL_WriteConfig(void)
 	BE_FILE_T	file;
 
 #ifdef REFKEEN_VER_KDREAMS_CGA_ALL
-	file = BE_Cross_open_for_overwriting("CONFIG."EXTENSION);
+	file = BE_Cross_open_rewritable_for_overwriting("CONFIG."EXTENSION);
 	//file = open("CONFIG."EXTENSION,O_CREAT | O_BINARY | O_WRONLY,
 	//			S_IREAD | S_IWRITE | S_IFREG);
 #elif defined REFKEEN_VER_KDREAMS_ANYEGA_ALL
-	file = BE_Cross_open_for_overwriting("KDREAMS.CFG");
+	file = BE_Cross_open_rewritable_for_overwriting("KDREAMS.CFG");
 	//file = open("KDREAMS.CFG", O_CREAT | O_BINARY | O_WRONLY,
 	//			S_IREAD | S_IWRITE | S_IFREG);
 #endif
@@ -400,7 +400,7 @@ USL_CheckSavedGames(void)
 	{
 		filename = USL_GiveSaveName(i);
 		ok = false;
-		if (BE_Cross_IsFileValid(file = BE_Cross_open_for_reading(filename)))
+		if (BE_Cross_IsFileValid(file = BE_Cross_open_rewritable_for_reading(filename)))
 		//if ((file = open(filename,O_BINARY | O_RDONLY)) != -1)
 		{
 			// REFKEEN Cross Platform file I/O
@@ -506,10 +506,10 @@ US_CheckParm(const id0_char_t *parm,const id0_char_t **strings)
 				return(i);
 			cp = *p++;
 
-			if (isupper(cs))
-				cs = tolower(cs);
-			if (isupper(cp))
-				cp = tolower(cp);
+			if (BE_Cross_isupper(cs))
+				cs = BE_Cross_tolower(cs);
+			if (BE_Cross_isupper(cp))
+				cp = BE_Cross_tolower(cp);
 		}
 	}
 	return(-1);
@@ -581,7 +581,23 @@ US_TextScreen(void)
 
 #define	scr_rowcol(y,x)	{sx = (x) - 1;sy = (y) - 1;}
 #define	scr_aputs(s,a)	USL_ScreenDraw(sx,sy,(s),(a))
-#include "id_us_s.c"
+	// REFKEEN - Embed multiple versions of id_us_s.c
+#ifdef REFKEEN_VER_KDREAMS_CGA_ALL
+#include "id_us_s_kdreams192andlater.c" // Also used in versions 1.05 and 1.93
+#else
+	switch (refkeen_current_gamever)
+	{
+	case BE_GAMEVER_KDREAMSE113:
+#include "id_us_s_kdreams113.c"
+		break;
+	case BE_GAMEVER_KDREAMSE193:
+#include "id_us_s_kdreams192andlater.c"
+		break;
+	case BE_GAMEVER_KDREAMSE120:
+#include "id_us_s_kdreams120.c"
+		break;
+	}
+#endif // EGA/CGA
 #undef	scr_rowcol
 #undef	scr_aputs
 
@@ -1199,7 +1215,7 @@ US_LineInput(id0_int_t x,id0_int_t y,id0_char_t *buf,const id0_char_t *def,id0_b
 
 	// REFKEEN - Alternative controllers support
 	BE_ST_AltControlScheme_Push();
-	BE_ST_AltControlScheme_PrepareTextInput();
+	BE_ST_AltControlScheme_PrepareControllerMapping(&g_beStControllerMappingTextInput);
 
 	while (!done)
 	{
@@ -2492,8 +2508,9 @@ static void
 USL_DoHelp(memptr text,id0_long_t len)
 {
 	// REFKEEN - Alternative controllers support	
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu_help;
 	BE_ST_AltControlScheme_Push();
-	BE_ST_AltControlScheme_PreparePageScrollingControls(sc_PgUp, sc_PgDn);
+	BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_menu_help);
 
 	id0_boolean_t		done,
 				moved;
@@ -2938,7 +2955,7 @@ USL_CtlDLButtonCustom(UserCall call,id0_word_t i,id0_word_t n)
 		VW_UpdateScreen();
 
 		err = 0;
-		if (BE_Cross_IsFileValid(file = BE_Cross_open_for_reading(filename)))
+		if (BE_Cross_IsFileValid(file = BE_Cross_open_rewritable_for_reading(filename)))
 		//if ((file = open(filename,O_BINARY | O_RDONLY)) != -1)
 		{
 			// REFKEEN Cross Platform file I/O
@@ -3028,7 +3045,7 @@ USL_CtlDSButtonCustom(UserCall call,id0_word_t i,id0_word_t n)
 #endif
 		filename = USL_GiveSaveName(n / 2);
 		err = 0;
-		file = BE_Cross_open_for_overwriting(filename);
+		file = BE_Cross_open_rewritable_for_overwriting(filename);
 		//file = open(filename,O_CREAT | O_BINARY | O_WRONLY,
 		//			S_IREAD | S_IWRITE | S_IFREG);
 		if (BE_Cross_IsFileValid(file))
@@ -3554,8 +3571,9 @@ void
 US_ControlPanel(void)
 {
 	// REFKEEN - Alternative controllers support	
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu;	
 	BE_ST_AltControlScheme_Push();
-	BE_ST_AltControlScheme_PrepareMenuControls();
+	BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_menu);
 
 	id0_char_t		gamename[MaxGameName + 10 + 1];
 	ScanCode	c;
@@ -3931,4 +3949,22 @@ US_CheckHighScore(id0_long_t score,id0_word_t other)
 
 	US_DisplayHighScores(n);
 	IN_UserInput(5 * TickBase,false);
+}
+
+// (REFKEEN) Used for patching version-specific stuff
+id0_char_t *gametext, *context, *story;
+
+void RefKeen_Patch_id_us(void)
+{
+	// Just in case these may ever be reloaded
+	BE_Cross_free_mem_loaded_embedded_rsrc(gametext);
+	BE_Cross_free_mem_loaded_embedded_rsrc(context);
+	BE_Cross_free_mem_loaded_embedded_rsrc(story);
+	// Don't use CA_LoadFile for (sort-of) compatibility; It also doesn't work!
+	if (!BE_Cross_load_embedded_rsrc_to_mem("GAMETEXT."EXTENSION, (memptr *)&gametext) ||
+	    !BE_Cross_load_embedded_rsrc_to_mem("CONTEXT."EXTENSION, (memptr *)&context) ||
+	    !BE_Cross_load_embedded_rsrc_to_mem("STORY."EXTENSION, (memptr *)&story)
+	)
+		// Similarly we don't use Quit
+		BE_ST_ExitWithErrorMsg("RefKeen_Patch_id_us - Failed to load at least one file.");
 }

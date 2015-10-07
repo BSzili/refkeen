@@ -1,5 +1,5 @@
-#ifndef	__BE_ST__
-#define __BE_ST__
+#ifndef	_BE_ST_
+#define _BE_ST_
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -9,14 +9,17 @@
 //#include "be_st_amiga.h"
 #else
 #include "be_st_sdl.h"
+#include "be_launcher.h"
 #endif
 
-// Direct accesses to any of these functions should be minimized
+#define BE_ST_MAXJOYSTICKS 8
 
 /*** General ***/
-void BE_ST_InitAll(void);
-void BE_ST_ShutdownAll(void);
+void BE_ST_InitCommon(void); // Before game or launcher
+void BE_ST_PrepareForGameStartup(void); // Before game
+void BE_ST_ShutdownAll(void); // After game
 void BE_ST_HandleExit(int status); // Replacement for exit function (useful for displaying text screen)
+void BE_ST_QuickExit(void); // Where the usual exit handler isn't sufficient: Saves last settings, shutdowns subsystems and then exits immediately
 void BE_ST_StartKeyboardService(void (*funcPtr)(uint8_t));
 void BE_ST_StopKeyboardService(void);
 void BE_ST_GetMouseDelta(int16_t *x, int16_t *y);
@@ -27,11 +30,77 @@ uint16_t BE_ST_GetJoyButtons(uint16_t joy);
 int16_t BE_ST_KbHit(void);
 int16_t BE_ST_BiosScanCode(int16_t command);
 
-// Used internally, or at least for new errors: Logs to emulated text screen
-// *and* possibly also to somewhere else (e.g., actual stdout). Note that
+// Used internally, or alternatively for new errors: Logs to emulated text
+// screen *and* possibly also somewhere else (e.g., actual stdout). Note that
 // this function does *not* access a variable number of arguments like printf,
 // since format specifiers may differ between the two methods of outputs.
 void BE_ST_ExitWithErrorMsg(const char *msg);
+
+
+/*** Alternative controller schemes ***/
+// The XInput Controller layout, using details given by the
+// SDL_GameController API, is used as a base for the controller layout.
+typedef enum {
+	BE_ST_CTRL_BUT_A = 0,
+	BE_ST_CTRL_BUT_B,
+	BE_ST_CTRL_BUT_X,
+	BE_ST_CTRL_BUT_Y,
+	BE_ST_CTRL_BUT_BACK,
+	BE_ST_CTRL_BUT_GUIDE, // Shouldn't be used, but defined for consistency with SDL 2.0
+	BE_ST_CTRL_BUT_START,
+	BE_ST_CTRL_BUT_LSTICK,
+	BE_ST_CTRL_BUT_RSTICK,
+	BE_ST_CTRL_BUT_LSHOULDER,
+	BE_ST_CTRL_BUT_RSHOULDER,
+	BE_ST_CTRL_BUT_DPAD_UP,
+	BE_ST_CTRL_BUT_DPAD_DOWN,
+	BE_ST_CTRL_BUT_DPAD_LEFT,
+	BE_ST_CTRL_BUT_DPAD_RIGHT,
+	BE_ST_CTRL_BUT_MAX,
+} BE_ST_ControllerDigiButton;
+
+typedef enum {
+	BE_ST_CTRL_AXIS_LX = 0,
+	BE_ST_CTRL_AXIS_LY,
+	BE_ST_CTRL_AXIS_RX,
+	BE_ST_CTRL_AXIS_RY,
+	BE_ST_CTRL_AXIS_LTRIGGER,
+	BE_ST_CTRL_AXIS_RTRIGGER,
+	BE_ST_CTRL_AXIS_MAX,
+} BE_ST_ControllerAxis;
+
+typedef enum {
+	BE_ST_CTRL_MAP_NONE = 0, // Should be set to 0 for e.g., default initializations
+	BE_ST_CTRL_MAP_KEYSCANCODE,
+	BE_ST_CTRL_MAP_MOUSEBUTTON,
+	BE_ST_CTRL_MAP_MOUSEMOTION,
+	BE_ST_CTRL_MAP_OTHERMAPPING,
+	//BE_ST_CONTROLLER_MAPPING_TEXTINPUTTOGGLE,
+	//BE_ST_CONTROLLER_MAPPING_DEBUGKEYSTOGGLE,
+} BE_ST_ControllerSingleMapClass;
+
+// BE_ST_ControllerMapping is what defines a mapping, consisting of arrays
+// of BE_ST_ControllerSingleMap. Note that an array element may have
+// a pointer to another BE_ST_ControllerMapping.
+
+struct BE_ST_ControllerMapping;
+
+typedef struct {
+	const struct BE_ST_ControllerMapping *otherMappingPtr;
+	int val;
+	int secondaryVal; // Used for mouse motion emulation
+	BE_ST_ControllerSingleMapClass mapClass;
+} BE_ST_ControllerSingleMap;
+
+typedef struct BE_ST_ControllerMapping {
+	// Set to non-NULL if toggling non-mapped action
+	// (generally digital buttons only, but MAY include the analog triggers)
+	struct BE_ST_ControllerMapping *prevMapping;
+
+	BE_ST_ControllerSingleMap buttons[BE_ST_CTRL_BUT_MAX];
+	BE_ST_ControllerSingleMap axes[BE_ST_CTRL_AXIS_MAX][2];
+	bool showUi;
+} BE_ST_ControllerMapping;
 
 // Various controller schemes are saved in a stack, so it's straight-forward
 // to revert to an arbitrary preceding scheme when desired.
@@ -41,15 +110,47 @@ void BE_ST_ExitWithErrorMsg(const char *msg);
 void BE_ST_AltControlScheme_Push(void);
 void BE_ST_AltControlScheme_Pop(void);
 // Replace current controller scheme using any of these
-void BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes(const char *scanCodes);
-void BE_ST_AltControlScheme_PreparePageScrollingControls(int prevPageScan, int nextPageScan);
-void BE_ST_AltControlScheme_PrepareMenuControls(void);
-void BE_ST_AltControlScheme_PrepareInGameControls(int primaryScanCode, int secondaryScanCode, int upScanCode, int downScanCode, int leftScanCode, int rightScanCode);
-void BE_ST_AltControlScheme_PrepareInputWaitControls(void); // When there's a simple wait for user input, not anything specific...
-void BE_ST_AltControlScheme_PrepareTextInput(void);
+void BE_ST_AltControlScheme_PrepareControllerMapping(const BE_ST_ControllerMapping *mapping);
+
+// HACK - Pass corresponding pointer to PrepareControllerMapping for on-screen keyboard
+// (can also be used to go from one mapping to another, e.g., showing debug keys in-game)
+extern BE_ST_ControllerMapping g_beStControllerMappingTextInput;
+extern BE_ST_ControllerMapping g_beStControllerMappingDebugKeys;
+
+
+// Used when loading controller scheme stuff from cfg
+enum {
+	BE_ST_CTRL_CFG_BUTMAP_BEFOREFIRST = -1, /* The actual first entry is to be numbered 0 */
+#ifdef REFKEEN_VER_KDREAMS
+	BE_ST_CTRL_CFG_BUTMAP_JUMP,
+	BE_ST_CTRL_CFG_BUTMAP_THROW,
+	BE_ST_CTRL_CFG_BUTMAP_STATS,
+#else
+	BE_ST_CTRL_CFG_BUTMAP_FIRE,
+	BE_ST_CTRL_CFG_BUTMAP_STRAFE,
+	BE_ST_CTRL_CFG_BUTMAP_DRINK,
+	BE_ST_CTRL_CFG_BUTMAP_BOLT, // Zapper in the Adventures Series
+	BE_ST_CTRL_CFG_BUTMAP_NUKE, // Xterminator in the Adventures Series
+	BE_ST_CTRL_CFG_BUTMAP_FASTTURN,
+#endif
+#if (defined REFKEEN_VER_CAT3D) || (defined REFKEEN_VER_CATABYSS)
+	BE_ST_CTRL_CFG_BUTMAP_SCROLLS,
+#endif
+#if (defined REFKEEN_VER_KDREAMS) || (defined REFKEEN_VER_CATADVENTURES)
+	BE_ST_CTRL_CFG_BUTMAP_FUNCKEYS,
+#endif
+	BE_ST_CTRL_CFG_BUTMAP_DEBUGKEYS,
+	BE_ST_CTRL_CFG_BUTMAP_AFTERLAST,
+};
+
+// Used by launcher for controller button selection
+void BE_ST_Launcher_WaitForControllerButton(BEMenuItem *menuItem);
 
 
 void BE_ST_PollEvents(void);
+
+// Launcher loop
+void BE_ST_Launcher_RunEventLoop(void);
 
 // Returns an offset that should be added to the 16-bit segments of 32-bit
 // far pointers present in The Catacomb Armageddon/Apocalypse saved games
@@ -89,6 +190,9 @@ void BE_ST_InitGfx(void);
 void BE_ST_ShutdownGfx(void);
 void BE_ST_SetScreenStartAddress(uint16_t crtc);
 
+void BE_ST_MarkGfxForUpdate(void);
+void BE_ST_Launcher_MarkGfxCache(void);
+
 // ***WARNING*** SEE WARNING BELOW BEFORE USING!!!
 //
 // Basically a replacement for B800:0000, points to a 80x25*2 bytes long
@@ -97,6 +201,9 @@ void BE_ST_SetScreenStartAddress(uint16_t crtc);
 // ***WARNING***: After modifying this chunk, it is a MUST to call the function
 // BE_ST_MarkGfxForUpdate (used as an optimization).
 uint8_t *BE_ST_GetTextModeMemoryPtr(void);
+
+// ***WARNING***: Ensure BE_ST_Launcher_MarkGfxCache is called after drawing.
+uint8_t *BE_ST_Launcher_GetGfxPtr(void);
 
 // EGA graphics manipulations
 void BE_ST_EGASetPaletteAndBorder(const uint8_t *palette);
@@ -126,6 +233,9 @@ void BE_ST_EGAOrGFXBits(uint16_t destOff, uint8_t srcVal, uint8_t bitsMask);
 // CGA graphics manipulations
 void BE_ST_CGAFullUpdateFromWrappedMem(const uint8_t *segPtr, const uint8_t *offInSegPtr, uint16_t byteLineWidth);
 
+//
+void BE_ST_Launcher_Prepare(void);
+void BE_ST_Launcher_Shutdown(void);
 
 //
 void BE_ST_SetBorderColor(uint8_t color);
@@ -144,8 +254,6 @@ void BE_ST_puts(const char *str);
 void BE_ST_printf(const char *str, ...);
 void BE_ST_vprintf(const char *str, va_list args);
 void BE_ST_cprintf(const char *str, ...); // Non-standard
-
-void BE_ST_MarkGfxForUpdate(void);
 
 // Used with BE_ST
 
@@ -252,7 +360,7 @@ typedef enum BE_ST_ScanCode_T {
      BE_ST_SC_DOWN = 0x50,
      BE_ST_SC_RALT = 0x38,
      BE_ST_SC_RCTRL = 0x1D,
-     // Two extra kes
+     // Two extra keys
      BE_ST_SC_LESSTHAN = 0x56,
      BE_ST_SC_KP_MULTIPLY = 0x37,
      // This one is different from all the rest (6 scancodes sent on press ONLY)

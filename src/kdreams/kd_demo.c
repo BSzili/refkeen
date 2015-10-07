@@ -312,9 +312,9 @@ static id0_boolean_t LoadObject(BE_FILE_T file, objtype *o)
 		return false;
 	}
 	o->active = (activetype)activeint;
-	o->state = (statetype *)BE_Cross_Compat_GetObjStatePtrFromDOSPointer(statedosoffset);
+	o->state = RefKeen_GetObjStatePtrFromDOSPointer(statedosoffset);
 	// ANOTHER SPECIAL CASE (for almost all creatures as flowers)
-	o->temp2stateptr = (statetype *)BE_Cross_Compat_GetObjStatePtrFromDOSPointer(o->temp2);
+	o->temp2stateptr = RefKeen_GetObjStatePtrFromDOSPointer(o->temp2);
 	// HACK: All we need to know is if next was originally NULL or not
 	o->next = isnext ? o : NULL;
 	return true;
@@ -764,7 +764,7 @@ DemoLoop (void)
 	US_SetLoadSaveHooks(LoadGame,SaveGame,ResetGame);
 	restartgame = gd_Continue;
 
-	BE_FILE_T handle = BE_Cross_open_for_reading("KDREAMS.CMP");
+	BE_FILE_T handle = BE_Cross_open_readonly_for_reading("KDREAMS.CMP");
 	//int handle = open("KDREAMS.CMP" ,O_BINARY | O_RDONLY);
 	if (!BE_Cross_IsFileValid(handle))
 	//if (handle == -1)

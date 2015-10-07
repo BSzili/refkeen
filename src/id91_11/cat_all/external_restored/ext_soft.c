@@ -90,7 +90,7 @@ id0_unsigned_long_t ext_BLoad(const id0_char_t *SourceFile, memptr *DstPtr)
 	// Open file to load....
 	//
 
-	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_for_reading(SourceFile)))
+	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading(SourceFile)))
 	//if ((handle = open(SourceFile, O_RDONLY|O_BINARY)) == -1)
 		return(0);
 
@@ -108,7 +108,7 @@ id0_unsigned_long_t ext_BLoad(const id0_char_t *SourceFile, memptr *DstPtr)
 		//
 
 		Compressed = true;
-		SrcLen = Verify(SourceFile);
+		SrcLen = VerifyReadOnly(SourceFile);
 
 		BE_Cross_readInt32LE(handle, &CompHeader.OrginalLen);
 		//read(handle,(void *)&CompHeader.OrginalLen,4);
@@ -126,7 +126,7 @@ id0_unsigned_long_t ext_BLoad(const id0_char_t *SourceFile, memptr *DstPtr)
 		//
 
 		Compressed = true;
-		SrcLen = Verify(SourceFile);
+		SrcLen = VerifyReadOnly(SourceFile);
 
 		BE_Cross_readInt8LEBuffer(handle,(void *)&CompHeader,sizeof(struct CMP1Header));
 		//read(handle,(void *)&CompHeader,sizeof(struct CMP1Header));
@@ -142,7 +142,7 @@ id0_unsigned_long_t ext_BLoad(const id0_char_t *SourceFile, memptr *DstPtr)
 			return(0);
 	}
 	else
-		DstLen = Verify(SourceFile);
+		DstLen = VerifyReadOnly(SourceFile);
 
 
 	//

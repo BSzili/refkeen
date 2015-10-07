@@ -115,16 +115,18 @@ id0_int_t UnpackEGAShapeToScreen(struct Shape *SHP,id0_int_t startx,id0_int_t st
 	return(0);
 }
 
+// (REFKEEN) Rename Verify -> VerifyReadOnly for consistency with the Catacombs
+
 ////////////////////////////////////////////////////////////////////////////
 //
 // Verify()
 //
-id0_long_t Verify(const id0_char_t *filename)
+id0_long_t VerifyReadOnly(const id0_char_t *filename)
 {
 	BE_FILE_T handle;
 	id0_long_t size;
 
-	if (!BE_Cross_IsFileValid(handle=BE_Cross_open_for_reading(filename)))
+	if (!BE_Cross_IsFileValid(handle=BE_Cross_open_readonly_for_reading(filename)))
 	//if ((handle=open(filename,O_BINARY))==-1)
 		return (0);
 	size=BE_Cross_FileLengthFromHandle(handle);
