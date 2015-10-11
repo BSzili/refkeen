@@ -27,6 +27,11 @@
 #define IPTR ULONG
 #endif
 
+// TODO: fix these
+RefKeenConfig g_refKeenCfg;
+BE_ST_ControllerMapping g_beStControllerMappingTextInput;
+BE_ST_ControllerMapping g_beStControllerMappingDebugKeys;
+
 static void (*g_sdlKeyboardInterruptFuncPtr)(uint8_t) = 0;
 extern struct Screen *g_amigaScreen;
 
@@ -272,7 +277,15 @@ static struct InputEvent * __saveds BEL_ST_InputHandler(register struct InputEve
 	return moo;
 }
 
-void BE_ST_InitAll(void)
+void BE_ST_InitCommon(void)
+{
+	// MUST be called BEFORE parsing config (of course!)
+	BE_Cross_PrepareAppPaths();
+
+	//BEL_ST_ParseConfig();
+}
+
+void BE_ST_PrepareForGameStartup(void)
 {
 	if ((g_inputPort = CreateMsgPort()))
 	{
@@ -344,6 +357,13 @@ void BE_ST_ExitWithErrorMsg(const char *msg)
 	BE_ST_puts(msg);
 	BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "%s\n", msg);
 	BE_ST_HandleExit(1);
+}
+
+void BE_ST_QuickExit(void)
+{
+	//BEL_ST_SaveConfig();
+	BE_ST_ShutdownAll();
+	exit(0);
 }
 
 void BE_ST_StartKeyboardService(void (*funcPtr)(uint8_t))
@@ -500,6 +520,9 @@ void BE_ST_AltControlScheme_PrepareTextInput(void)
 {
 }
 
+void BE_ST_AltControlScheme_PrepareControllerMapping(const BE_ST_ControllerMapping *mapping)
+{
+}
 
 void BE_ST_PollEvents(void)
 {

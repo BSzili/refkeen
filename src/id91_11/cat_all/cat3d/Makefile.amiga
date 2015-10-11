@@ -1,4 +1,4 @@
-VERDIRNAME=cat3d122
+VERDIRNAME=cat3d
 
 DEBUG=1
 BUILDASCPP=0
@@ -21,12 +21,6 @@ OBJ=$(OBJPREFIX)/$(VERDIRNAME)
 IDOBJ=$(OBJ)/id
 BEOBJ=$(OBJ)/be
 
-VERSRC=$(SRC)/$(VERDIRNAME)
-
-# HACK (Kind of)
-RSRCSRC=$(VERSRC)/static
-RSRCOBJ=$(OBJ)/static
-
 OBJECTS=$(OBJ)/c3_act1.o \
         $(OBJ)/c3_debug.o \
         $(OBJ)/c3_draw.o \
@@ -34,12 +28,14 @@ OBJECTS=$(OBJ)/c3_act1.o \
         $(OBJ)/c3_main.o \
         $(OBJ)/c3_play.o \
         $(OBJ)/c3_state.o \
-        $(OBJ)/c3_wiz.o
+        $(OBJ)/c3_wiz.o \
+        $(OBJ)/statetype_ptr_conversion.o
 
 #Shared with Catacomb 3-D and The Adventures Series
 OBJECTS+= $(OBJ)/c3_asm.o \
           $(OBJ)/c3_scale.o \
-          $(OBJ)/c3_trace.o
+          $(OBJ)/c3_trace.o \
+          $(OBJ)/altcontroller.o
 
 IDOBJECTS=$(IDOBJ)/id_ca.o \
           $(IDOBJ)/id_in.o \
@@ -55,7 +51,6 @@ IDOBJECTS=$(IDOBJ)/id_ca.o \
 BEOBJECTS=$(BEOBJ)/actual_main.o \
           $(BEOBJ)/be_cross.o \
           $(BEOBJ)/be_cross_fs.o \
-          $(BEOBJ)/be_cross_compat.o \
           $(BEOBJ)/be_cross_doszeroseg.o \
           $(BEOBJ)/be_st_amiga.o \
           $(BEOBJ)/be_st_amiga_audio_timer.o \
@@ -75,18 +70,11 @@ ifeq ($(VERDIRNAME), cat3d100)
 	RSRC_OBJECTS+= $(RSRCOBJ)/introscn.o
 endif
 
-INTCXXFLAGS=-I$(SRC) -I$(C3DCOMMONSRC) -I$(VERSRC) -I$(IDSRC) -I$(BESRC) -DREFKEEN_VER_CAT3D=1
-
-ifeq ($(VERDIRNAME), cat3d100)
-INTCXXFLAGS+= -DREFKEEN_VER_CAT3D_100=1
-EXENAME=refcat3d-100
-else ifeq ($(VERDIRNAME), cat3d122)
-INTCXXFLAGS+= -DREFKEEN_VER_CAT3D_122=1
-EXENAME=refcat3d-122
-endif
+INTCXXFLAGS=-I$(SRC) -I$(C3DCOMMONSRC) -I$(IDSRC) -I$(BESRC) -DREFKEEN_VER_CAT3D=1 -DREFKEEN_VER_CATACOMB_ALL=1
+EXENAME=refcat3d
 
 ifeq ($(DEBUG),1)
-	INTCXXFLAGS+= -g -ftrapv -fstack-check -DREFKEEN_CONFIG_DEBUG
+	INTCXXFLAGS+= -ggdb -ftrapv -fstack-check -DREFKEEN_CONFIG_DEBUG
 	CXXOPT=
 else
 	CXXOPT=-O2
@@ -115,8 +103,8 @@ all: game
 
 game: $(EXE_PATH)
 
-$(EXE_PATH): $(OBJECTS) $(IDOBJECTS) $(BEOBJECTS) $(RSRC_OBJECTS)
-	$(CXX) $(OBJECTS) $(IDOBJECTS) $(BEOBJECTS) $(RSRC_OBJECTS) $(LDFLAGS) $(INTLDFLAGS) -o $@
+$(EXE_PATH): $(OBJECTS) $(IDOBJECTS) $(BEOBJECTS)
+	$(CXX) $(OBJECTS) $(IDOBJECTS) $(BEOBJECTS) $(LDFLAGS) $(INTLDFLAGS) -o $@
 ifeq ($(DEBUG),0)
 	$(STRIPBIN) $(EXE_PATH)
 endif
@@ -130,29 +118,17 @@ $(BEOBJ)/dbopl.o: $(BESRC)/opl/dbopl.c | $(BEOBJ)
 $(BEOBJ)/unlzexe.o: $(BESRC)/unlzexe/unlzexe.c | $(BEOBJ)
 	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
 
-$(BEOBJ)/be_cross_compat.o: $(VERSRC)/be_cross_compat.c | $(BEOBJ)
-	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
-
 $(BEOBJ)/%.o: $(BESRC)/%.c $(BEOBJ)
 	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
 $(IDOBJ)/%.o: $(IDSRC)/%.c $(IDOBJ)
 	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
 
-$(OBJ)/c3_asm.o: $(C3DCOMMONSRC)/c3_asm.c | $(OBJ)
+$(OBJ)/%.o: $(C3DCOMMONSRC)/%.c | $(OBJ)
 	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
-$(OBJ)/c3_scale.o: $(C3DCOMMONSRC)/c3_scale.c | $(OBJ)
-	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
-$(OBJ)/c3_trace.o: $(C3DCOMMONSRC)/c3_trace.c | $(OBJ)
-	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
-
 
 $(OBJ)/%.o: $(SRC)/%.c | $(OBJ)
 	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
-$(RSRCOBJ)/%.o: $(RSRCSRC)/%.c | $(RSRCOBJ)
-	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
 
-$(RSRCOBJ): | $(OBJ)
-	-mkdir $(RSRCOBJ)
 $(BEOBJ): | $(OBJ)
 	-mkdir $(BEOBJ)
 $(IDOBJ): | $(OBJ)
@@ -163,5 +139,5 @@ $(OBJPREFIX):
 	-mkdir $(OBJPREFIX)
 
 clean:
-	-rm -f $(EXE_PATH) $(OBJECTS) $(IDOBJECTS) $(BEOBJECTS) $(RSRC_OBJECTS)
+	-rm -f $(EXE_PATH) $(OBJECTS) $(IDOBJECTS) $(BEOBJECTS)
 

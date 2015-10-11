@@ -7,10 +7,9 @@
 #ifdef __AMIGA__
 #include <stdarg.h>
 //#include "be_st_amiga.h"
-#else
+#endif
 #include "be_st_sdl.h"
 #include "be_launcher.h"
-#endif
 
 #define BE_ST_MAXJOYSTICKS 8
 

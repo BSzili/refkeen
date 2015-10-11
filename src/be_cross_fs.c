@@ -306,6 +306,10 @@ void BE_Cross_PrepareAppPaths(void)
 		}
 	}
 #endif
+
+#ifdef __AMIGA__
+	getcwd(g_be_appDataPath, sizeof(g_be_appDataPath)/sizeof(TCHAR));
+#endif
 }
 
 static BE_GameInstallation_T* g_be_selectedGameInstallation;

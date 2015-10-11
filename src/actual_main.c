@@ -18,7 +18,9 @@
  */
 
 #include "id_heads.h"
+#ifndef __AMIGA__
 #include "SDL_main.h"
+#endif
 
 int id0_argc;
 const char **id0_argv;
@@ -160,11 +162,13 @@ int main(int argc, char **argv)
 	else
 	{
 		BE_Cross_PrepareGameInstallations();
+#ifndef __AMIGA__
 		if (startLauncher)
 		{
 			BE_Launcher_Start();
 		}
 		else
+#endif
 		{
 #ifdef REFKEEN_VER_CATADVENTURES
 			BE_Cross_StartGame(selectedGameVerVal, argc, argv, skipIntro);

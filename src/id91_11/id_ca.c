@@ -1666,7 +1666,11 @@ void CA_CacheMap (id0_int_t mapnum)
 //
 	if (!mapheaderseg[mapnum])
 	{
+#ifdef __AMIGA__
+		pos = BE_Cross_Swap32LE(((mapfiletype	id0_seg *)tinf)->headeroffsets[mapnum]);
+#else
 		pos = ((mapfiletype	id0_seg *)tinf)->headeroffsets[mapnum];
+#endif
 		if (pos<0)						// $FFFFFFFF start is a sparse map
 		  Quit ("CA_CacheMap: Tried to load a non existent map!");
 
@@ -1732,8 +1736,13 @@ void CA_CacheMap (id0_int_t mapnum)
 		source++;
 		MM_GetPtr (&buffer2seg,expanded);
 		CAL_CarmackExpand_FromLE_ToNE (source, (id0_unsigned_t id0_far *)buffer2seg,expanded);
+#ifdef __AMIGA__
+		CA_RLEWexpand (((id0_unsigned_t id0_far *)buffer2seg)+1,(id0_unsigned_t *)(*dest),size,
+		BE_Cross_Swap16LE(((mapfiletype id0_seg *)tinf)->RLEWtag));
+#else
 		CA_RLEWexpand (((id0_unsigned_t id0_far *)buffer2seg)+1,(id0_unsigned_t *)(*dest),size,
 		((mapfiletype id0_seg *)tinf)->RLEWtag);
+#endif
 		MM_FreePtr (&buffer2seg);
 
 #else
@@ -2228,19 +2237,26 @@ void RefKeen_Patch_id_ca(void)
 	{
 		// We want a 24-bit swap i.e., swap bytes no. 0 and 2
 		uint8_t temp = *headptr;
+#ifdef __AMIGA__
+		*headptr = *(headptr+2);
+		*(headptr+2) = temp;
+#else
 		*(headptr+2) = temp;
 		*headptr = *(headptr+2);
+#endif
 	}
 #else
 	for (uint32_t *headptr = (uint32_t *)(*GFXheadptr); GFXheadsize >= 4; ++headptr, GFXheadsize -= 4)
 		*headptr = BE_Cross_Swap32LE(*headptr);
 #endif
 
+#ifndef __AMIGA__
 	mapfiletype id0_seg *tinfasmapfile = (mapfiletype id0_seg *)mapdict;
 	tinfasmapfile->RLEWtag = BE_Cross_Swap16LE(tinfasmapfile->RLEWtag);
 	for (int i = 0; i < sizeof(tinfasmapfile->headeroffsets)/sizeof(*(tinfasmapfile->headeroffsets)); ++i)
 	{
 		tinfasmapfile->headeroffsets[i] = BE_Cross_Swap32LE(tinfasmapfile->headeroffsets[i]);
 	}
+#endif
 #endif
 }
