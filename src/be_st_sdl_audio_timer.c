@@ -2,6 +2,7 @@
 
 #include "be_cross.h"
 #include "be_st.h"
+#include "be_st_sdl_private.h"
 #include "opl/dbopl.h"
 
 #define PC_PIT_RATE 1193182
@@ -72,10 +73,10 @@ void BE_ST_InitAudio(void)
 		else
 		{
 			g_sdlAudioSpec.freq = g_refKeenCfg.sndSampleRate;
-			g_sdlAudioSpec.format = AUDIO_S16;
+			g_sdlAudioSpec.format = AUDIO_S16SYS;
 			g_sdlAudioSpec.channels = 1;
-			// Should be some power-of-two roughly proportional to the sample rate; Using 512 for 48000Hz.
-			for (g_sdlAudioSpec.samples = 1; g_sdlAudioSpec.samples < g_refKeenCfg.sndSampleRate/128; g_sdlAudioSpec.samples *= 2)
+			// Should be some power-of-two roughly proportional to the sample rate; Using 1024 for 48000Hz.
+			for (g_sdlAudioSpec.samples = 1; g_sdlAudioSpec.samples < g_refKeenCfg.sndSampleRate/64; g_sdlAudioSpec.samples *= 2)
 			{
 			}
 			g_sdlAudioSpec.callback = BEL_ST_CallBack;
@@ -602,7 +603,6 @@ void BE_ST_SetTimer(uint16_t speed, bool isALMusicOn)
 	g_sdlScaledTimerDivisor = isALMusicOn ? (speed*8) : (speed*2);
 }
 
-void BEL_ST_UpdateHostDisplay(void);
 void BEL_ST_TicksDelayWithOffset(int sdltickstowait);
 void BEL_ST_TimeCountWaitByPeriod(int16_t timetowait);
 

@@ -44,6 +44,7 @@ int BE_Cross_isupper(int c);
 char *BE_Cross_safeandfastcstringcopy(char *dest, char *destEnd, const char *src);
 char *BE_Cross_safeandfastcstringcopy_2strs(char *dest, char *destEnd, const char *src0, const char *src1);
 char *BE_Cross_safeandfastcstringcopy_3strs(char *dest, char *destEnd, const char *src0, const char *src1, const char *src2);
+char *BE_Cross_safeandfastcstringcopy_4strs(char *dest, char *destEnd, const char *src0, const char *src1, const char *src2, const char *src3);
 
 int BE_Cross_strcasecmp(const char *s1, const char *s2)
 {
@@ -57,6 +58,20 @@ int BE_Cross_strcasecmp(const char *s1, const char *s2)
 	uc2 = (unsigned char)((char)(BE_Cross_toupper(*s2)));
 	/* We should still cast back to int, for a signed difference. */
 	/* Assumption: An int can store any unsigned char value.      */
+	return ((int)uc1 - (int)uc2);
+}
+
+// Similar to BE_Cross_strcasecmp, but compares up to count chars
+int BE_Cross_strncasecmp(const char *s1, const char *s2, size_t count)
+{
+	unsigned char uc1, uc2;
+	for (; count && (*s1) && (BE_Cross_toupper(*s1) == BE_Cross_toupper(*s2)); s1++, s2++, count--);
+	// If done, return 0
+	if (!count)
+		return 0;
+	// Otherwise behave as in BE_Cross_strcasecmp
+	uc1 = (unsigned char)((char)(BE_Cross_toupper(*s1)));
+	uc2 = (unsigned char)((char)(BE_Cross_toupper(*s2)));
 	return ((int)uc1 - (int)uc2);
 }
 

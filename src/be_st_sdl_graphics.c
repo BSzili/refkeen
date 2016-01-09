@@ -1,9 +1,30 @@
+/* Copyright (C) 2014-2015 NY00123
+ *
+ * This file is part of Reflection Keen.
+ *
+ * Reflection Keen is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #include <string.h>
 #include "SDL.h"
 
 #include "be_cross.h"
+#include "be_gamever.h" // Enable VSync by default for EGA, not CGA
 #include "be_st.h"
 #include "be_st_sdl_private.h"
+#include "be_title_and_version.h"
 
 // Some of these are also used in launcher
 SDL_Window *g_sdlWindow;
@@ -11,15 +32,7 @@ SDL_Renderer *g_sdlRenderer;
 SDL_Texture *g_sdlTexture, *g_sdlTargetTexture;
 SDL_Rect g_sdlAspectCorrectionRect, g_sdlAspectCorrectionBorderedRect;
 
-#ifdef REFKEEN_VER_KDREAMS
-	const char *g_sdlWindowTitle = "Reflection Keen";
-#elif (defined REFKEEN_VER_CATACOMB_ALL)
-	const char *g_sdlWindowTitle = "Reflection Catacomb 3-D";
-#else
-#error "FATAL ERROR: No Ref port game macro is defined!"
-#endif
-
-
+static bool g_sdlIsSoftwareRendered;
 static bool g_sdlDoRefreshGfxOutput;
 bool g_sdlForceGfxControlUiRefresh;
 
@@ -144,15 +157,26 @@ static bool g_sdlDebugKeysPressed[ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT][ALTCONTRO
 
 void BE_ST_InitGfx(void)
 {
+	if (g_refKeenCfg.sdlRendererDriver >= 0)
+	{
+		SDL_RendererInfo info;
+		SDL_GetRenderDriverInfo(g_refKeenCfg.sdlRendererDriver, &info);
+		g_sdlIsSoftwareRendered = (info.flags & SDL_RENDERER_SOFTWARE);
+	}
+	else
+	{
+		g_sdlIsSoftwareRendered = false;
+	}
+
 	if (g_refKeenCfg.isFullscreen)
 	{
 		if (g_refKeenCfg.fullWidth && g_refKeenCfg.fullHeight)
 		{
-			g_sdlWindow = SDL_CreateWindow(g_sdlWindowTitle, SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), g_refKeenCfg.fullWidth, g_refKeenCfg.fullHeight, SDL_WINDOW_FULLSCREEN);
+			g_sdlWindow = SDL_CreateWindow(REFKEEN_TITLE_AND_VER_STRING, SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), g_refKeenCfg.fullWidth, g_refKeenCfg.fullHeight, SDL_WINDOW_FULLSCREEN);
 		}
 		else
 		{
-			g_sdlWindow = SDL_CreateWindow(g_sdlWindowTitle, SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), 0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP);
+			g_sdlWindow = SDL_CreateWindow(REFKEEN_TITLE_AND_VER_STRING, SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), 0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP);
 		}
 	}
 	else
@@ -160,18 +184,7 @@ void BE_ST_InitGfx(void)
 		int actualWinWidth = g_refKeenCfg.winWidth, actualWinHeight = g_refKeenCfg.winHeight;
 		if (!actualWinWidth || !actualWinHeight)
 		{
-			bool doSoftwareRendering;
-			if (g_refKeenCfg.sdlRendererDriver >= 0)
-			{
-				SDL_RendererInfo info;
-				SDL_GetRenderDriverInfo(g_refKeenCfg.sdlRendererDriver, &info);
-				doSoftwareRendering = (info.flags & SDL_RENDERER_SOFTWARE);
-			}
-			else
-			{
-				doSoftwareRendering = false;
-			}
-			if (doSoftwareRendering)
+			if (g_sdlIsSoftwareRendered)
 			{
 				actualWinWidth = 640;
 				actualWinHeight = 480;
@@ -196,18 +209,19 @@ void BE_ST_InitGfx(void)
 				actualWinHeight = mode.h*500/809;
 			}
 		}
-		g_sdlWindow = SDL_CreateWindow(g_sdlWindowTitle, SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), actualWinWidth, actualWinHeight, SDL_WINDOW_RESIZABLE);
+		g_sdlWindow = SDL_CreateWindow(REFKEEN_TITLE_AND_VER_STRING, SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), actualWinWidth, actualWinHeight, (!g_sdlIsSoftwareRendered || g_refKeenCfg.forceFullSoftScaling) ? SDL_WINDOW_RESIZABLE : 0);
 	}
 	if (!g_sdlWindow)
 	{
 		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to create SDL2 window,\n%s\n", SDL_GetError());
 		exit(0);
 	}
-#ifdef REFKEEN_VER_ANY_CGA
+	SDL_SetWindowIcon(g_sdlWindow, g_be_sdl_windowIconSurface);
 	// Vanilla Keen Dreams and Keen 4-6 have no VSync in the CGA builds
-	g_sdlRenderer = SDL_CreateRenderer(g_sdlWindow, g_refKeenCfg.sdlRendererDriver, SDL_RENDERER_ACCELERATED | ((g_refKeenCfg.vSync == VSYNC_ON) ? SDL_RENDERER_PRESENTVSYNC : 0));
+#ifdef REFKEEN_VER_KDREAMS
+	g_sdlRenderer = SDL_CreateRenderer(g_sdlWindow, g_refKeenCfg.sdlRendererDriver, SDL_RENDERER_ACCELERATED | (((g_refKeenCfg.vSync == VSYNC_ON) || ((g_refKeenCfg.vSync == VSYNC_AUTO) && (refkeen_current_gamever != BE_GAMEVER_KDREAMSC105))) ? SDL_RENDERER_PRESENTVSYNC : 0));
 #else
-	g_sdlRenderer = SDL_CreateRenderer(g_sdlWindow, g_refKeenCfg.sdlRendererDriver, SDL_RENDERER_ACCELERATED | ((g_refKeenCfg.vSync == VSYNC_OFF) ? 0 : SDL_RENDERER_PRESENTVSYNC));
+	g_sdlRenderer = SDL_CreateRenderer(g_sdlWindow, g_refKeenCfg.sdlRendererDriver, SDL_RENDERER_ACCELERATED | ((g_refKeenCfg.vSync != VSYNC_OFF) ? SDL_RENDERER_PRESENTVSYNC : 0));
 #endif
 	if (!g_sdlRenderer)
 	{
@@ -838,6 +852,8 @@ int BEL_ST_ToggleShiftStateInTextInputUI(bool *pToggle)
 
 	BEL_ST_RedrawWholeTextInputUI();
 
+	g_sdlForceGfxControlUiRefresh = true;
+
 	return BE_ST_SC_LSHIFT;
 }
 
@@ -1035,7 +1051,7 @@ void BEL_ST_CheckPressedPointerInControllerUI(int x, int y)
 		emulatedDOSKeyEvent dosKeyEvent;
 		dosKeyEvent.isSpecial = false;
 		dosKeyEvent.dosScanCode = g_sdlPointerSelectedPadButtonScanCode;
-		BEL_ST_HandleEmuKeyboardEvent(true, dosKeyEvent);
+		BEL_ST_HandleEmuKeyboardEvent(true, false, dosKeyEvent);
 	}
 	else if (g_sdlPointerSelectedPadButtonScanCode < 0)
 	{
@@ -1057,7 +1073,7 @@ void BEL_ST_CheckReleasedPointerInControllerUI(void)
 		emulatedDOSKeyEvent dosKeyEvent;
 		dosKeyEvent.isSpecial = false;
 		dosKeyEvent.dosScanCode = g_sdlPointerSelectedPadButtonScanCode;
-		BEL_ST_HandleEmuKeyboardEvent(false, dosKeyEvent);
+		BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
 	}
 	g_sdlPointerSelectedPadButtonScanCode = 0;
 }
@@ -1080,12 +1096,12 @@ void BEL_ST_CheckMovedPointerInControllerUI(int x, int y)
 		if (oldScanCode)
 		{
 			dosKeyEvent.dosScanCode = oldScanCode;
-			BEL_ST_HandleEmuKeyboardEvent(false, dosKeyEvent);
+			BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
 		}
 		if (g_sdlPointerSelectedPadButtonScanCode)
 		{
 			dosKeyEvent.dosScanCode = g_sdlPointerSelectedPadButtonScanCode;
-			BEL_ST_HandleEmuKeyboardEvent(true, dosKeyEvent);
+			BEL_ST_HandleEmuKeyboardEvent(true, false, dosKeyEvent);
 		}
 	}
 }
@@ -1100,13 +1116,21 @@ void BEL_ST_ReleasePressedKeysInTextInputUI(void)
 		dosKeyEvent.isSpecial = false;
 		dosKeyEvent.dosScanCode = g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX];
 		// Don't forget to "release" a key pressed in the text input UI
-		BEL_ST_HandleEmuKeyboardEvent(false, dosKeyEvent);
+		BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
+
+		BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
+		g_sdlTextInputIsKeyPressed = false;
 		// Shift key may further be held, don't forget this too!
 		if ((dosKeyEvent.dosScanCode != BE_ST_SC_LSHIFT) && g_sdlTextInputIsShifted)
 		{
 			dosKeyEvent.dosScanCode = BE_ST_SC_LSHIFT;
-			BEL_ST_HandleEmuKeyboardEvent(false, dosKeyEvent);
+			BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
+
+			g_sdlTextInputIsShifted = false;
+			BEL_ST_RedrawWholeTextInputUI();
+
 		}
+		g_sdlForceGfxControlUiRefresh = true;
 	}
 }
 
@@ -1120,8 +1144,14 @@ void BEL_ST_ReleasePressedKeysInDebugKeysUI(void)
 			{
 				dosKeyEvent.dosScanCode = g_sdlDOSScanCodeDebugKeysLayout[currKeyRow][currKeyCol];
 				// Don't forget to "release" a key pressed in the text input UI
-				BEL_ST_HandleEmuKeyboardEvent(false, dosKeyEvent);
+				BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
+
+				g_sdlDebugKeysPressed[currKeyRow][currKeyCol] = false;
+				BEL_ST_ToggleDebugKeysKey(currKeyCol, currKeyRow, false, false);
 			}
+
+	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
+	g_sdlForceGfxControlUiRefresh = true;
 }
 
 void BEL_ST_ReleasePressedKeysInControllerUI(void)
@@ -1143,7 +1173,7 @@ void BEL_ST_ReleasePressedKeysInControllerUI(void)
 }
 
 
-void BE_ST_SetGfxOutputRects(void)
+void BEL_ST_SetGfxOutputRects(bool allowResize)
 {
 	int srcWidth = g_sdlTexWidth;
 	int srcHeight = g_sdlTexHeight;
@@ -1173,6 +1203,18 @@ void BE_ST_SetGfxOutputRects(void)
 	int srcBorderedHeight = srcBorderTop+srcHeight+srcBorderBottom;
 	int winWidth, winHeight;
 	SDL_GetWindowSize(g_sdlWindow, &winWidth, &winHeight);
+
+	// Special case - We may resize window based on mode, but only if allowResize == true (to prevent any possible infinite resizes loop)
+	if (allowResize && g_sdlIsSoftwareRendered && !g_refKeenCfg.forceFullSoftScaling && (!(SDL_GetWindowFlags(g_sdlWindow) & SDL_WINDOW_FULLSCREEN)))
+	{
+		if ((g_refKeenCfg.scaleFactor*srcBorderedWidth != winWidth) || (g_refKeenCfg.scaleFactor*srcBorderedHeight != winHeight))
+		{
+			SDL_SetWindowSize(g_sdlWindow, g_refKeenCfg.scaleFactor*srcBorderedWidth, g_refKeenCfg.scaleFactor*srcBorderedHeight);
+			// Not sure this will help, but still trying...
+			SDL_GetWindowSize(g_sdlWindow, &winWidth, &winHeight);
+		}
+	}
+
 	// Save modified window size
 	if (!(SDL_GetWindowFlags(g_sdlWindow) & SDL_WINDOW_FULLSCREEN))
 	{
@@ -1180,7 +1222,31 @@ void BE_ST_SetGfxOutputRects(void)
 		g_refKeenCfg.winHeight = winHeight;
 	}
 
-	if (g_refKeenCfg.scaleType == SCALE_FILL)
+	if (g_sdlIsSoftwareRendered && !g_refKeenCfg.forceFullSoftScaling)
+	{
+		if (g_refKeenCfg.scaleFactor*srcBorderedWidth >= winWidth)
+		{
+			g_sdlAspectCorrectionBorderedRect.w = winWidth;
+			g_sdlAspectCorrectionBorderedRect.x = 0;
+		}
+		else
+		{
+			g_sdlAspectCorrectionBorderedRect.w = g_refKeenCfg.scaleFactor*srcBorderedWidth;
+			g_sdlAspectCorrectionBorderedRect.x = (winWidth-g_sdlAspectCorrectionBorderedRect.w)/2;
+		}
+
+		if (g_refKeenCfg.scaleFactor*srcBorderedHeight >= winHeight)
+		{
+			g_sdlAspectCorrectionBorderedRect.h = winHeight;
+			g_sdlAspectCorrectionBorderedRect.y = 0;
+		}
+		else
+		{
+			g_sdlAspectCorrectionBorderedRect.h = g_refKeenCfg.scaleFactor*srcBorderedHeight;
+			g_sdlAspectCorrectionBorderedRect.y = (winHeight-g_sdlAspectCorrectionBorderedRect.h)/2;
+		}
+	}
+	else if (g_refKeenCfg.scaleType == SCALE_FILL)
 	{
 		g_sdlAspectCorrectionBorderedRect.w = winWidth;
 		g_sdlAspectCorrectionBorderedRect.h = winHeight;
@@ -1241,10 +1307,15 @@ void BE_ST_SetGfxOutputRects(void)
 	g_sdlControllerDebugKeysRect.y = winHeight-g_sdlControllerDebugKeysRect.h;
 }
 
+void BEL_ST_ForceHostDisplayUpdate(void)
+{
+	g_sdlForceGfxControlUiRefresh = true; // HACK that technically does exactly what we want (even if controls are not drawn)
+}
+
 void BE_ST_SetScreenStartAddress(uint16_t crtc)
 {
+	g_sdlDoRefreshGfxOutput |= (g_sdlScreenStartAddress != crtc);
 	g_sdlScreenStartAddress = crtc;
-	g_sdlDoRefreshGfxOutput = true;
 }
 
 uint8_t *BE_ST_GetTextModeMemoryPtr(void)
@@ -1286,14 +1357,14 @@ void BE_ST_EGASetPaletteAndBorder(const uint8_t *palette)
 
 void BE_ST_EGASetPelPanning(uint8_t panning)
 {
+	g_sdlDoRefreshGfxOutput |= (g_sdlPelPanning != panning);
 	g_sdlPelPanning = panning;
-	g_sdlDoRefreshGfxOutput = true;
 }
 
 void BE_ST_EGASetLineWidth(uint8_t widthInBytes)
 {
+	g_sdlDoRefreshGfxOutput |= (g_sdlLineWidth != widthInBytes);
 	g_sdlLineWidth = widthInBytes;
-	g_sdlDoRefreshGfxOutput = true;
 }
 
 void BE_ST_EGASetSplitScreen(int16_t linenum)
@@ -1310,6 +1381,7 @@ void BE_ST_EGASetSplitScreen(int16_t linenum)
 	}
 	else
 		g_sdlSplitScreenLine = linenum;
+	g_sdlDoRefreshGfxOutput = true;
 }
 
 void BE_ST_EGAUpdateGFXByte(uint16_t destOff, uint8_t srcVal, uint16_t planeMask)
@@ -1530,7 +1602,7 @@ void BE_ST_EGAOrGFXBits(uint16_t destOff, uint8_t srcVal, uint8_t bitsMask)
 
 
 
-void BE_ST_CGAFullUpdateFromWrappedMem(const uint8_t *segPtr, const uint8_t *offInSegPtr, uint16_t byteLineWidth)
+void BE_ST_CGAUpdateGFXBufferFromWrappedMem(const uint8_t *segPtr, const uint8_t *offInSegPtr, uint16_t byteLineWidth)
 {
 	const uint8_t *endSegPtr = segPtr + 0x10000;
 	uint8_t *cgaHostPtr = g_sdlHostScrMem.cgaGfx, *cgaHostCachePtr = g_sdlHostScrMemCache.cgaGfx;
@@ -1619,7 +1691,7 @@ void BE_ST_SetScreenMode(int mode)
 		break;
 	}
 	g_sdlScreenMode = mode;
-	BE_ST_SetGfxOutputRects();
+	BEL_ST_SetGfxOutputRects(true);
 	BEL_ST_RecreateTexture();
 }
 
@@ -1837,6 +1909,7 @@ void BEL_ST_UpdateHostDisplay(void)
 		{
 			if (g_sdlForceGfxControlUiRefresh)
 				goto dorefresh;
+			return;
 		}
 		/****** Do update ******/
 		wereBlinkingCharsShown = areBlinkingCharsShown;
@@ -1911,6 +1984,7 @@ void BEL_ST_UpdateHostDisplay(void)
 		{
 			if (g_sdlForceGfxControlUiRefresh)
 				goto dorefresh;
+			return;
 		}
 		// That's easy now since there isn't a lot that can be done...
 		void *pixels;
@@ -1929,6 +2003,7 @@ void BEL_ST_UpdateHostDisplay(void)
 		{
 			if (g_sdlForceGfxControlUiRefresh)
 				goto dorefresh;
+			return;
 		}
 		uint16_t currLineFirstByte = (g_sdlScreenStartAddress + g_sdlPelPanning/8) % 0x10000;
 		uint8_t panningWithinInByte = g_sdlPelPanning%8;
@@ -1996,6 +2071,7 @@ void BEL_ST_UpdateHostDisplay(void)
 				g_sdlDoRefreshGfxOutput = false;
 				if (g_sdlForceGfxControlUiRefresh)
 					goto dorefresh;
+				return;
 			}
 		}
 		void *pixels;

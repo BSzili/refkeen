@@ -21,7 +21,9 @@
 #define _BE_LAUNCHER_
 
 #define BE_LAUNCHER_PIX_WIDTH 320
-#define BE_LAUNCHER_PIX_HEIGHT 240	
+#define BE_LAUNCHER_PIX_HEIGHT 240
+// Some upper bound for menu item label buffer length
+#define BE_LAUNCHER_MENUITEM_STRBUFFER_LEN_BOUND 40
 
 typedef enum { BE_MENUITEM_TYPE_STATIC, BE_MENUITEM_TYPE_HANDLER, BE_MENUITEM_TYPE_SELECTION, BE_MENUITEM_TYPE_SELECTION_WITH_HANDLER, BE_MENUITEM_TYPE_DYNAMIC_SELECTION, BE_MENUITEM_TYPE_TARGETMENU } BEMenuItemType;
 
@@ -48,16 +50,20 @@ typedef struct BEMenu
 	const char *title;
 	struct BEMenu *backMenu;
 	BEMenuItem **menuItems;
+	BEMenuItemHandler backButtonHandler; // Usually unused
 	int nOfItems;
 	int titleXPos;
 	int currPixYScroll;
 	int pixYScrollUpperBound;
 } BEMenu;
 
-extern BEMenu g_beMainMenu, g_beSelectGameMenu, g_beDisappearedGameHelpMenu,
+extern BEMenu g_beMainMenu,
+              g_beSelectGameMenu, g_beDisappearedGameHelpMenu,
+              g_beSelectInitialPathMenu, g_beSelectDirectoryMenu, g_beSelectDirectoryErrorMenu,
+              g_beSelectDirectoryFoundGameMenu, g_beSelectDirectoryNoGameFoundMenu,
               g_beSettingsMenu, g_beVideoSettingsMenu, g_beSoundSettingsMenu,
               g_beInputSettingsMenu, g_beControllerSettingsMenu,
-              g_beQuitConfirmMenu;
+              g_beShowVersionMenu, g_beQuitConfirmMenu;
 
 extern bool g_be_launcher_wasAnySettingChanged;
 
@@ -65,20 +71,29 @@ void BE_Launcher_HandleInput_ButtonLeft(void);
 void BE_Launcher_HandleInput_ButtonRight(void);
 void BE_Launcher_HandleInput_ButtonUp(void);
 void BE_Launcher_HandleInput_ButtonDown(void);
+void BE_Launcher_HandleInput_ButtonPageUp(void);
+void BE_Launcher_HandleInput_ButtonPageDown(void);
 void BE_Launcher_HandleInput_ButtonActivate(void);
 void BE_Launcher_HandleInput_ButtonBack(void);
+void BE_Launcher_HandleInput_ASCIIChar(char ch);
 
-void BE_Launcher_HandleInput_PointerSelect(int xpos, int ypos);
-void BE_Launcher_HandleInput_PointerRelease(int xpos, int ypos);
-void BE_Launcher_HandleInput_PointerMotion(int xpos, int ypos);
-void BE_Launcher_HandleInput_PointerVScroll(int ydiff);
+void BE_Launcher_HandleInput_PointerSelect(int xpos, int ypos, uint32_t ticksinms);
+void BE_Launcher_HandleInput_PointerRelease(int xpos, int ypos, uint32_t ticksinms);
+void BE_Launcher_HandleInput_PointerMotion(int xpos, int ypos, uint32_t ticksinms);
+void BE_Launcher_HandleInput_PointerVScroll(int ydiff, uint32_t ticksinms);
 
-void BE_Launcher_RefreshVerticalScrolling(void);
+void BE_Launcher_RefreshVerticalScrolling(uint32_t ticksinms);
 
+void BE_Launcher_Handler_LastGameVerLaunch(BEMenuItem **menuItemP);
 void BE_Launcher_Handler_GameLaunch(BEMenuItem **menuItemP);
+void BE_Launcher_Handler_RootPathSelection(BEMenuItem **menuItemP);
+void BE_Launcher_Handler_DirectorySelection(BEMenuItem **menuItemP);
+void BE_Launcher_Handler_DirectorySelectionConfirm(BEMenuItem **menuItemP);
+void BE_Launcher_Handler_DirectorySelectionGoPrev(BEMenuItem **menuItemP);
 void BE_Launcher_Handler_MenuQuit(BEMenuItem **menuItemP);
 void BE_Launcher_Handler_ControllerAction(BEMenuItem **menuItemP);
 
-void BE_Launcher_Start();
+void BE_Launcher_Start(void);
+void BE_Launcher_ClearDirSelectionMenu(void);
 
 #endif // _BE_LAUNCHER_

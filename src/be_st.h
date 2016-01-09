@@ -1,3 +1,22 @@
+/* Copyright (C) 2014-2015 NY00123
+ *
+ * This file is part of Reflection Keen.
+ *
+ * Reflection Keen is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #ifndef	_BE_ST_
 #define _BE_ST_
 
@@ -6,9 +25,7 @@
 
 #ifdef __AMIGA__
 #include <stdarg.h>
-//#include "be_st_amiga.h"
 #endif
-#include "be_st_sdl.h"
 #include "be_launcher.h"
 
 #define BE_ST_MAXJOYSTICKS 8
@@ -230,11 +247,12 @@ void BE_ST_EGAXorGFXByte(uint16_t destOff, uint8_t srcVal, uint16_t planeMask);
 // - Only specific bits are updated in each plane's byte.
 void BE_ST_EGAOrGFXBits(uint16_t destOff, uint8_t srcVal, uint8_t bitsMask);
 // CGA graphics manipulations
-void BE_ST_CGAFullUpdateFromWrappedMem(const uint8_t *segPtr, const uint8_t *offInSegPtr, uint16_t byteLineWidth);
+void BE_ST_CGAUpdateGFXBufferFromWrappedMem(const uint8_t *segPtr, const uint8_t *offInSegPtr, uint16_t byteLineWidth);
 
 //
 void BE_ST_Launcher_Prepare(void);
 void BE_ST_Launcher_Shutdown(void);
+void BE_ST_Launcher_RefreshSelectGameMenuContents(void);
 
 //
 void BE_ST_SetBorderColor(uint8_t color);
@@ -364,6 +382,12 @@ typedef enum BE_ST_ScanCode_T {
      BE_ST_SC_KP_MULTIPLY = 0x37,
      // This one is different from all the rest (6 scancodes sent on press ONLY)
      BE_ST_SC_PAUSE = 0xE1,
+
+     // SPECIAL - Used to mark maximum, may have to update if 0xFF is actually used
+     BE_ST_SC_MAX = 0xFF,
 } BE_ST_ScanCode_T;
+
+// MUST be included here (since be_st_sdl.h depends on be_st.h)
+#include "be_st_sdl.h"
 
 #endif

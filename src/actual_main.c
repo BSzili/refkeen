@@ -43,22 +43,16 @@ static void show_command_line_help()
 	// HACK - For text mode emulation (and exit handler)
 	BE_ST_PrepareForGameStartup();
 
-#ifdef REFKEEN_VER_KDREAMS
-	BE_ST_puts("*** Reflection Keen - Command line arguments ***");
-#elif (defined REFKEEN_VER_CATACOMB_ALL)
-	BE_ST_puts("*** Reflection Catacomb 3-D - Command line arguments ***");
-#else
-#error "FATAL ERROR: No Ref port game macro is defined!"
-#endif
+	BE_ST_puts("*** " REFKEEN_TITLE_AND_VER_STRING " - Command line arguments ***");
 	BE_ST_puts("");
 	BE_ST_puts("Launcher is started unless any command line argument is passed.");
 	BE_ST_puts("");
 	BE_ST_puts("List of possible command line arguments:");
-	BE_ST_puts("-gamever <VER>: Selects game version supported by this executable.");
+	BE_ST_puts("-gamever <VER>: Select game version supported by this executable.");
 #ifdef REFKEEN_VER_CATADVENTURES
-	BE_ST_puts("-skipintro: Skips what is found in the original intro EXE and starts game.");
+	BE_ST_puts("-skipintro: Skip what is found in the original intro EXE and start game.");
 #endif
-	BE_ST_puts("-passorigargs <...>: Passes all following arguments to the original game port.");
+	BE_ST_puts("-passorigargs <...>: Pass all following arguments to the original game port.");
 	BE_ST_puts("-datadir <...>: Specify an alternative path for game data (separated by ver.).");
 	BE_ST_puts("-cfgdir <...>: Specify an alternative path for new cfg files (not old CONFIG).");
 	BE_ST_puts("-fulllauncher: Show a fullscreen launcher window.");
