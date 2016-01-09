@@ -142,6 +142,9 @@ inline char *BE_Cross_safeandfastcstringcopy_3strs(char *dest, char *destEnd, co
 	return BE_Cross_safeandfastcstringcopy(BE_Cross_safeandfastcstringcopy(BE_Cross_safeandfastcstringcopy(dest, destEnd, src0), destEnd, src1), destEnd, src2);
 }
 
+#ifdef __AMIGA__
+static
+#endif
 inline char *BE_Cross_safeandfastcstringcopy_4strs(char *dest, char *destEnd, const char *src0, const char *src1, const char *src2, const char *src3)
 {
 	return BE_Cross_safeandfastcstringcopy(BE_Cross_safeandfastcstringcopy(BE_Cross_safeandfastcstringcopy(BE_Cross_safeandfastcstringcopy(dest, destEnd, src0), destEnd, src1), destEnd, src2), destEnd, src3);
