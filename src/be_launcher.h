@@ -1,4 +1,4 @@
-/* Copyright (C) 2015 NY00123
+/* Copyright (C) 2015-2016 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -19,6 +19,8 @@
 
 #ifndef	_BE_LAUNCHER_
 #define _BE_LAUNCHER_
+
+#ifdef REFKEEN_ENABLE_LAUNCHER
 
 #define BE_LAUNCHER_PIX_WIDTH 320
 #define BE_LAUNCHER_PIX_HEIGHT 240
@@ -75,6 +77,7 @@ void BE_Launcher_HandleInput_ButtonPageUp(void);
 void BE_Launcher_HandleInput_ButtonPageDown(void);
 void BE_Launcher_HandleInput_ButtonActivate(void);
 void BE_Launcher_HandleInput_ButtonBack(void);
+void BE_Launcher_HandleInput_ButtonSearch(void);
 void BE_Launcher_HandleInput_ASCIIChar(char ch);
 
 void BE_Launcher_HandleInput_PointerSelect(int xpos, int ypos, uint32_t ticksinms);
@@ -85,6 +88,7 @@ void BE_Launcher_HandleInput_PointerVScroll(int ydiff, uint32_t ticksinms);
 void BE_Launcher_RefreshVerticalScrolling(uint32_t ticksinms);
 
 void BE_Launcher_Handler_LastGameVerLaunch(BEMenuItem **menuItemP);
+void BE_Launcher_Handler_SetArgumentsForGame(BEMenuItem **menuItemP);
 void BE_Launcher_Handler_GameLaunch(BEMenuItem **menuItemP);
 void BE_Launcher_Handler_RootPathSelection(BEMenuItem **menuItemP);
 void BE_Launcher_Handler_DirectorySelection(BEMenuItem **menuItemP);
@@ -93,7 +97,18 @@ void BE_Launcher_Handler_DirectorySelectionGoPrev(BEMenuItem **menuItemP);
 void BE_Launcher_Handler_MenuQuit(BEMenuItem **menuItemP);
 void BE_Launcher_Handler_ControllerAction(BEMenuItem **menuItemP);
 
+void BE_Launcher_ArgumentsEditing_MoveCursorToEdge(bool moveForward);
+void BE_Launcher_ArgumentsEditing_MoveCursorOnePos(bool moveForward);
+void BE_Launcher_ArgumentsEditing_InsertChar(char ch);
+void BE_Launcher_ArgumentsEditing_DeleteChar(bool deleteAt);
+
+void BE_Launcher_ArgumentsEditing_HandleInput_PointerSelect(int xpos, int ypos);
+bool BE_Launcher_ArgumentsEditing_HandleInput_PointerRelease(int xpos, int ypos);
+void BE_Launcher_ArgumentsEditing_HandleInput_PointerMotion(int xpos, int ypos);
+
 void BE_Launcher_Start(void);
 void BE_Launcher_ClearDirSelectionMenu(void);
+
+#endif // REFKEEN_ENABLE_LAUNCHER
 
 #endif // _BE_LAUNCHER_

@@ -1,4 +1,4 @@
-/* Copyright (C) 2015 NY00123
+/* Copyright (C) 2015-2016 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -16,6 +16,8 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
+
+#ifdef REFKEEN_ENABLE_LAUNCHER
 
 #include <stdlib.h>
 #include <string.h>
@@ -35,11 +37,14 @@
 
 #define BE_MENU_BACKBUTTON_PIX_WIDTH BE_MENU_FIRST_ITEM_PIX_YPOS
 
+#define BE_MENU_SEARCHBUTTON_PIX_WIDTH BE_MENU_FIRST_ITEM_PIX_YPOS
+
 #define BE_MENU_STATIC_TEXT_MAX_ROW_STRLEN ((BE_LAUNCHER_PIX_WIDTH-2*(BE_MENU_ITEM_MIN_TEXT_BORDER_PIX_SPACING+1))/BE_MENU_CHAR_WIDTH)
 
 #define BE_LAUNCHER_SELECTION_LABEL_PIX_XPOS_UPPERBOUND (2*(BE_LAUNCHER_PIX_WIDTH-1)/3-2*BE_MENU_CHAR_WIDTH)
 #define BE_LAUNCHER_SELECTION_LARROW_PIX_XPOS (BE_LAUNCHER_SELECTION_LABEL_PIX_XPOS_UPPERBOUND+BE_MENU_CHAR_WIDTH)
 #define BE_LAUNCHER_SELECTION_RARROW_PIX_XPOS (BE_LAUNCHER_PIX_WIDTH-1-BE_MENU_ITEM_MIN_TEXT_BORDER_PIX_SPACING-BE_MENU_CHAR_WIDTH)
+#define BE_LAUNCHER_SELECTION_BOX_PIX_XPOS (BE_LAUNCHER_SELECTION_LARROW_PIX_XPOS-3)
 
 #define BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD 8 // Moving the pointer less than that leads to no effect
 
@@ -202,7 +207,30 @@ static void BEL_Launcher_DrawTopRect(int x, int y, int width, int height, int fr
 
 }
 
-static void BEL_Launcher_DrawString(const char *str, int x, int y, int color, int yFirstBound, int yEndBound)
+static void BEL_Launcher_DrawVertLine(int x, int y, int height, int color, int yFirstBound, int yEndBound)
+{
+	// Should use g_be_launcher_screenPtr wisely so we don't go out of buffer's bounds
+	// (just cause this can lead to undefined behaviors even without dereferencing)
+
+	if (y >= yEndBound)
+		return;
+
+	int actualEndY = y+height;
+	if (yEndBound < actualEndY)
+		actualEndY = yEndBound;
+
+	if (actualEndY < yFirstBound) // == is OK
+		return;
+
+	if (y < yFirstBound)
+		y = yFirstBound;
+
+	uint8_t *pixPtr;
+	for (pixPtr = g_be_launcher_screenPtr + x + y*BE_LAUNCHER_PIX_WIDTH; y < actualEndY; ++y, pixPtr += BE_LAUNCHER_PIX_WIDTH)
+		*pixPtr = color;
+}
+
+static void BEL_Launcher_DrawStringWithStrLenBound(const char *str, int x, int y, int color, int yFirstBound, int yEndBound, int maxStrLenPerLine)
 {
 	// Should use g_be_launcher_screenPtr wisely so we don't go out of buffer's bounds
 	// (just cause this can lead to undefined behaviors even without dereferencing)
@@ -222,7 +250,8 @@ static void BEL_Launcher_DrawString(const char *str, int x, int y, int color, in
 				return;
 
 			pixPtr = g_be_launcher_screenPtr + x + y*BE_LAUNCHER_PIX_WIDTH;
-			for (ch = currLine; *ch && (*ch != '\n'); ++ch)
+			int charsScanned;
+			for (charsScanned = 0, ch = currLine; *ch && (*ch != '\n') && (charsScanned < maxStrLenPerLine); ++ch, ++charsScanned)
 			{
 				if (y < yFirstBound)
 					continue; // We still want to track the current line in string
@@ -231,6 +260,8 @@ static void BEL_Launcher_DrawString(const char *str, int x, int y, int color, in
 					if (g_cga_8x8TextFont[BE_MENU_CHAR_WIDTH*BE_MENU_CHAR_HEIGHT*(unsigned char)(*ch) + BE_MENU_CHAR_HEIGHT*chRow + chCol])
 						*pixPtr = color; // Draw pixel
 			}
+			for (; *ch && (*ch != '\n'); ++ch) // Skip what's left in line
+				;
 		}
 		currLine = ch;
 		if (*currLine == '\n')
@@ -239,9 +270,21 @@ static void BEL_Launcher_DrawString(const char *str, int x, int y, int color, in
 	}
 }
 
+static void BEL_Launcher_DrawString(const char *str, int x, int y, int color, int yFirstBound, int yEndBound)
+{
+	BEL_Launcher_DrawStringWithStrLenBound(str, x, y, color, yFirstBound, yEndBound, strlen(str));
+}
+
 static void BEL_Launcher_DrawBackButtonLabel(bool isPressed)
 {
 	BEL_Launcher_DrawString("\xAE\xAE", (BE_MENU_BACKBUTTON_PIX_WIDTH-BE_MENU_CHAR_WIDTH*strlen("\xAE\xAE"))/2, 1 + (BE_MENU_FIRST_ITEM_PIX_YPOS - BE_MENU_CHAR_HEIGHT - 1)/2, isPressed ? 15 : 7, 0, BE_LAUNCHER_PIX_HEIGHT);
+
+	BE_ST_Launcher_MarkGfxCache();
+}
+
+static void BEL_Launcher_DrawSearchButtonLabel(bool isPressed)
+{
+	BEL_Launcher_DrawString("\xF9\xF9\xF9", BE_LAUNCHER_PIX_WIDTH-(BE_MENU_SEARCHBUTTON_PIX_WIDTH+BE_MENU_CHAR_WIDTH*strlen("\xF9\xF9\xF9"))/2, 1 + (BE_MENU_FIRST_ITEM_PIX_YPOS - BE_MENU_CHAR_HEIGHT - 1)/2, isPressed ? 15 : 7, 0, BE_LAUNCHER_PIX_HEIGHT);
 
 	BE_ST_Launcher_MarkGfxCache();
 }
@@ -253,6 +296,9 @@ static void BEL_Launcher_DrawMenuTitleItem(BEMenu *menu)
 	// Back button
 	BEL_Launcher_DrawTopRect(0, 0, BE_MENU_BACKBUTTON_PIX_WIDTH, BE_MENU_FIRST_ITEM_PIX_YPOS, 2, 0, 0, BE_LAUNCHER_PIX_HEIGHT);
 	BEL_Launcher_DrawBackButtonLabel(false);
+	// Search button
+	BEL_Launcher_DrawTopRect(BE_LAUNCHER_PIX_WIDTH-BE_MENU_SEARCHBUTTON_PIX_WIDTH, 0, BE_MENU_SEARCHBUTTON_PIX_WIDTH, BE_MENU_FIRST_ITEM_PIX_YPOS, 2, 0, 0, BE_LAUNCHER_PIX_HEIGHT);
+	BEL_Launcher_DrawSearchButtonLabel(false);
 
 	BE_ST_Launcher_MarkGfxCache();
 }
@@ -284,6 +330,7 @@ static void BEL_Launcher_DrawMenuItemString(const char *str, int selectionYPos, 
 
 	if ((menuItem->type == BE_MENUITEM_TYPE_SELECTION) || (menuItem->type == BE_MENUITEM_TYPE_SELECTION_WITH_HANDLER))
 	{
+		BEL_Launcher_DrawVertLine(BE_LAUNCHER_SELECTION_BOX_PIX_XPOS, menuItem->yPosStart - g_be_launcher_currMenu->currPixYScroll, menuItem->yPosPastEnd - menuItem->yPosStart, 2, BE_MENU_FIRST_ITEM_PIX_YPOS, BE_LAUNCHER_PIX_HEIGHT);
 		BEL_Launcher_DrawString("\xAE", BE_LAUNCHER_SELECTION_LARROW_PIX_XPOS, menuItem->selectionYPos - g_be_launcher_currMenu->currPixYScroll, 14, BE_MENU_FIRST_ITEM_PIX_YPOS, BE_LAUNCHER_PIX_HEIGHT);
 		BEL_Launcher_DrawString("\xAF", BE_LAUNCHER_SELECTION_RARROW_PIX_XPOS, menuItem->selectionYPos - g_be_launcher_currMenu->currPixYScroll, 14, BE_MENU_FIRST_ITEM_PIX_YPOS, BE_LAUNCHER_PIX_HEIGHT);
 	}
@@ -334,6 +381,9 @@ static void BEL_Launcher_SetCurrentMenu(BEMenu *menu)
 	memset(g_be_launcher_screenPtr, 0, BE_LAUNCHER_PIX_WIDTH*BE_LAUNCHER_PIX_HEIGHT); // Clear screen
 	BEL_Launcher_DrawMenuTitleItem(menu);
 	BEL_Launcher_DrawMenuItems(menu);
+
+	void BEL_ST_Launcher_TurnTextSearchOff(void);
+	BEL_ST_Launcher_TurnTextSearchOff();
 }
 
 
@@ -533,6 +583,11 @@ void BE_Launcher_HandleInput_ButtonBack(void)
 		BEL_Launcher_SetCurrentMenu(g_be_launcher_currMenu->backMenu);
 }
 
+void BE_Launcher_HandleInput_ButtonSearch(void)
+{
+	void BEL_ST_Launcher_ToggleTextSearch(void);
+	BEL_ST_Launcher_ToggleTextSearch();
+}
 
 void BE_Launcher_HandleInput_ASCIIChar(char ch)
 {
@@ -578,6 +633,7 @@ void BE_Launcher_HandleInput_ASCIIChar(char ch)
 
 static bool g_be_launcher_pointer_in_use = false;
 static bool g_be_launcher_back_button_pressed = false;
+static bool g_be_launcher_search_button_pressed = false;
 static int g_be_launcher_startpointerx;
 static int g_be_launcher_startpointery;
 static bool g_be_launcher_pointermotionactuallystarted;
@@ -594,8 +650,10 @@ void BE_Launcher_HandleInput_PointerSelect(int xpos, int ypos, uint32_t ticksinm
 	g_be_launcher_vscroll_currrateper100ms = 0;
 
 	g_be_launcher_pointer_in_use = true;
-	g_be_launcher_back_button_pressed = (xpos < BE_MENU_BACKBUTTON_PIX_WIDTH) && (ypos < BE_MENU_FIRST_ITEM_PIX_YPOS);
+	g_be_launcher_back_button_pressed = ((xpos >= 0) && (xpos < BE_MENU_BACKBUTTON_PIX_WIDTH) && (ypos >= 0) && (ypos < BE_MENU_FIRST_ITEM_PIX_YPOS));
 	BEL_Launcher_DrawBackButtonLabel(g_be_launcher_back_button_pressed);
+	g_be_launcher_search_button_pressed = ((xpos >= BE_LAUNCHER_PIX_WIDTH-BE_MENU_SEARCHBUTTON_PIX_WIDTH) && (xpos < BE_LAUNCHER_PIX_WIDTH) && (ypos >= 0) && (ypos < BE_MENU_FIRST_ITEM_PIX_YPOS));
+	BEL_Launcher_DrawSearchButtonLabel(g_be_launcher_search_button_pressed);
 	g_be_launcher_startpointerx = xpos;
 	g_be_launcher_startpointery = ypos;
 	g_be_launcher_pointermotionactuallystarted = false;
@@ -604,7 +662,7 @@ void BE_Launcher_HandleInput_PointerSelect(int xpos, int ypos, uint32_t ticksinm
 	g_be_launcher_lastpointerymeasurementticksinms = ticksinms;
 	g_be_launcher_pointerymotionrateper100ms = 0;
 
-	if (!g_be_launcher_back_button_pressed)
+	if (!g_be_launcher_back_button_pressed && !g_be_launcher_search_button_pressed && (xpos >= 0) && (xpos < BE_LAUNCHER_PIX_WIDTH) && (ypos >= BE_MENU_FIRST_ITEM_PIX_YPOS) && (ypos < BE_LAUNCHER_PIX_HEIGHT))
 	{
 		ypos += g_be_launcher_currMenu->currPixYScroll;
 		for (BEMenuItem **menuItemPP = g_be_launcher_currMenu->menuItems; *menuItemPP; ++menuItemPP)
@@ -631,11 +689,20 @@ void BE_Launcher_HandleInput_PointerRelease(int xpos, int ypos, uint32_t ticksin
 
 	g_be_launcher_pointer_in_use = false;
 	//g_be_launcher_lastpointery = ypos;
+
 	if (g_be_launcher_back_button_pressed)
 	{
 		g_be_launcher_back_button_pressed = false;
 		//BEL_Launcher_DrawBackButtonLabel(g_be_launcher_back_button_pressed);
 		BE_Launcher_HandleInput_ButtonBack();
+		return;
+	}
+
+	if (g_be_launcher_search_button_pressed)
+	{
+		g_be_launcher_search_button_pressed = false;
+		BEL_Launcher_DrawSearchButtonLabel(g_be_launcher_search_button_pressed);
+		BE_Launcher_HandleInput_ButtonSearch();
 		return;
 	}
 
@@ -648,11 +715,11 @@ void BE_Launcher_HandleInput_PointerRelease(int xpos, int ypos, uint32_t ticksin
 		case BE_MENUITEM_TYPE_SELECTION:
 		case BE_MENUITEM_TYPE_SELECTION_WITH_HANDLER:
 			// FIXME Move these to another places? (don't verify ptr is ok twice)
-			if ((xpos >= BE_LAUNCHER_SELECTION_LARROW_PIX_XPOS) && (xpos < BE_LAUNCHER_SELECTION_LARROW_PIX_XPOS +  BE_MENU_CHAR_WIDTH))
+			if ((g_be_launcher_startpointerx >= BE_LAUNCHER_SELECTION_BOX_PIX_XPOS) && (g_be_launcher_startpointerx < BE_LAUNCHER_SELECTION_BOX_PIX_XPOS + (BE_LAUNCHER_PIX_WIDTH-BE_LAUNCHER_SELECTION_BOX_PIX_XPOS)/2))
 				BE_Launcher_HandleInput_ButtonLeft();
-			else if ((xpos >= BE_LAUNCHER_SELECTION_RARROW_PIX_XPOS) && (xpos < BE_LAUNCHER_SELECTION_RARROW_PIX_XPOS +  BE_MENU_CHAR_WIDTH))
-				BE_Launcher_HandleInput_ButtonRight();
 			else
+				BE_Launcher_HandleInput_ButtonRight();
+			break;
 		default:
 			BEL_Launcher_HandleCurrentMenuItem();
 		}
@@ -676,7 +743,18 @@ void BE_Launcher_HandleInput_PointerMotion(int xpos, int ypos, uint32_t ticksinm
 	if (!g_be_launcher_pointermotionactuallystarted)
 	{
 		if ((ypos >= g_be_launcher_startpointery-BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD) && (ypos <= g_be_launcher_startpointery+BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD))
-			return;
+		{
+			if (g_be_launcher_back_button_pressed || g_be_launcher_search_button_pressed)
+			{
+				if ((xpos >= g_be_launcher_startpointerx-BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD) && (xpos <= g_be_launcher_startpointerx+BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD))
+					return;
+			}
+			else
+			{
+				if ((xpos >= -BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD) && (xpos < BE_LAUNCHER_PIX_WIDTH+BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD))
+					return;
+			}
+		}
 		g_be_launcher_pointermotionactuallystarted = true;
 	}
 
@@ -684,6 +762,9 @@ void BE_Launcher_HandleInput_PointerMotion(int xpos, int ypos, uint32_t ticksinm
 
 	g_be_launcher_back_button_pressed = false;
 	BEL_Launcher_DrawBackButtonLabel(g_be_launcher_back_button_pressed);
+
+	g_be_launcher_search_button_pressed = false;
+	BEL_Launcher_DrawSearchButtonLabel(g_be_launcher_search_button_pressed);
 
 	g_be_launcher_selectedMenuItemPtr = NULL;
 	g_be_launcher_vscroll_currrateper100ms = 0;
@@ -829,6 +910,92 @@ void BE_Launcher_Handler_LastGameVerLaunch(BEMenuItem **menuItemP)
 	BEL_Launcher_DoLaunchGame(g_refKeenCfg.lastSelectedGameVer);
 }
 
+
+
+#define BE_MENU_ARGUMENTS_RECT_PIX_YPOS ((BE_LAUNCHER_PIX_HEIGHT-BE_MENU_ITEM_MIN_INTERNAL_PIX_HEIGHT-2)/2)
+#define BE_MENU_ARGUMENTS_PIX_XPOS BE_MENU_ITEM_MIN_TEXT_BORDER_PIX_SPACING
+#define BE_MENU_ARGUMENTS_TEXT_PIX_YPOS (1+BE_MENU_ARGUMENTS_RECT_PIX_YPOS+(BE_MENU_ITEM_MIN_INTERNAL_PIX_HEIGHT-BE_MENU_CHAR_HEIGHT)/2)
+#define BE_MENU_ARGUMENTS_TEXT_PIX_XPOS (BE_MENU_ARGUMENTS_PIX_XPOS+3*BE_MENU_CHAR_WIDTH)
+#define BE_MENU_ARGUMENTS_TEXT_MAX_ROW_STRLEN ((BE_LAUNCHER_PIX_WIDTH-2*(BE_MENU_ARGUMENTS_TEXT_PIX_XPOS+1))/BE_MENU_CHAR_WIDTH)
+#define BE_MENU_ARGUMENTS_TEXT_CHARS_BEFORE_SCROLLING 4
+
+static char g_beArgumentsStringToSet[LAUNCHER_EXE_ARGS_BUFFERLEN];
+static char *g_beArgumentsStringToSet_curPtr;
+static char * const g_beArgumentsStringToSet_lastCharPtr = g_beArgumentsStringToSet + LAUNCHER_EXE_ARGS_BUFFERLEN - 1;
+static int g_beArgumentsStringToSet_charsOffsetOnScreen = 0;
+
+static void BEL_Launcher_DrawArgumentsText(int color)
+{
+	int x = BE_MENU_ARGUMENTS_TEXT_PIX_XPOS;
+	int y = BE_MENU_ARGUMENTS_TEXT_PIX_YPOS;
+	BEL_Launcher_DrawStringWithStrLenBound(g_beArgumentsStringToSet+g_beArgumentsStringToSet_charsOffsetOnScreen, x, y, color, 0, BE_LAUNCHER_PIX_HEIGHT, BE_MENU_ARGUMENTS_TEXT_MAX_ROW_STRLEN);
+}
+
+static void BEL_Launcher_DrawArgumentsCursor(int color)
+{
+	int x = BE_MENU_ARGUMENTS_TEXT_PIX_XPOS + BE_MENU_CHAR_WIDTH*(g_beArgumentsStringToSet_curPtr-g_beArgumentsStringToSet-g_beArgumentsStringToSet_charsOffsetOnScreen);
+	int y = BE_MENU_ARGUMENTS_TEXT_PIX_YPOS+2;
+	BEL_Launcher_DrawString("_", x, y, color, 0, BE_LAUNCHER_PIX_HEIGHT);
+}
+
+static void BEL_Launcher_DrawArgumentsTextAndCursor(int color)
+{
+	 BEL_Launcher_DrawArgumentsText(color);
+	 BEL_Launcher_DrawArgumentsCursor(color);
+}
+
+static void BEL_Launcher_RefreshArgumentsOffset(void)
+{
+	int ptrDiff = g_beArgumentsStringToSet_curPtr-g_beArgumentsStringToSet;
+	if (ptrDiff - g_beArgumentsStringToSet_charsOffsetOnScreen < BE_MENU_ARGUMENTS_TEXT_CHARS_BEFORE_SCROLLING)
+		g_beArgumentsStringToSet_charsOffsetOnScreen = BE_Cross_TypedMax(int, 0, ptrDiff - BE_MENU_ARGUMENTS_TEXT_CHARS_BEFORE_SCROLLING);
+	else if (ptrDiff - g_beArgumentsStringToSet_charsOffsetOnScreen > BE_MENU_ARGUMENTS_TEXT_MAX_ROW_STRLEN - BE_MENU_ARGUMENTS_TEXT_CHARS_BEFORE_SCROLLING)
+		g_beArgumentsStringToSet_charsOffsetOnScreen = BE_Cross_TypedMax(int, 0, BE_Cross_TypedMin(int, strlen(g_beArgumentsStringToSet) - BE_MENU_ARGUMENTS_TEXT_MAX_ROW_STRLEN, ptrDiff - BE_MENU_ARGUMENTS_TEXT_MAX_ROW_STRLEN + BE_MENU_ARGUMENTS_TEXT_CHARS_BEFORE_SCROLLING));
+}
+
+void BE_Launcher_Handler_SetArgumentsForGame(BEMenuItem **menuItemP)
+{
+	// HACK because we usually don't access g_refKeenCfg directly
+	memcpy(g_beArgumentsStringToSet, g_refKeenCfg.launcherExeArgs, sizeof(g_beArgumentsStringToSet));
+	g_beArgumentsStringToSet_curPtr = g_beArgumentsStringToSet + strlen(g_beArgumentsStringToSet);
+	g_beArgumentsStringToSet_charsOffsetOnScreen = 0;
+	BEL_Launcher_RefreshArgumentsOffset();
+
+	memset(g_be_launcher_screenPtr, 0, BE_LAUNCHER_PIX_WIDTH*BE_LAUNCHER_PIX_HEIGHT); // Clear screen
+	BEL_Launcher_DrawTopRect(0, 0, BE_LAUNCHER_PIX_WIDTH, BE_MENU_FIRST_ITEM_PIX_YPOS, 2, 0, 0, BE_LAUNCHER_PIX_HEIGHT);
+	BEL_Launcher_DrawTopRect(0, BE_MENU_FIRST_ITEM_PIX_YPOS, BE_LAUNCHER_PIX_WIDTH, BE_LAUNCHER_PIX_HEIGHT-BE_MENU_FIRST_ITEM_PIX_YPOS, 2, 0, 0, BE_LAUNCHER_PIX_HEIGHT);
+	BEL_Launcher_DrawTopRect(0, BE_MENU_ARGUMENTS_RECT_PIX_YPOS, BE_LAUNCHER_PIX_WIDTH, BE_MENU_FIRST_ITEM_PIX_YPOS, 2, 0, 0, BE_LAUNCHER_PIX_HEIGHT);
+	BEL_Launcher_DrawTopRect(0, BE_MENU_ARGUMENTS_RECT_PIX_YPOS + BE_MENU_ITEM_MIN_INTERNAL_PIX_HEIGHT + 1, BE_LAUNCHER_PIX_WIDTH, BE_LAUNCHER_PIX_HEIGHT-BE_MENU_FIRST_ITEM_PIX_YPOS, 2, 0, 0, BE_LAUNCHER_PIX_HEIGHT);
+	static const char *titleStr = "Edit command line arguments";
+	BEL_Launcher_DrawString(titleStr, (BE_LAUNCHER_PIX_WIDTH-BE_MENU_CHAR_WIDTH*strlen(titleStr))/2, BE_MENU_TITLE_PIX_YPOS, 11, 0, BE_LAUNCHER_PIX_HEIGHT);
+	BEL_Launcher_DrawString("\xF9\xF9", BE_MENU_ARGUMENTS_PIX_XPOS, BE_MENU_ARGUMENTS_TEXT_PIX_YPOS, 12, 0, BE_LAUNCHER_PIX_HEIGHT);
+	BEL_Launcher_DrawString("\xF9\xF9", BE_LAUNCHER_PIX_WIDTH-BE_MENU_ARGUMENTS_PIX_XPOS-2*BE_MENU_CHAR_WIDTH, BE_MENU_ARGUMENTS_TEXT_PIX_YPOS, 12, 0, BE_LAUNCHER_PIX_HEIGHT);
+	// Back button
+	BEL_Launcher_DrawTopRect(0, 0, BE_MENU_BACKBUTTON_PIX_WIDTH, BE_MENU_FIRST_ITEM_PIX_YPOS, 2, 0, 0, BE_LAUNCHER_PIX_HEIGHT);
+	BEL_Launcher_DrawBackButtonLabel(false);
+	// Search button
+	BEL_Launcher_DrawTopRect(BE_LAUNCHER_PIX_WIDTH-BE_MENU_SEARCHBUTTON_PIX_WIDTH, 0, BE_MENU_SEARCHBUTTON_PIX_WIDTH, BE_MENU_FIRST_ITEM_PIX_YPOS, 2, 0, 0, BE_LAUNCHER_PIX_HEIGHT);
+	BEL_Launcher_DrawSearchButtonLabel(false);
+	//
+	BEL_Launcher_DrawArgumentsTextAndCursor(14);
+
+	//BE_ST_Launcher_MarkGfxCache();
+
+	bool BEL_ST_SDL_Launcher_DoEditArguments(void);
+	if (BEL_ST_SDL_Launcher_DoEditArguments())
+	{
+		memcpy(g_refKeenCfg.launcherExeArgs, g_beArgumentsStringToSet, sizeof(g_beArgumentsStringToSet));
+		void BEL_ST_Launcher_RefreshSetArgumentsMenuItemLabel(void);
+		BEL_ST_Launcher_RefreshSetArgumentsMenuItemLabel();
+	}
+
+
+	void BEL_ST_Launcher_TurnTextInputOff(void);
+	BEL_ST_Launcher_TurnTextInputOff();
+
+	BEL_Launcher_SetCurrentMenu(g_be_launcher_currMenu);
+}
+
 void BE_Launcher_Handler_GameLaunch(BEMenuItem **menuItemP)
 {
 	BEL_Launcher_DoLaunchGame(BE_Cross_GetGameVerFromInstallation(menuItemP - g_be_launcher_currMenu->menuItems));
@@ -970,3 +1137,148 @@ void BE_Launcher_Handler_ControllerAction(BEMenuItem **menuItemP)
 	BE_ST_Launcher_WaitForControllerButton(menuItem);
 	BEL_Launcher_DrawMenuItems(g_be_launcher_currMenu);
 }
+
+void BE_Launcher_ArgumentsEditing_MoveCursorToEdge(bool moveForward)
+{
+	BEL_Launcher_DrawArgumentsTextAndCursor(0);
+
+	if (moveForward)
+		for (; *g_beArgumentsStringToSet_curPtr != '\0'; ++g_beArgumentsStringToSet_curPtr);
+	else
+		g_beArgumentsStringToSet_curPtr = g_beArgumentsStringToSet;
+
+	BEL_Launcher_RefreshArgumentsOffset();
+	BEL_Launcher_DrawArgumentsTextAndCursor(14);
+
+	BE_ST_Launcher_MarkGfxCache();
+}
+
+void BE_Launcher_ArgumentsEditing_MoveCursorOnePos(bool moveForward)
+{
+	BEL_Launcher_DrawArgumentsTextAndCursor(0);
+
+	if (moveForward)
+	{
+		if (*g_beArgumentsStringToSet_curPtr != '\0')
+			++g_beArgumentsStringToSet_curPtr;
+	}
+	else
+	{
+		if (g_beArgumentsStringToSet_curPtr > g_beArgumentsStringToSet)
+			--g_beArgumentsStringToSet_curPtr;
+	}
+
+	BEL_Launcher_RefreshArgumentsOffset();
+	BEL_Launcher_DrawArgumentsTextAndCursor(14);
+
+	BE_ST_Launcher_MarkGfxCache();
+}
+
+void BE_Launcher_ArgumentsEditing_InsertChar(char ch)
+{
+	char *ptr = g_beArgumentsStringToSet_curPtr;
+	for (; ptr < g_beArgumentsStringToSet_lastCharPtr; ++ptr)
+		if (*ptr == '\0')
+			break;
+	if (ptr < g_beArgumentsStringToSet_lastCharPtr)
+	{
+		BEL_Launcher_DrawArgumentsTextAndCursor(0);
+		// Shift chars to the right, including NUL terminator
+		for (; ptr > g_beArgumentsStringToSet_curPtr; --ptr)
+			*(ptr + 1) = *ptr;
+		// Finally shift char at cursor and then replace it
+		*(ptr + 1) = *ptr;
+		*ptr = ch;
+		// Let's move the cursor itself
+		++g_beArgumentsStringToSet_curPtr;
+
+		BEL_Launcher_RefreshArgumentsOffset();
+		BEL_Launcher_DrawArgumentsTextAndCursor(14);
+
+		BE_ST_Launcher_MarkGfxCache();
+	}
+}
+
+void BE_Launcher_ArgumentsEditing_DeleteChar(bool deleteAt)
+{
+	char *ptr = g_beArgumentsStringToSet_curPtr;
+	if (!deleteAt)
+	{
+		if (ptr == g_beArgumentsStringToSet)
+			return;
+		--ptr;
+	}
+
+	BEL_Launcher_DrawArgumentsTextAndCursor(0);
+
+	if (!deleteAt)
+		--g_beArgumentsStringToSet_curPtr;
+
+	for (; *ptr != '\0'; ++ptr)
+		*ptr = *(ptr+1);
+
+	BEL_Launcher_RefreshArgumentsOffset();
+	BEL_Launcher_DrawArgumentsTextAndCursor(14);
+
+	BE_ST_Launcher_MarkGfxCache();
+}
+
+
+void BE_Launcher_ArgumentsEditing_HandleInput_PointerSelect(int xpos, int ypos)
+{
+	g_be_launcher_pointer_in_use = true;
+	g_be_launcher_back_button_pressed = ((xpos >= 0) && (xpos < BE_MENU_BACKBUTTON_PIX_WIDTH) && (ypos >= 0) && (ypos < BE_MENU_FIRST_ITEM_PIX_YPOS));
+	BEL_Launcher_DrawBackButtonLabel(g_be_launcher_back_button_pressed);
+	g_be_launcher_search_button_pressed = ((xpos >= BE_LAUNCHER_PIX_WIDTH-BE_MENU_SEARCHBUTTON_PIX_WIDTH) && (xpos < BE_LAUNCHER_PIX_WIDTH) && (ypos >= 0) && (ypos < BE_MENU_FIRST_ITEM_PIX_YPOS));
+	BEL_Launcher_DrawSearchButtonLabel(g_be_launcher_search_button_pressed);
+	g_be_launcher_startpointerx = xpos;
+	g_be_launcher_startpointery = ypos;
+	g_be_launcher_pointermotionactuallystarted = false;
+}
+
+bool BE_Launcher_ArgumentsEditing_HandleInput_PointerRelease(int xpos, int ypos)
+{
+	g_be_launcher_pointer_in_use = false;
+
+	if (g_be_launcher_back_button_pressed)
+	{
+		g_be_launcher_back_button_pressed = false;
+		//BEL_Launcher_DrawBackButtonLabel(g_be_launcher_back_button_pressed);
+		return true;
+	}
+
+	if (g_be_launcher_search_button_pressed)
+	{
+		g_be_launcher_search_button_pressed = false;
+		BEL_Launcher_DrawSearchButtonLabel(g_be_launcher_search_button_pressed);
+		void BEL_ST_Launcher_ToggleTextInput(void);
+		BEL_ST_Launcher_ToggleTextInput();
+		return false;
+	}
+
+	return false;
+}
+
+void BE_Launcher_ArgumentsEditing_HandleInput_PointerMotion(int xpos, int ypos)
+{
+	if (!g_be_launcher_pointer_in_use)
+		return;
+
+	if (!g_be_launcher_pointermotionactuallystarted)
+	{
+		// Nothing other than the back or search button may be selected here, so the check is a bit simpler here (compared to the usual menu)
+		if ((xpos >= g_be_launcher_startpointerx-BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD) && (xpos <= g_be_launcher_startpointerx+BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD) &&
+		    (ypos >= g_be_launcher_startpointery-BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD) && (ypos <= g_be_launcher_startpointery+BE_LAUNCHER_POINTER_MOTION_PIX_THRESHOLD))
+			return;
+		g_be_launcher_pointermotionactuallystarted = true;
+	}
+
+	g_be_launcher_back_button_pressed = false;
+	BEL_Launcher_DrawBackButtonLabel(g_be_launcher_back_button_pressed);
+
+	g_be_launcher_search_button_pressed = false;
+	BEL_Launcher_DrawSearchButtonLabel(g_be_launcher_search_button_pressed);
+}
+
+
+#endif // REFKEEN_ENABLE_LAUNCHER

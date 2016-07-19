@@ -1,4 +1,4 @@
-/* Copyright (C) 2014-2015 NY00123
+/* Copyright (C) 2014-2016 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -26,17 +26,22 @@
 
 typedef enum { VSYNC_AUTO, VSYNC_OFF, VSYNC_ON } VSyncSettingType;
 typedef enum { SCALE_ASPECT, SCALE_FILL } ScaleTypeSettingType;
-typedef enum { LAUNCHER_WINDOW_DEFAULT, LAUNCHER_WINDOW_FULL, LAUNCHER_WINDOW_SOFTWARE } LauncherWindowSettingType;
+
+#ifdef REFKEEN_ENABLE_LAUNCHER
 #define LAUNCHER_EXE_ARGS_BUFFERLEN 80
+typedef enum { LAUNCHER_WINDOW_DEFAULT, LAUNCHER_WINDOW_FULL, LAUNCHER_WINDOW_SOFTWARE } LauncherWindowSettingType;
+#endif
 
 typedef struct
 {
 	bool isFullscreen;
 	int fullWidth, fullHeight;
 	int winWidth, winHeight;
+#ifdef REFKEEN_ENABLE_LAUNCHER
 	int launcherWinWidth, launcherWinHeight;
 	LauncherWindowSettingType launcherWinType;
 	char launcherExeArgs[LAUNCHER_EXE_ARGS_BUFFERLEN];
+#endif
 	int lastSelectedGameVer;
 	int displayNum;
 	int sdlRendererDriver;
@@ -49,6 +54,11 @@ typedef struct
 	int sndSampleRate;
 	bool sndSubSystem;
 	bool oplEmulation;
+#ifndef REFKEEN_RESAMPLER_NONE
+	bool useResampler;
+#endif
+	bool enableTouchInput; // FIXME Make it Auto/Always/Never
+	bool touchInputDebugging;
 	struct
 	{
 		int actionMappings[BE_ST_CTRL_CFG_BUTMAP_AFTERLAST]; // Buttons/triggers

@@ -1652,7 +1652,7 @@ id0_int_t UnpackEGAShapeToScreen(struct Shape *SHP,id0_int_t startx,id0_int_t st
 							n--;
 
 						while (n--)
-							BE_ST_EGAUpdateGFXByte(DstOff[Plane]++, Rep, 1<<Plane);
+							BE_ST_EGAUpdateGFXByteInPlane(DstOff[Plane]++, Rep, Plane);
 							//*Dst[Plane]++ = Rep;
 					}
 					else
@@ -1666,7 +1666,7 @@ id0_int_t UnpackEGAShapeToScreen(struct Shape *SHP,id0_int_t startx,id0_int_t st
 						n--;
 
 					while (n--)
-						BE_ST_EGAUpdateGFXByte(DstOff[Plane]++, *Src++, 1<<Plane);
+						BE_ST_EGAUpdateGFXByteInPlane(DstOff[Plane]++, *Src++, Plane);
 						//*Dst[Plane]++ = *Src++;
 
 					if ((!BPR) && (NotWordAligned))     // IGNORE WORD ALIGN
@@ -1694,11 +1694,16 @@ id0_char_t GetKeyChoice(const id0_char_t *choices,id0_boolean_t clear)
 	// REFKEEN - Alternative controllers support
 	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_keychoice;
 	// This one is a bit tricky... Also reusing s variable here
+	g_ingame_altcontrol_mapping_keychoice.defaultMapping.mapClass = BE_ST_CTRL_MAP_NONE;
 	int controllerbutton;
 	for (controllerbutton = BE_ST_CTRL_BUT_A, s = choices; controllerbutton < BE_ST_CTRL_BUT_A + 4; ++controllerbutton)
 	{
 		while (*s == sc_Escape)
+		{
+			g_ingame_altcontrol_mapping_keychoice.defaultMapping.mapClass = BE_ST_CTRL_MAP_KEYSCANCODE;
+			g_ingame_altcontrol_mapping_keychoice.defaultMapping.val = sc_Escape;
 			++s;
+		}
 
 		if (*s)
 		{
@@ -1722,6 +1727,8 @@ id0_char_t GetKeyChoice(const id0_char_t *choices,id0_boolean_t clear)
 				++s;
 				continue;
 			}
+			g_ingame_altcontrol_mapping_keychoice.defaultMapping.mapClass = BE_ST_CTRL_MAP_KEYSCANCODE;
+			g_ingame_altcontrol_mapping_keychoice.defaultMapping.val = sc_Escape;
 			++s;
 		}
 		g_ingame_altcontrol_mapping_keychoice.buttons[controllerbutton].mapClass = BE_ST_CTRL_MAP_NONE;
@@ -2444,7 +2451,7 @@ noxor:
 			//
 			// In ported code we update all planes at once
 
-			BE_ST_EGAUpdateGFXBitsScrToScr((drawofs+(x>>3))+pagedelta, drawofs+(x>>3), maskb[x&7]);
+			BE_ST_EGAUpdateGFXBitsInAllPlanesScrToScr((drawofs+(x>>3))+pagedelta, drawofs+(x>>3), maskb[x&7]);
 #if 0
 			asm     mov     cx,[x]
 			asm     mov     si,cx

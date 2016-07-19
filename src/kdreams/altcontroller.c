@@ -22,12 +22,106 @@
 #include <string.h>
 #include "id_heads.h"
 
+/*** Touch input UI resource definitions ***/
+
+#include "../rsrc/button_confirm.xpm"
+#include "../rsrc/button_back.xpm"
+#include "../rsrc/button_debug_keys.xpm"
+#include "../rsrc/button_function_keys.xpm"
+#include "../rsrc/button_jump.xpm"
+#include "../rsrc/button_shoot.xpm"
+#include "../rsrc/button_pause.xpm"
+#include "../rsrc/button_stats.xpm"
+#include "../rsrc/button_pageup.xpm"
+#include "../rsrc/button_pagedown.xpm"
+
+#include "../rsrc/pad_dpad.xpm"
+#include "../rsrc/pad_dpad_left_input.xpm"
+#include "../rsrc/pad_dpad_right_input.xpm"
+#include "../rsrc/pad_dpad_up_input.xpm"
+#include "../rsrc/pad_dpad_down_input.xpm"
+
+#include "../rsrc/analog_circle.xpm"
+#include "../rsrc/analog_circle_left_input.xpm"
+#include "../rsrc/analog_circle_right_input.xpm"
+#include "../rsrc/analog_circle_top_input.xpm"
+#include "../rsrc/analog_circle_bottom_input.xpm"
+#include "../rsrc/analog_circle_topleft_input.xpm"
+#include "../rsrc/analog_circle_topright_input.xpm"
+#include "../rsrc/analog_circle_bottomleft_input.xpm"
+#include "../rsrc/analog_circle_bottomright_input.xpm"
+
 BE_ST_ControllerSingleMap *g_ingame_altcontrol_button0mappings[2], *g_ingame_altcontrol_button1mappings[2],
 	*g_ingame_altcontrol_upmappings[4], *g_ingame_altcontrol_downmappings[4], *g_ingame_altcontrol_leftmappings[4], *g_ingame_altcontrol_rightmappings[4];
 
+extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_funckeys;
+
 // This one is incomplete and partially filled on startup
 BE_ST_ControllerMapping g_ingame_altcontrol_mapping_gameplay = {
-	NULL,
+	{0},
+	(BE_ST_OnscreenTouchControl[])
+	{
+		{button_jump_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8},
+		{button_shoot_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8},
+		{button_debug_keys_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, 26+8},
+		{button_stats_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-56-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8},
+		{button_back_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, 2+8},
+		{button_pause_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-46-8, 2+8},
+		{analog_circle_xpm+5, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8},
+		{button_function_keys_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-46-8, 26+8},
+		{0}
+	},
+	(BE_ST_TouchControlSingleMap[])
+	{
+		/*** Actually adjusted in-game ***/
+		{{NULL, BE_ST_SC_LCTRL, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 button_jump_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8
+		},
+		{{NULL, BE_ST_SC_LALT, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 button_shoot_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8
+		},
+		{{NULL, BE_ST_SC_LEFT, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 analog_circle_left_input_xpm+5, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{{NULL, BE_ST_SC_RIGHT, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 analog_circle_right_input_xpm+5, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{{NULL, BE_ST_SC_UP, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 analog_circle_top_input_xpm+5, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{{NULL, BE_ST_SC_DOWN, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 analog_circle_bottom_input_xpm+5, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{{NULL, BE_ST_SC_HOME, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 analog_circle_topleft_input_xpm+5, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{{NULL, BE_ST_SC_PAGEUP, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 analog_circle_topright_input_xpm+5, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{{NULL, BE_ST_SC_END, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 analog_circle_bottomleft_input_xpm+5, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{{NULL, BE_ST_SC_PAGEDOWN, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 analog_circle_bottomright_input_xpm+5, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		/*** Not adjusted as above ***/
+		{{NULL, BE_ST_SC_SPACE, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 button_stats_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-56-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8
+		},
+		{{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 button_back_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, 2+8
+		},
+		{{NULL, BE_ST_SC_PAUSE, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 button_pause_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-46-8, 2+8
+		},
+		{{&g_ingame_altcontrol_mapping_funckeys, 0, 0, BE_ST_CTRL_MAP_OTHERMAPPING},
+		 button_function_keys_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-46-8, 26+8
+		},
+		{{&g_beStControllerMappingDebugKeys, 0, 0, BE_ST_CTRL_MAP_OTHERMAPPING},
+		 button_debug_keys_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, 26+8
+		},
+		{0}
+	},
 	{
 		{0},
 		{0},
@@ -53,7 +147,9 @@ BE_ST_ControllerMapping g_ingame_altcontrol_mapping_gameplay = {
 };
 
 BE_ST_ControllerMapping g_ingame_altcontrol_mapping_funckeys = {
-	&g_ingame_altcontrol_mapping_gameplay,
+	{&g_ingame_altcontrol_mapping_gameplay, 0, 0, BE_ST_CTRL_MAP_OTHERMAPPING},
+	NULL,
+	NULL,
 	{
 		// Face buttons
 		{NULL, BE_ST_SC_F6, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
@@ -62,7 +158,7 @@ BE_ST_ControllerMapping g_ingame_altcontrol_mapping_funckeys = {
 		{0},
 		{0},
 		{0},
-		// Start Button
+		// Start button
 		{NULL, BE_ST_SC_PAUSE, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
 		{0},
 		{0},
@@ -79,7 +175,40 @@ BE_ST_ControllerMapping g_ingame_altcontrol_mapping_funckeys = {
 	true
 };
 
+// Used only in EGA mode while running out of memory, and it should never
+// happen anyway (unless a few changes are done)
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_notenoughmemorytostart = {
+	{0},
+	NULL,
+	NULL,
+	{
+		// Face buttons
+		{NULL, BE_ST_SC_Q, 0, BE_ST_CTRL_MAP_KEYSCANCODE}, // Quit
+		{NULL, BE_ST_SC_C, 0, BE_ST_CTRL_MAP_KEYSCANCODE}, // Continue
+		{0},
+		{0},
+		// Back button
+		{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		{0},
+		// Start button
+		{NULL, BE_ST_SC_PAUSE, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		{0},
+		{0},
+		{0},
+		{0},
+		{0},
+		{0},
+		{0},
+		{0}
+	},
+	{
+	},
+	true
+};
+
 BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback = {
+	{NULL, BE_ST_SC_ENTER, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+	NULL,
 	NULL,
 	{
 		// Face buttons
@@ -116,6 +245,103 @@ BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback = {
 };
 
 BE_ST_ControllerMapping g_ingame_altcontrol_mapping_simpledialog = {
+	{0},
+	(BE_ST_OnscreenTouchControl[])
+	{
+		{button_confirm_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8},
+		{button_back_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8},
+		{pad_dpad_xpm+8, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8},
+		{0}
+	},
+	(BE_ST_TouchControlSingleMap[])
+	{
+		{{NULL, BE_ST_SC_ENTER, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 button_confirm_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8
+		},
+		{{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 button_back_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8
+		},
+		{{NULL, BE_ST_SC_UP, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 pad_dpad_up_input_xpm+4, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{{NULL, BE_ST_SC_DOWN, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 pad_dpad_down_input_xpm+4, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{0}
+	},
+	{
+		// Face buttons
+		{NULL, BE_ST_SC_ENTER, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		{0},
+		{0},
+		// Back button
+		{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		{0},
+		// Start button
+		{NULL, BE_ST_SC_PAUSE, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		{0},
+		{0},
+		{0},
+		{0},
+		// D-pad
+		{NULL, BE_ST_SC_UP, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		{NULL, BE_ST_SC_DOWN, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		{NULL, BE_ST_SC_LEFT, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		{NULL, BE_ST_SC_RIGHT, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+	},
+	{
+	},
+	false
+};
+
+static BE_ST_OnscreenTouchControl g_ingame_altcontrol_mapping_menu_onscreentouchcontrols_keyboardemu[] = {
+	{button_confirm_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8},
+	{button_back_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8},
+	{pad_dpad_xpm+8, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8},
+	{0}
+};
+
+static BE_ST_TouchControlSingleMap g_ingame_altcontrol_mapping_menu_touchmappings_keyboardemu[] = {
+	{{NULL, BE_ST_SC_ENTER, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+	 button_confirm_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8
+	},
+	{{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+	 button_back_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-39-8
+	},
+	{{NULL, BE_ST_SC_LEFT, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+	 pad_dpad_left_input_xpm+4, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+	},
+	{{NULL, BE_ST_SC_RIGHT, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+	 pad_dpad_right_input_xpm+4, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+	},
+	{{NULL, BE_ST_SC_UP, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+	 pad_dpad_up_input_xpm+4, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+	},
+	{{NULL, BE_ST_SC_DOWN, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+	 pad_dpad_down_input_xpm+4, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+	},
+	{0}
+};
+
+static BE_ST_OnscreenTouchControl g_ingame_altcontrol_mapping_menu_onscreentouchcontrols_mouseemu[] = {
+	{button_back_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8},
+	{0}
+};
+
+static BE_ST_TouchControlSingleMap g_ingame_altcontrol_mapping_menu_touchmappings_mouseemu[] = {
+	{{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+	 button_back_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8
+	},
+	{0}
+};
+
+// This one may also be partially filled on startup, for two purposes:
+// - Game controller mappings.
+// - Keyboard vs mouse emulation for touch input.
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu = {
+	{0},
+	NULL,
 	NULL,
 	{
 		// Face buttons
@@ -143,37 +369,35 @@ BE_ST_ControllerMapping g_ingame_altcontrol_mapping_simpledialog = {
 	false
 };
 
-// This one may also be partially filled on startup
-BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu = {
-	NULL,
-	{
-		// Face buttons
-		{NULL, BE_ST_SC_ENTER, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
-		{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
-		{0},
-		{0},
-		// Back button
-		{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
-		{0},
-		// Start Button
-		{NULL, BE_ST_SC_PAUSE, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
-		{0},
-		{0},
-		{0},
-		{0},
-		// D-pad
-		{NULL, BE_ST_SC_UP, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
-		{NULL, BE_ST_SC_DOWN, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
-		{NULL, BE_ST_SC_LEFT, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
-		{NULL, BE_ST_SC_RIGHT, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
-	},
-	{
-	},
-	false
-};
-
 BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu_help = {
-	NULL,
+	{0},
+	(BE_ST_OnscreenTouchControl[])
+	{
+		{button_pageup_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, 8},
+		{button_pagedown_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, 26+8},
+		{button_back_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8},
+		{pad_dpad_xpm+8, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8},
+		{0}
+	},
+	(BE_ST_TouchControlSingleMap[])
+	{
+		{{NULL, BE_ST_SC_PAGEUP, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 button_pageup_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, 8
+		},
+		{{NULL, BE_ST_SC_PAGEDOWN, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 button_pagedown_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, 26+8
+		},
+		{{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 button_back_xpm+5, 22, 22, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-22-8
+		},
+		{{NULL, BE_ST_SC_UP, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 pad_dpad_up_input_xpm+4, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{{NULL, BE_ST_SC_DOWN, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
+		 pad_dpad_down_input_xpm+4, 48, 48, 8, BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-48-8
+		},
+		{0}
+	},
 	{
 		// Face buttons
 		{0},
@@ -183,7 +407,7 @@ BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu_help = {
 		// Back button
 		{NULL, BE_ST_SC_ESC, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
 		{0},
-		// Start Button
+		// Start button
 		{NULL, BE_ST_SC_PAUSE, 0, BE_ST_CTRL_MAP_KEYSCANCODE},
 		{0},
 		{0},
@@ -236,6 +460,13 @@ void RefKeen_PrepareAltControllerScheme(void)
 	tempsinglemapping.otherMappingPtr = &g_beStControllerMappingDebugKeys;
 	CheckButtonMapping(g_refKeenCfg.altControlScheme.actionMappings[BE_ST_CTRL_CFG_BUTMAP_DEBUGKEYS], &tempsinglemappingptr, &tempsinglemapping);
 
+	// HACK (leave US_LineInput this way)
+	g_beStControllerMappingTextInput.defaultMapping.mapClass = BE_ST_CTRL_MAP_KEYSCANCODE;
+	g_beStControllerMappingTextInput.defaultMapping.val = BE_ST_SC_ESC;
+	// HACK (hide debug keys this way)
+	g_beStControllerMappingDebugKeys.defaultMapping.mapClass = BE_ST_CTRL_MAP_OTHERMAPPING;
+	g_beStControllerMappingDebugKeys.defaultMapping.otherMappingPtr = &g_ingame_altcontrol_mapping_gameplay;
+
 	if (g_refKeenCfg.altControlScheme.useDpad)
 	{
 		*currupmappingptr = &g_ingame_altcontrol_mapping_gameplay.buttons[BE_ST_CTRL_BUT_DPAD_UP];
@@ -277,21 +508,36 @@ void RefKeen_PrepareAltControllerScheme(void)
 
 	if (g_refKeenCfg.altControlScheme.useLeftStick)
 	{
-		memcpy(&g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_LY][0], &mouseup, sizeof(mouseup));
-		memcpy(&g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_LY][1], &mousedown, sizeof(mousedown));
-		memcpy(&g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_LX][0], &mouseleft, sizeof(mouseleft));
-		memcpy(&g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_LX][1], &mouseright, sizeof(mouseright));
+		g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_LY][0] = mouseup;
+		g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_LY][1] = mousedown;
+		g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_LX][0] = mouseleft;
+		g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_LX][1] = mouseright;
 	}
 	if (g_refKeenCfg.altControlScheme.useRightStick)
 	{
-		memcpy(&g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_RY][0], &mouseup, sizeof(mouseup));
-		memcpy(&g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_RY][1], &mousedown, sizeof(mousedown));
-		memcpy(&g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_RX][0], &mouseleft, sizeof(mouseleft));
-		memcpy(&g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_RX][1], &mouseright, sizeof(mouseright));
+		g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_RY][0] = mouseup;
+		g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_RY][1] = mousedown;
+		g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_RX][0] = mouseleft;
+		g_ingame_altcontrol_mapping_menu.axes[BE_ST_CTRL_AXIS_RX][1] = mouseright;
 	}
 
 	// Since it's our first time we can do this now
 	BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_inackback);
+}
+
+void FillControlPanelTouchMappings(bool withmouse)
+{
+	if (withmouse)
+	{
+		g_ingame_altcontrol_mapping_menu.onScreenTouchControls = g_ingame_altcontrol_mapping_menu_onscreentouchcontrols_mouseemu;
+		g_ingame_altcontrol_mapping_menu.touchMappings = g_ingame_altcontrol_mapping_menu_touchmappings_mouseemu;
+	}
+	else
+	{
+		g_ingame_altcontrol_mapping_menu.onScreenTouchControls = g_ingame_altcontrol_mapping_menu_onscreentouchcontrols_keyboardemu;
+		g_ingame_altcontrol_mapping_menu.touchMappings = g_ingame_altcontrol_mapping_menu_touchmappings_keyboardemu;
+	}
+	g_ingame_altcontrol_mapping_menu.absoluteFingerPositioning = withmouse;
 }
 
 void PrepareGamePlayControllerMapping(void)
@@ -310,6 +556,17 @@ void PrepareGamePlayControllerMapping(void)
 		(*singlemappingptr)->val = KbdDefs[0].left;
 	for (singlemappingptr = g_ingame_altcontrol_rightmappings; *singlemappingptr; ++singlemappingptr)
 		(*singlemappingptr)->val = KbdDefs[0].right;
+	// HACK - The indices are hardcoded
+	g_ingame_altcontrol_mapping_gameplay.touchMappings[0].mapping.val = KbdDefs[0].button0;
+	g_ingame_altcontrol_mapping_gameplay.touchMappings[1].mapping.val = KbdDefs[0].button1;
+	g_ingame_altcontrol_mapping_gameplay.touchMappings[2].mapping.val = KbdDefs[0].left;
+	g_ingame_altcontrol_mapping_gameplay.touchMappings[3].mapping.val = KbdDefs[0].right;
+	g_ingame_altcontrol_mapping_gameplay.touchMappings[4].mapping.val = KbdDefs[0].up;
+	g_ingame_altcontrol_mapping_gameplay.touchMappings[5].mapping.val = KbdDefs[0].down;
+	g_ingame_altcontrol_mapping_gameplay.touchMappings[6].mapping.val = KbdDefs[0].upleft;
+	g_ingame_altcontrol_mapping_gameplay.touchMappings[7].mapping.val = KbdDefs[0].upright;
+	g_ingame_altcontrol_mapping_gameplay.touchMappings[8].mapping.val = KbdDefs[0].downleft;
+	g_ingame_altcontrol_mapping_gameplay.touchMappings[9].mapping.val = KbdDefs[0].downright;
 
 	BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_gameplay);
 }

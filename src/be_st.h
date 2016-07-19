@@ -1,4 +1,4 @@
-/* Copyright (C) 2014-2015 NY00123
+/* Copyright (C) 2014-2016 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -29,6 +29,10 @@
 #include "be_launcher.h"
 
 #define BE_ST_MAXJOYSTICKS 8
+
+// On-screen touch controls are scaled such that the largest square
+// fitting in the window has the dimensions of 140x140 (scaled) pixels
+#define BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM 130
 
 /*** General ***/
 void BE_ST_InitCommon(void); // Before game or launcher
@@ -108,14 +112,37 @@ typedef struct {
 	BE_ST_ControllerSingleMapClass mapClass;
 } BE_ST_ControllerSingleMap;
 
+typedef struct {
+	const char **xpmImage;
+	int xpmWidth, xpmHeight;
+	int xpmPosX, xpmPosY;
+} BE_ST_OnscreenTouchControl;
+
+// Same as above, but invisible (touch regions defined) and with some mapping...
+typedef struct {
+	BE_ST_ControllerSingleMap mapping;
+	const char **xpmImage;
+	int xpmWidth, xpmHeight;
+	int xpmPosX, xpmPosY;
+} BE_ST_TouchControlSingleMap;
+
 typedef struct BE_ST_ControllerMapping {
-	// Set to non-NULL if toggling non-mapped action
-	// (generally digital buttons only, but MAY include the analog triggers)
-	struct BE_ST_ControllerMapping *prevMapping;
+	// Fill this for some default action. Examples of ways to trigger it:
+	// - Pressing on a game controller button (or trigger)
+	// with no mapped action.
+	// - Pressing with mouse, or finger on a touchscreen,
+	// outside touch controls or on-screen keyboard.
+	// - Pressing on game controller's back button while
+	// an on-screen keyboard is shown.
+	BE_ST_ControllerSingleMap defaultMapping;
+
+	BE_ST_OnscreenTouchControl *onScreenTouchControls;
+	BE_ST_TouchControlSingleMap *touchMappings;
 
 	BE_ST_ControllerSingleMap buttons[BE_ST_CTRL_BUT_MAX];
 	BE_ST_ControllerSingleMap axes[BE_ST_CTRL_AXIS_MAX][2];
 	bool showUi;
+	bool absoluteFingerPositioning;
 } BE_ST_ControllerMapping;
 
 // Various controller schemes are saved in a stack, so it's straight-forward
@@ -127,6 +154,9 @@ void BE_ST_AltControlScheme_Push(void);
 void BE_ST_AltControlScheme_Pop(void);
 // Replace current controller scheme using any of these
 void BE_ST_AltControlScheme_PrepareControllerMapping(const BE_ST_ControllerMapping *mapping);
+// Use this for absolute mouse cursor position update (e.g., for touch input)
+// Assumes dimensions of 320x200 are used as a base
+void BE_ST_AltControlScheme_UpdateVirtualMouseCursor(int x, int y);
 
 // HACK - Pass corresponding pointer to PrepareControllerMapping for on-screen keyboard
 // (can also be used to go from one mapping to another, e.g., showing debug keys in-game)
@@ -159,9 +189,10 @@ enum {
 	BE_ST_CTRL_CFG_BUTMAP_AFTERLAST,
 };
 
+#ifdef REFKEEN_ENABLE_LAUNCHER
 // Used by launcher for controller button selection
 void BE_ST_Launcher_WaitForControllerButton(BEMenuItem *menuItem);
-
+#endif
 
 void BE_ST_PollEvents(void);
 
@@ -226,26 +257,21 @@ void BE_ST_EGASetPaletteAndBorder(const uint8_t *palette);
 void BE_ST_EGASetLineWidth(uint8_t widthInBytes);
 void BE_ST_EGASetSplitScreen(int16_t linenum);
 void BE_ST_EGASetPelPanning(uint8_t panning);
-void BE_ST_EGAUpdateGFXByte(uint16_t destOff, uint8_t srcVal, uint16_t planeMask);
-// Same as BE_ST_EGAUpdateGFXByte but picking specific bits out of each byte, and WITHOUT planes mask
-void BE_ST_EGAUpdateGFXBits(uint16_t destOff, uint8_t srcVal, uint8_t bitsMask);
-void BE_ST_EGAUpdateGFXBuffer(uint16_t destOff, const uint8_t *srcPtr, uint16_t num, uint16_t planeMask);
-void BE_ST_EGAUpdateGFXByteScrToScr(uint16_t destOff, uint16_t srcOff);
-// Same as BE_ST_EGAUpdateGFXByteScrToScr but with plane mask (added for Catacomb Abyss vanilla bug reproduction/workaround)
-void BE_ST_EGAUpdateGFXByteWithPlaneMaskScrToScr(uint16_t destOff, uint16_t srcOff, uint16_t planeMask);
-// Same as BE_ST_EGAUpdateGFXByteScrToScr but picking specific bits out of each byte
-void BE_ST_EGAUpdateGFXBitsScrToScr(uint16_t destOff, uint16_t srcOff, uint8_t bitsMask);
-void BE_ST_EGAUpdateGFXBufferScrToScr(uint16_t destOff, uint16_t srcOff, uint16_t num);
-uint8_t BE_ST_EGAFetchGFXByte(uint16_t destOff, uint16_t planenum);
-void BE_ST_EGAFetchGFXBuffer(uint8_t *destPtr, uint16_t srcOff, uint16_t num, uint16_t planenum);
-void BE_ST_EGAUpdateGFXPixel4bpp(uint16_t destOff, uint8_t color, uint8_t bitsMask);
-void BE_ST_EGAUpdateGFXPixel4bppRepeatedly(uint16_t destOff, uint8_t color, uint16_t count, uint8_t bitsMask);
-void BE_ST_EGAXorGFXByte(uint16_t destOff, uint8_t srcVal, uint16_t planeMask);
-// Like BE_ST_EGAXorGFXByte, but:
-// - OR instead of XOR.
-// - All planes are updated.
-// - Only specific bits are updated in each plane's byte.
-void BE_ST_EGAOrGFXBits(uint16_t destOff, uint8_t srcVal, uint8_t bitsMask);
+void BE_ST_EGAUpdateGFXByteInPlane(uint16_t destOff, uint8_t srcVal, uint16_t planeNum);
+// Same as BE_ST_EGAUpdateGFXByteInPlane but picking specific bits out of each byte, and covering ALL planes
+void BE_ST_EGAUpdateGFXBufferInPlane(uint16_t destOff, const uint8_t *srcPtr, uint16_t num, uint16_t planeNum);
+void BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(uint16_t destOff, uint16_t srcOff);
+// Same as BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr but with a specific plane (added for Catacomb Abyss vanilla bug reproduction/workaround)
+void BE_ST_EGAUpdateGFXByteInPlaneScrToScr(uint16_t destOff, uint16_t srcOff, uint16_t planeNum);
+// Same as BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr but picking specific bits out of each byte
+void BE_ST_EGAUpdateGFXBitsInAllPlanesScrToScr(uint16_t destOff, uint16_t srcOff, uint8_t bitsMask);
+void BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(uint16_t destOff, uint16_t srcOff, uint16_t num);
+uint8_t BE_ST_EGAFetchGFXByteFromPlane(uint16_t destOff, uint16_t planenum);
+void BE_ST_EGAFetchGFXBufferFromPlane(uint8_t *destPtr, uint16_t srcOff, uint16_t num, uint16_t planenum);
+void BE_ST_EGAUpdateGFXBitsFrom4bitsPixel(uint16_t destOff, uint8_t color, uint8_t bitsMask);
+void BE_ST_EGAUpdateGFXBufferFrom4bitsPixel(uint16_t destOff, uint8_t color, uint16_t count);
+void BE_ST_EGAXorGFXByteByPlaneMask(uint16_t destOff, uint8_t srcVal, uint16_t planeMask);
+
 // CGA graphics manipulations
 void BE_ST_CGAUpdateGFXBufferFromWrappedMem(const uint8_t *segPtr, const uint8_t *offInSegPtr, uint16_t byteLineWidth);
 

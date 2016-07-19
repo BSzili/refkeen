@@ -1,4 +1,4 @@
-/* Copyright (C) 2014-2015 NY00123
+/* Copyright (C) 2014-2016 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -24,6 +24,7 @@
 #include "be_gamever.h" // Enable VSync by default for EGA, not CGA
 #include "be_st.h"
 #include "be_st_sdl_private.h"
+#include "be_st_ega_lookup_tables.h"
 #include "be_title_and_version.h"
 
 // Some of these are also used in launcher
@@ -31,6 +32,8 @@ SDL_Window *g_sdlWindow;
 SDL_Renderer *g_sdlRenderer;
 SDL_Texture *g_sdlTexture, *g_sdlTargetTexture;
 SDL_Rect g_sdlAspectCorrectionRect, g_sdlAspectCorrectionBorderedRect;
+
+static int g_sdlLastReportedWindowWidth, g_sdlLastReportedWindowHeight;
 
 static bool g_sdlIsSoftwareRendered;
 static bool g_sdlDoRefreshGfxOutput;
@@ -71,12 +74,13 @@ void BE_ST_MarkGfxForUpdate(void)
 #define VGA_TXT_CURSOR_BLINK_VERT_FRAME_RATE 8
 #define VGA_TXT_BLINK_VERT_FRAME_RATE 16
 
+static int g_sdlDebugFingerRectSideLen;
 
 extern const uint8_t g_vga_8x16TextFont[256*8*16];
 // We can use a union because the memory contents are refreshed on screen mode change
 // (well, not on change between modes 0xD and 0xE, both sharing planar A000:0000)
 static union {
-	uint8_t egaGfx[4][0x10000]; // Contents of A000:0000 (4 planes)
+	uint64_t egaGfx[0x10000]; // Contents of A000:0000, de-planed (1 byte per pixel)
 	uint8_t text[TXT_COLS_NUM*TXT_ROWS_NUM*2]; // Textual contents of B800:0000
 } g_sdlVidMem;
 
@@ -91,11 +95,25 @@ static uint16_t g_sdlScreenStartAddress = 0;
 static int g_sdlScreenMode = 3;
 static int g_sdlTexWidth, g_sdlTexHeight;
 static uint8_t g_sdlPelPanning = 0;
-static uint8_t g_sdlLineWidth = 40;
+static int g_sdlPixLineWidth = 8*40; // Originally stored a byte, while measuring this in bytes instead of pixels
 static int16_t g_sdlSplitScreenLine = -1;
 static int g_sdlTxtCursorPosX, g_sdlTxtCursorPosY;
 static bool g_sdlTxtCursorEnabled = true;
 static int g_sdlTxtColor = 7, g_sdlTxtBackground = 0;
+
+/* Tracked fingers definitions (multi-touch input) */
+
+#define MAX_NUM_OF_TRACKED_FINGERS 10
+
+typedef struct {
+	SDL_TouchID touchId;
+	SDL_FingerID fingerId;
+	int touchMappingIndex;
+	int lastX, lastY;
+} BESDLTrackedFinger;
+
+static BESDLTrackedFinger g_sdlTrackedFingers[MAX_NUM_OF_TRACKED_FINGERS];
+static int nOfTrackedFingers = 0;
 
 /*** Game controller UI resource definitions ***/
 
@@ -106,34 +124,42 @@ static int g_sdlTxtColor = 7, g_sdlTxtBackground = 0;
 #define ALTCONTROLLER_FONT_XPM_ROW_OFFSET 3
 #define ALTCONTROLLER_PAD_XPM_ROW_OFFSET 8
 
-#define ALTCONTROLLER_PAD_PIX_WIDTH 48
-#define ALTCONTROLLER_PAD_PIX_HEIGHT 48
+#define ALTCONTROLLER_DPAD_PIX_DIM 48
+#define ALTCONTROLLER_FACEBUTTONS_PIX_DIM 56
+// The max. of the above
+#define ALTCONTROLLER_PAD_MAX_PIX_DIM ((ALTCONTROLLER_DPAD_PIX_DIM > ALTCONTROLLER_FACEBUTTONS_PIX_DIM) ? ALTCONTROLLER_DPAD_PIX_DIM : ALTCONTROLLER_FACEBUTTONS_PIX_DIM)
+
 #define ALTCONTROLLER_CHAR_PIX_WIDTH 6
 #define ALTCONTROLLER_CHAR_PIX_HEIGHT 8
 #define ALTCONTROLLER_CHAR_TOTAL_PIX_WIDTH 570
 
 #define ALTCONTROLLER_EDGE_PIX_DIST 2
-#define ALTCONTROLLER_FACEBUTTONS_SCREEN_DIM_RATIO 5
 
-// Measured in keys
 #define ALTCONTROLLER_KEYBOARD_KEY_PIXWIDTH 22
 #define ALTCONTROLLER_KEYBOARD_KEY_PIXHEIGHT 12
 
-#define ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH 18
-#define ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT 3
+
+// Measured in keys
+#define ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH 14
+#define ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT 4
 
 #define ALTCONTROLLER_TEXTINPUT_PIX_WIDTH (ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH*ALTCONTROLLER_KEYBOARD_KEY_PIXWIDTH)
 #define ALTCONTROLLER_TEXTINPUT_PIX_HEIGHT (ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT*ALTCONTROLLER_KEYBOARD_KEY_PIXHEIGHT)
 
+// Again measured in keys
 #define ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH 17
 #define ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT 5
 
 #define ALTCONTROLLER_DEBUGKEYS_PIX_WIDTH (ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH*ALTCONTROLLER_KEYBOARD_KEY_PIXWIDTH)
 #define ALTCONTROLLER_DEBUGKEYS_PIX_HEIGHT (ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT*ALTCONTROLLER_KEYBOARD_KEY_PIXHEIGHT)
 
+
+#define ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS 20
+
 // These are given as (x, y) offset pairs within the non-scaled,
 // face buttons image, assuming longest texts possible (3 chars long)
-static const int g_sdlControllerFaceButtonsTextLocs[] = {15, 34, 28, 21, 2, 21, 15, 8};
+static const int g_sdlControllerFaceButtonsTextLocs[] = {19, 42, 36, 25, 2, 25, 19, 8};
+static const int g_sdlControllerDpadTextLocs[] = {15, 34, 28, 21, 2, 21, 15, 8};
 
 static SDL_Rect g_sdlControllerFaceButtonsRect, g_sdlControllerDpadRect, g_sdlControllerTextInputRect, g_sdlControllerDebugKeysRect;
 static SDL_Texture *g_sdlFaceButtonsTexture, *g_sdlDpadTexture, *g_sdlTextInputTexture, *g_sdlDebugKeysTexture;
@@ -142,6 +168,11 @@ static bool g_sdlFaceButtonsAreShown, g_sdlDpadIsShown, g_sdlTextInputUIIsShown,
 static int g_sdlFaceButtonsScanCodes[4], g_sdlDpadScanCodes[4];
 static int g_sdlPointerSelectedPadButtonScanCode;
 static bool g_sdlControllerUIPointerPressed;
+
+static SDL_Rect g_sdlOnScreenTouchControlsRects[ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS];
+static SDL_Texture *g_sdlOnScreenTouchControlsTextures[ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS];
+static int g_sdlNumOfOnScreenTouchControls = 0;
+static SDL_Rect g_sdlInputTouchControlsRects[ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS];
 
 // With alternative game controllers scheme, all UI is hidden if no controller is connected
 bool g_sdlShowControllerUI;
@@ -154,6 +185,7 @@ static bool g_sdlTextInputIsKeyPressed, g_sdlTextInputIsShifted;
 // Debug keys specific
 static bool g_sdlDebugKeysPressed[ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT][ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH];
 
+void BEL_ST_RecreateSDLWindowAndRenderer(int x, int y, int w, int h, uint32_t windowFlags, int driverIndex, Uint32 rendererFlags);
 
 void BE_ST_InitGfx(void)
 {
@@ -168,26 +200,33 @@ void BE_ST_InitGfx(void)
 		g_sdlIsSoftwareRendered = false;
 	}
 
+	uint32_t windowFlagsToSet;
+	int windowWidthToSet, windowHeightToSet;
 	if (g_refKeenCfg.isFullscreen)
 	{
 		if (g_refKeenCfg.fullWidth && g_refKeenCfg.fullHeight)
 		{
-			g_sdlWindow = SDL_CreateWindow(REFKEEN_TITLE_AND_VER_STRING, SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), g_refKeenCfg.fullWidth, g_refKeenCfg.fullHeight, SDL_WINDOW_FULLSCREEN);
+			windowWidthToSet = g_refKeenCfg.fullWidth;
+			windowHeightToSet = g_refKeenCfg.fullHeight;
+			windowFlagsToSet = SDL_WINDOW_FULLSCREEN;
 		}
 		else
 		{
-			g_sdlWindow = SDL_CreateWindow(REFKEEN_TITLE_AND_VER_STRING, SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), 0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP);
+			windowWidthToSet = 0;
+			windowHeightToSet = 0;
+			windowFlagsToSet = SDL_WINDOW_FULLSCREEN_DESKTOP;
 		}
 	}
 	else
 	{
-		int actualWinWidth = g_refKeenCfg.winWidth, actualWinHeight = g_refKeenCfg.winHeight;
-		if (!actualWinWidth || !actualWinHeight)
+		windowWidthToSet = g_refKeenCfg.winWidth;
+		windowHeightToSet = g_refKeenCfg.winHeight;
+		if (!windowWidthToSet || !windowHeightToSet)
 		{
 			if (g_sdlIsSoftwareRendered)
 			{
-				actualWinWidth = 640;
-				actualWinHeight = 480;
+				windowWidthToSet = 640;
+				windowHeightToSet = 480;
 			}
 			else
 			{
@@ -205,30 +244,23 @@ void BE_ST_InitGfx(void)
 					mode.w = mode.h*280/207;
 				}
 				// Just for the sake of it, using the golden ratio...
-				actualWinWidth = mode.w*500/809;
-				actualWinHeight = mode.h*500/809;
+				windowWidthToSet = mode.w*500/809;
+				windowHeightToSet = mode.h*500/809;
 			}
 		}
-		g_sdlWindow = SDL_CreateWindow(REFKEEN_TITLE_AND_VER_STRING, SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), actualWinWidth, actualWinHeight, (!g_sdlIsSoftwareRendered || g_refKeenCfg.forceFullSoftScaling) ? SDL_WINDOW_RESIZABLE : 0);
+		windowFlagsToSet = (!g_sdlIsSoftwareRendered || g_refKeenCfg.forceFullSoftScaling) ? SDL_WINDOW_RESIZABLE : 0;
 	}
-	if (!g_sdlWindow)
-	{
-		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to create SDL2 window,\n%s\n", SDL_GetError());
-		exit(0);
-	}
-	SDL_SetWindowIcon(g_sdlWindow, g_be_sdl_windowIconSurface);
 	// Vanilla Keen Dreams and Keen 4-6 have no VSync in the CGA builds
 #ifdef REFKEEN_VER_KDREAMS
-	g_sdlRenderer = SDL_CreateRenderer(g_sdlWindow, g_refKeenCfg.sdlRendererDriver, SDL_RENDERER_ACCELERATED | (((g_refKeenCfg.vSync == VSYNC_ON) || ((g_refKeenCfg.vSync == VSYNC_AUTO) && (refkeen_current_gamever != BE_GAMEVER_KDREAMSC105))) ? SDL_RENDERER_PRESENTVSYNC : 0));
+	uint32_t rendererFlagsToSet = SDL_RENDERER_ACCELERATED | (((g_refKeenCfg.vSync == VSYNC_ON) || ((g_refKeenCfg.vSync == VSYNC_AUTO) && (refkeen_current_gamever != BE_GAMEVER_KDREAMSC105))) ? SDL_RENDERER_PRESENTVSYNC : 0);
 #else
-	g_sdlRenderer = SDL_CreateRenderer(g_sdlWindow, g_refKeenCfg.sdlRendererDriver, SDL_RENDERER_ACCELERATED | ((g_refKeenCfg.vSync != VSYNC_OFF) ? SDL_RENDERER_PRESENTVSYNC : 0));
+	uint32_t rendererFlagsToSet = SDL_RENDERER_ACCELERATED | ((g_refKeenCfg.vSync != VSYNC_OFF) ? SDL_RENDERER_PRESENTVSYNC : 0);
 #endif
-	if (!g_sdlRenderer)
-	{
-		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to create SDL2 renderer,\n%s\n", SDL_GetError());
-		//Destroy window?
-		exit(0);
-	}
+	BEL_ST_RecreateSDLWindowAndRenderer(
+		SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum),
+		windowWidthToSet, windowHeightToSet, windowFlagsToSet, g_refKeenCfg.sdlRendererDriver, rendererFlagsToSet
+	);
+
 	BE_ST_SetScreenMode(3); // Includes SDL_Texture handling and output rects preparation
 }
 
@@ -250,6 +282,52 @@ void BE_ST_ShutdownGfx(void)
 	g_sdlRenderer = NULL;
 	SDL_DestroyWindow(g_sdlWindow);
 	g_sdlWindow = NULL;
+}
+
+void BEL_ST_RecreateSDLWindowAndRenderer(int x, int y, int w, int h, uint32_t windowFlags, int driverIndex, uint32_t rendererFlags)
+{
+	static int prev_x, prev_y, prev_driverIndex;
+	static uint32_t prev_rendererFlags;
+
+	if (g_sdlWindow)
+	{
+		// This is a little bit of a hack:
+		// - x and y are compared to previous values, currently used to pick a display to use (in a multi-display setup).
+		// - Since the actual flags of a window may differ from what we requested (due to toggling fullscreen or any other reason),
+		// we support skipping window recreation only for SDL_WINDOW_FULLSCREEN_DESKTOP windows.
+		// - Renderer flags are compared to the previously requested flags.
+		// - Same is done with with renderer driver index. If -1 is used anywhere, this makes reuse of the same window more probable.
+		if ((x == prev_x) && (y == prev_y) &&
+		    ((windowFlags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP) &&
+		    ((SDL_GetWindowFlags(g_sdlWindow) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP) &&
+		    (driverIndex == prev_driverIndex) && (rendererFlags == prev_rendererFlags)
+		)
+			return;
+
+		SDL_DestroyRenderer(g_sdlRenderer);
+		g_sdlRenderer = NULL;
+		SDL_DestroyWindow(g_sdlWindow);
+		g_sdlWindow = NULL;
+	}
+
+	g_sdlWindow = SDL_CreateWindow(REFKEEN_TITLE_AND_VER_STRING, x, y, w, h, windowFlags);
+	if (!g_sdlWindow)
+	{
+		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to create SDL2 window,\n%s\n", SDL_GetError());
+		exit(0);
+	}
+	SDL_SetWindowIcon(g_sdlWindow, g_be_sdl_windowIconSurface);
+	g_sdlRenderer = SDL_CreateRenderer(g_sdlWindow, driverIndex, rendererFlags);
+	if (!g_sdlRenderer)
+	{
+		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to create SDL2 renderer,\n%s\n", SDL_GetError());
+		exit(0);
+	}
+
+	prev_x = x;
+	prev_y = y;
+	prev_driverIndex = driverIndex;
+	prev_rendererFlags = rendererFlags;
 }
 
 static void BEL_ST_RecreateTexture(void)
@@ -314,7 +392,7 @@ static const char *g_sdlDOSScanCodeTextInputNonShiftedStrs[] = {
 	"\x1E", "\\", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", NULL,
 	NULL, NULL, "[_]", NULL,
 	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-	NULL, "\x18", NULL, NULL, "\x1B", NULL, "\x1A", "+", NULL, "\x19", NULL,
+	"\x1B\x1B", "\x18", NULL, NULL, "\x1B", NULL, "\x1A", "+", "\x1A\x1A", "\x19", NULL,
 	NULL, "Del",
 };
 
@@ -327,7 +405,7 @@ static const char *g_sdlDOSScanCodeTextInputShiftedStrs[] = {
 	"\x1E", "|", "Z", "X", "C", "V", "B", "N", "M", "<", ">", "?", NULL,
 	NULL, NULL, "[_]", NULL,
 	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-	NULL, "\x18", NULL, NULL, "\x1B", NULL, "\x1A", "+", NULL, "\x19", NULL,
+	"\x1B\x1B", "\x18", NULL, NULL, "\x1B", NULL, "\x1A", "+", "\x1A\x1A", "\x19", NULL,
 	NULL, "Del",
 };
 
@@ -364,11 +442,13 @@ static const char **g_sdlDOSScanCodeTextInputStrs_Ptr;
 // Text input keyboard layout definition (probably better we don't use "special" keys e.g., with scancode 0xE0 sent, even though there shouldn't be a difference)
 
 static const BE_ST_ScanCode_T g_sdlDOSScanCodeTextInputLayout[ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT][ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH] = {
-	{BE_ST_SC_KP_4/*LEFT*/, BE_ST_SC_Q, BE_ST_SC_W, BE_ST_SC_E, BE_ST_SC_R, BE_ST_SC_T, BE_ST_SC_Y, BE_ST_SC_U, BE_ST_SC_I, BE_ST_SC_O, BE_ST_SC_P, BE_ST_SC_LBRACKET, BE_ST_SC_RBRACKET, BE_ST_SC_7, BE_ST_SC_8, BE_ST_SC_9, BE_ST_SC_0, BE_ST_SC_MINUS},
+	{BE_ST_SC_GRAVE, BE_ST_SC_1, BE_ST_SC_2, BE_ST_SC_3, BE_ST_SC_4, BE_ST_SC_5, BE_ST_SC_6, BE_ST_SC_7, BE_ST_SC_8, BE_ST_SC_9, BE_ST_SC_0, BE_ST_SC_MINUS, BE_ST_SC_EQUALS, BE_ST_SC_BSPACE},
 
-	{BE_ST_SC_KP_6/*RIGHT*/, BE_ST_SC_A, BE_ST_SC_S, BE_ST_SC_D, BE_ST_SC_F, BE_ST_SC_G, BE_ST_SC_H, BE_ST_SC_J, BE_ST_SC_K, BE_ST_SC_L, BE_ST_SC_SEMICOLON, BE_ST_SC_QUOTE, BE_ST_SC_BACKSLASH, BE_ST_SC_4, BE_ST_SC_5, BE_ST_SC_6, BE_ST_SC_SPACE, BE_ST_SC_EQUALS},
+	{BE_ST_SC_KP_4/*LEFT*/, BE_ST_SC_Q, BE_ST_SC_W, BE_ST_SC_E, BE_ST_SC_R, BE_ST_SC_T, BE_ST_SC_Y, BE_ST_SC_U, BE_ST_SC_I, BE_ST_SC_O, BE_ST_SC_P, BE_ST_SC_LBRACKET, BE_ST_SC_RBRACKET, BE_ST_SC_HOME},
 
-	{BE_ST_SC_LSHIFT, BE_ST_SC_Z, BE_ST_SC_X, BE_ST_SC_C, BE_ST_SC_V, BE_ST_SC_B, BE_ST_SC_N, BE_ST_SC_M, BE_ST_SC_COMMA, BE_ST_SC_PERIOD, BE_ST_SC_SLASH, BE_ST_SC_GRAVE, BE_ST_SC_ENTER, BE_ST_SC_1, BE_ST_SC_2, BE_ST_SC_3, BE_ST_SC_KP_PERIOD/*DEL*/, BE_ST_SC_BSPACE},
+	{BE_ST_SC_KP_6/*RIGHT*/, BE_ST_SC_A, BE_ST_SC_S, BE_ST_SC_D, BE_ST_SC_F, BE_ST_SC_G, BE_ST_SC_H, BE_ST_SC_J, BE_ST_SC_K, BE_ST_SC_L, BE_ST_SC_SEMICOLON, BE_ST_SC_QUOTE, BE_ST_SC_BACKSLASH, BE_ST_SC_END},
+
+	{BE_ST_SC_LSHIFT, BE_ST_SC_Z, BE_ST_SC_X, BE_ST_SC_C, BE_ST_SC_V, BE_ST_SC_B, BE_ST_SC_N, BE_ST_SC_M, BE_ST_SC_COMMA, BE_ST_SC_PERIOD, BE_ST_SC_SLASH, BE_ST_SC_SPACE, BE_ST_SC_KP_PERIOD/*DEL*/, BE_ST_SC_ENTER},
 };
 
 // Debug keys keyboard layout definition (again not using "special" keys, but the Pause key, for which 6 scancodes are sent on press only, is here)
@@ -412,18 +492,21 @@ void BEL_ST_SetRelativeMouseMotion(bool enable);
 
 /*static*/ void BEL_ST_ConditionallyShowAltInputPointer(void)
 {
+	// FIXME
+	if (g_refKeenCfg.enableTouchInput)
+		return;
 	BEL_ST_SetRelativeMouseMotion(!g_sdlShowControllerUI || !(g_sdlFaceButtonsAreShown || g_sdlDpadIsShown || g_sdlTextInputUIIsShown || g_sdlDebugKeysUIIsShown));
 }
 
 
-static void BEL_ST_CreatePadTextureIfNeeded(SDL_Texture **padTexturePtrPtr)
+static void BEL_ST_CreatePadTextureIfNeeded(SDL_Texture **padTexturePtrPtr, int len)
 {
 	if (*padTexturePtrPtr)
 	{
 		return;
 	}
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-	*padTexturePtrPtr = SDL_CreateTexture(g_sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, ALTCONTROLLER_PAD_PIX_WIDTH, ALTCONTROLLER_PAD_PIX_HEIGHT);
+	*padTexturePtrPtr = SDL_CreateTexture(g_sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, len, len);
 	if (!(*padTexturePtrPtr))
 	{
 		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to (re)create SDL2 pad texture,\n%s\n", SDL_GetError());
@@ -453,30 +536,30 @@ static void BEL_ST_RedrawTextToBuffer(uint32_t *picPtr, int picWidth, const char
 	}
 }
 
-static void BEL_ST_PrepareToShowOnePad(const int *scanCodes, const char **padXpm, SDL_Texture **padTexturePtrPtr, bool *areButtonsShownPtr)
+static void BEL_ST_PrepareToShowOnePad(const int *scanCodes, const char **padXpm, SDL_Texture **padTexturePtrPtr, bool *areButtonsShownPtr, const int *textLocs, int len)
 {
-	BEL_ST_CreatePadTextureIfNeeded(padTexturePtrPtr);
+	BEL_ST_CreatePadTextureIfNeeded(padTexturePtrPtr, len);
 
-	uint32_t pixels[ALTCONTROLLER_PAD_PIX_WIDTH*ALTCONTROLLER_PAD_PIX_HEIGHT];
+	uint32_t pixels[ALTCONTROLLER_PAD_MAX_PIX_DIM*ALTCONTROLLER_PAD_MAX_PIX_DIM];
 	uint32_t *currPtr = pixels;
-	for (int currRow = 0, xpmIndex = ALTCONTROLLER_PAD_XPM_ROW_OFFSET; currRow < ALTCONTROLLER_PAD_PIX_HEIGHT; ++currRow, ++xpmIndex)
+	for (int currRow = 0, xpmIndex = ALTCONTROLLER_PAD_XPM_ROW_OFFSET; currRow < len; ++currRow, ++xpmIndex)
 	{
 		const char *xpmRowPtr = padXpm[xpmIndex];
-		for (int currCol = 0; currCol < ALTCONTROLLER_PAD_PIX_WIDTH; ++currCol, ++currPtr, ++xpmRowPtr)
+		for (int currCol = 0; currCol < len; ++currCol, ++currPtr, ++xpmRowPtr)
 		{
 			switch (*xpmRowPtr)
 			{
 			case ' ':
 				*currPtr = 0x00000000; // HACK (BGRA, working with any order) because we don't have it defined elsewhere
 				break;
-			case '.':
+			case '@':
 				*currPtr = g_sdlEGABGRAScreenColors[8]; // Gray
 				break;
-			case '+':
+			case '.':
 				*currPtr = g_sdlEGABGRAScreenColors[7]; // Light gray
 				break;
 			// HACK - Compress 4 XPM colors into one
-			case '@':
+			case '+':
 			case '#':
 			case '$':
 			case '%':
@@ -485,21 +568,24 @@ static void BEL_ST_PrepareToShowOnePad(const int *scanCodes, const char **padXpm
 			}
 		}
 	}
-	for (int counter = 0; counter < 4; ++scanCodes, ++counter)
-	{
-		if (!(*scanCodes))
-			continue;
+	// Special case
+	static const int arrowsScanCodes[] = {BE_ST_SC_DOWN, BE_ST_SC_RIGHT, BE_ST_SC_LEFT, BE_ST_SC_UP};
+	if ((padXpm != pad_dpad_xpm) || memcmp(scanCodes, arrowsScanCodes, sizeof(arrowsScanCodes)))
+		for (int counter = 0; counter < 4; ++scanCodes, ++counter)
+		{
+			if (!(*scanCodes))
+				continue;
 
-		const char *str = g_sdlDOSScanCodePadStrs[*scanCodes];
-		BEL_ST_RedrawTextToBuffer(pixels + g_sdlControllerFaceButtonsTextLocs[2*counter] + g_sdlControllerFaceButtonsTextLocs[2*counter+1]*ALTCONTROLLER_PAD_PIX_WIDTH + (3-strlen(str))*(ALTCONTROLLER_CHAR_PIX_WIDTH/2), ALTCONTROLLER_PAD_PIX_WIDTH, str);
-	}
+			const char *str = g_sdlDOSScanCodePadStrs[*scanCodes];
+			BEL_ST_RedrawTextToBuffer(pixels + textLocs[2*counter] + textLocs[2*counter+1]*len + (3-strlen(str))*(ALTCONTROLLER_CHAR_PIX_WIDTH/2), len, str);
+		}
 	// Add some alpha channel
 	currPtr = pixels;
-	for (int pixCounter = 0; pixCounter < ALTCONTROLLER_PAD_PIX_WIDTH*ALTCONTROLLER_PAD_PIX_HEIGHT; ++pixCounter, ++currPtr)
+	for (int pixCounter = 0; pixCounter < len*len; ++pixCounter, ++currPtr)
 	{
 		*currPtr &= 0xBFFFFFFF; // BGRA
 	}
-	SDL_UpdateTexture(*padTexturePtrPtr, NULL, pixels, 4*ALTCONTROLLER_PAD_PIX_WIDTH);
+	SDL_UpdateTexture(*padTexturePtrPtr, NULL, pixels, 4*len);
 	*areButtonsShownPtr = true;
 
 	g_sdlForceGfxControlUiRefresh = true;
@@ -523,11 +609,11 @@ static void BEL_ST_PrepareToShowOnePad(const int *scanCodes, const char **padXpm
 
 	memcpy(g_sdlFaceButtonsScanCodes, faceButtonsScancodes, sizeof(faceButtonsScancodes));
 	if (memcmp(&faceButtonsScancodes, &emptyScancodesArray, sizeof(emptyScancodesArray)))
-		BEL_ST_PrepareToShowOnePad(faceButtonsScancodes, pad_thumb_buttons_xpm, &g_sdlFaceButtonsTexture, &g_sdlFaceButtonsAreShown);
+		BEL_ST_PrepareToShowOnePad(faceButtonsScancodes, pad_thumb_buttons_xpm, &g_sdlFaceButtonsTexture, &g_sdlFaceButtonsAreShown, g_sdlControllerFaceButtonsTextLocs, ALTCONTROLLER_FACEBUTTONS_PIX_DIM);
 
 	memcpy(g_sdlDpadScanCodes, dpadScancodes, sizeof(dpadScancodes));
 	if (memcmp(&dpadScancodes, &emptyScancodesArray, sizeof(emptyScancodesArray)))
-		BEL_ST_PrepareToShowOnePad(dpadScancodes, pad_dpad_xpm, &g_sdlDpadTexture, &g_sdlDpadIsShown);
+		BEL_ST_PrepareToShowOnePad(dpadScancodes, pad_dpad_xpm, &g_sdlDpadTexture, &g_sdlDpadIsShown, g_sdlControllerDpadTextLocs, ALTCONTROLLER_DPAD_PIX_DIM);
 
 	g_sdlPointerSelectedPadButtonScanCode = 0;
 	g_sdlControllerUIPointerPressed = false;
@@ -535,7 +621,83 @@ static void BEL_ST_PrepareToShowOnePad(const int *scanCodes, const char **padXpm
 	BEL_ST_ConditionallyShowAltInputPointer();
 }
 
-static void BEL_ST_RedrawKeyToBuffer(uint32_t *picPtr, int picWidth, const char *text, bool isMarked, bool isPressed)
+static void BEL_ST_SetTouchControlsRects(void);
+
+void BEL_ST_PrepareToShowTouchControls(const BE_ST_ControllerMapping *mapping)
+{
+	// FIXME this is bad in terms of performance (texture creation, malloc, etc.)
+	int i;
+	for (int i = 0; i < g_sdlNumOfOnScreenTouchControls; ++i)
+	{
+		SDL_DestroyTexture(g_sdlOnScreenTouchControlsTextures[i]);
+		g_sdlOnScreenTouchControlsTextures[i] = NULL;
+	}
+	BE_ST_OnscreenTouchControl *touchControl;
+	for (i = 0, touchControl = mapping->onScreenTouchControls; touchControl->xpmImage; ++i, ++touchControl)
+	{
+		if (i == ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS)
+			BE_ST_ExitWithErrorMsg("BEL_ST_PrepareToShowTouchControls: On-screen touch controls overflow!");
+
+		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+		int texWidth = touchControl->xpmWidth, texHeight = touchControl->xpmHeight;
+		g_sdlOnScreenTouchControlsTextures[i] = SDL_CreateTexture(g_sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, texWidth, texHeight);
+		if (!(g_sdlOnScreenTouchControlsTextures[i]))
+		{
+			BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to (re)create SDL2 touch control texture,\n%s\n", SDL_GetError());
+			//Destroy window and renderer?
+			exit(0);
+		}
+		SDL_SetTextureBlendMode(g_sdlOnScreenTouchControlsTextures[i], SDL_BLENDMODE_BLEND); // Yes there's some Alpha
+		// Update texture
+		uint32_t *pixels = (uint32_t *)malloc(4*texWidth*texHeight); // FIXME!!!!
+		if (pixels == NULL)
+		{
+			BE_ST_ExitWithErrorMsg("BEL_ST_PrepareToShowTouchControls: Out of memory for drawing to textures!");
+		}
+		uint32_t *currPtr = pixels;
+		for (int currRow = 0; currRow < texHeight; ++currRow)
+		{
+			const char *xpmRowPtr = touchControl->xpmImage[currRow];
+			for (int currCol = 0; currCol < texWidth; ++currCol, ++currPtr, ++xpmRowPtr)
+			{
+				switch (*xpmRowPtr)
+				{
+				case ' ':
+					*currPtr = 0x00000000; // HACK (BGRA, working with any order) because we don't have it defined elsewhere
+					break;
+				case '@':
+					*currPtr = g_sdlEGABGRAScreenColors[8]; // Gray
+					break;
+				case '.':
+					*currPtr = g_sdlEGABGRAScreenColors[7]; // Light gray
+					break;
+				// HACK - Compress 4 XPM colors into one
+				case '+':
+				case '#':
+				case '$':
+				case '%':
+					*currPtr = g_sdlEGABGRAScreenColors[15]; // White
+					break;
+				}
+				*currPtr &= 0xBFFFFFFF; // Add some alpha channel
+			}
+		}
+		SDL_UpdateTexture(g_sdlOnScreenTouchControlsTextures[i], NULL, pixels, 4*texWidth);
+		free(pixels);
+	}
+	g_sdlNumOfOnScreenTouchControls = i;
+
+	// Also verify this
+	BE_ST_TouchControlSingleMap *singleMap;
+	for (i = 0, singleMap = mapping->touchMappings; singleMap->xpmImage; ++i, ++singleMap)
+		;
+	if (i > ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS)
+		BE_ST_ExitWithErrorMsg("BEL_ST_PrepareToShowTouchControls: Touch controls overflow!");
+
+	BEL_ST_SetTouchControlsRects();
+}
+
+/*static*/ void BEL_ST_RedrawKeyToBuffer(uint32_t *picPtr, int picWidth, const char *text, bool isMarked, bool isPressed)
 {
 #if 0
 	// This can happen for space that should be skipped
@@ -580,7 +742,7 @@ static void BEL_ST_RedrawKeyToBuffer(uint32_t *picPtr, int picWidth, const char 
 	{
 		for (int currCol = 0; currCol < ALTCONTROLLER_KEYBOARD_KEY_PIXWIDTH; ++currCol, ++currPtr)
 		{
-		*currPtr &= 0xDFFFFFFF; // BGRA
+			*currPtr &= 0xDFFFFFFF; // BGRA
 		}
 	}
 }
@@ -720,6 +882,9 @@ static void BEL_ST_ToggleDebugKeysKey(int x, int y, bool isMarked, bool isPresse
 int BEL_ST_MoveUpInTextInputUI(void)
 {
 	int origScanCode = g_sdlTextInputIsKeyPressed ? (int)g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX] : 0;
+	if (origScanCode == BE_ST_SC_LSHIFT)
+		origScanCode = 0;
+
 	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
 	g_sdlTextInputIsKeyPressed = false;
 
@@ -737,6 +902,9 @@ int BEL_ST_MoveUpInTextInputUI(void)
 int BEL_ST_MoveDownInTextInputUI(void)
 {
 	int origScanCode = g_sdlTextInputIsKeyPressed ? (int)g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX] : 0;
+	if (origScanCode == BE_ST_SC_LSHIFT)
+		origScanCode = 0;
+
 	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
 	g_sdlTextInputIsKeyPressed = false;
 
@@ -754,6 +922,9 @@ int BEL_ST_MoveDownInTextInputUI(void)
 int BEL_ST_MoveLeftInTextInputUI(void)
 {
 	int origScanCode = g_sdlTextInputIsKeyPressed ? (int)g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX] : 0;
+	if (origScanCode == BE_ST_SC_LSHIFT)
+		origScanCode = 0;
+
 	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
 	g_sdlTextInputIsKeyPressed = false;
 
@@ -771,6 +942,9 @@ int BEL_ST_MoveLeftInTextInputUI(void)
 int BEL_ST_MoveRightInTextInputUI(void)
 {
 	int origScanCode = g_sdlTextInputIsKeyPressed ? (int)g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX] : 0;
+	if (origScanCode == BE_ST_SC_LSHIFT)
+		origScanCode = 0;
+
 	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
 	g_sdlTextInputIsKeyPressed = false;
 
@@ -908,23 +1082,37 @@ void BEL_ST_CheckMovedPointerInTextInputUI(int x, int y)
 	g_sdlForceGfxControlUiRefresh = true;
 }
 
+extern const BE_ST_ControllerMapping *g_sdlControllerMappingActualCurr;
+extern const int g_sdlJoystickAxisMax;
+extern bool g_sdlDefaultMappingBinaryState;
+
+bool BEL_ST_AltControlScheme_HandleEntry(const BE_ST_ControllerSingleMap *map, int value, bool *lastBinaryStatusPtr);
+
 void BEL_ST_CheckPressedPointerInTextInputUI(int x, int y)
 {
+	if ((x < g_sdlControllerTextInputRect.x) || (x >= g_sdlControllerTextInputRect.x+g_sdlControllerTextInputRect.w)
+	    || (y < g_sdlControllerTextInputRect.y) || (y >= g_sdlControllerTextInputRect.y+g_sdlControllerTextInputRect.h)
+	)
+		BEL_ST_AltControlScheme_HandleEntry(&g_sdlControllerMappingActualCurr->defaultMapping, g_sdlJoystickAxisMax, &g_sdlDefaultMappingBinaryState);
+
 	g_sdlKeyboardUIPointerUsed = true;
 	BEL_ST_CheckMovedPointerInTextInputUI(x, y);
 }
 
-int BEL_ST_CheckReleasedPointerInTextInputUI(int x, int y)
+void BEL_ST_CheckReleasedPointerInTextInputUI(int x, int y)
 {
 	if (!g_sdlKeyboardUIPointerUsed)
-		return 0;
+		return;
 
 	g_sdlKeyboardUIPointerUsed = false;
 	if ((x < g_sdlControllerTextInputRect.x) || (x >= g_sdlControllerTextInputRect.x+g_sdlControllerTextInputRect.w)
 	    || (y < g_sdlControllerTextInputRect.y) || (y >= g_sdlControllerTextInputRect.y+g_sdlControllerTextInputRect.h))
-		return 0;
+		return;
 
 	//BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
+
+	emulatedDOSKeyEvent dosKeyEvent;
+	dosKeyEvent.isSpecial = false;
 
 	// Normalize coordinates to keys
 	g_sdlKeyboardUISelectedKeyX = (x-g_sdlControllerTextInputRect.x)*ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH/g_sdlControllerTextInputRect.w;
@@ -932,11 +1120,14 @@ int BEL_ST_CheckReleasedPointerInTextInputUI(int x, int y)
 	// Hack for covering the special case of the shift key
 	g_sdlTextInputIsKeyPressed = false;
 	bool toggle = true;
-	int result = BEL_ST_ToggleKeyPressInTextInputUI(&toggle);
+	dosKeyEvent.dosScanCode = BEL_ST_ToggleKeyPressInTextInputUI(&toggle);
+	if (dosKeyEvent.dosScanCode)
+		BEL_ST_HandleEmuKeyboardEvent(toggle, false, dosKeyEvent);
+	// FIXME: A delay may be required here in certain cases, but this works for now...
 	toggle = false;
-	BEL_ST_ToggleKeyPressInTextInputUI(&toggle);
-
-	return result;
+	dosKeyEvent.dosScanCode = BEL_ST_ToggleKeyPressInTextInputUI(&toggle);
+	if (dosKeyEvent.dosScanCode)
+		BEL_ST_HandleEmuKeyboardEvent(toggle, false, dosKeyEvent);
 }
 
 
@@ -962,27 +1153,38 @@ void BEL_ST_CheckMovedPointerInDebugKeysUI(int x, int y)
 
 void BEL_ST_CheckPressedPointerInDebugKeysUI(int x, int y)
 {
+	if ((x < g_sdlControllerDebugKeysRect.x) || (x >= g_sdlControllerDebugKeysRect.x+g_sdlControllerDebugKeysRect.w)
+	    || (y < g_sdlControllerDebugKeysRect.y) || (y >= g_sdlControllerDebugKeysRect.y+g_sdlControllerDebugKeysRect.h)
+	)
+		BEL_ST_AltControlScheme_HandleEntry(&g_sdlControllerMappingActualCurr->defaultMapping, g_sdlJoystickAxisMax, &g_sdlDefaultMappingBinaryState);
+
 	g_sdlKeyboardUIPointerUsed = true;
 	BEL_ST_CheckMovedPointerInDebugKeysUI(x, y);
 }
 
-int BEL_ST_CheckReleasedPointerInDebugKeysUI(int x, int y, bool *pToggle)
+void BEL_ST_CheckReleasedPointerInDebugKeysUI(int x, int y)
 {
 	if (!g_sdlKeyboardUIPointerUsed)
-		return 0;
+		return;
 
 	g_sdlKeyboardUIPointerUsed = false;
 	if ((x < g_sdlControllerDebugKeysRect.x) || (x >= g_sdlControllerDebugKeysRect.x+g_sdlControllerDebugKeysRect.w)
 	    || (y < g_sdlControllerDebugKeysRect.y) || (y >= g_sdlControllerDebugKeysRect.y+g_sdlControllerDebugKeysRect.h))
-		return 0;
+		return;
 
 	//BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+
+	emulatedDOSKeyEvent dosKeyEvent;
+	dosKeyEvent.isSpecial = false;
 
 	// Normalize coordinates to keys
 	g_sdlKeyboardUISelectedKeyX = (x-g_sdlControllerDebugKeysRect.x)*ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH/g_sdlControllerDebugKeysRect.w;
 	g_sdlKeyboardUISelectedKeyY = (y-g_sdlControllerDebugKeysRect.y)*ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT/g_sdlControllerDebugKeysRect.h;
 
-	return BEL_ST_ToggleKeyPressInDebugKeysUI(pToggle);
+	bool toggle;
+	dosKeyEvent.dosScanCode = BEL_ST_ToggleKeyPressInDebugKeysUI(&toggle);
+	if (dosKeyEvent.dosScanCode)
+		BEL_ST_HandleEmuKeyboardEvent(toggle, false, dosKeyEvent);
 }
 
 // Returns matching scanCode if found (possibly 0 if not set), -1 if not
@@ -993,8 +1195,8 @@ static int BEL_ST_GetControllerUIScanCodeFromPointer(int x, int y)
 	    && (y >= g_sdlControllerFaceButtonsRect.y) && (y < g_sdlControllerFaceButtonsRect.y+g_sdlControllerFaceButtonsRect.h))
 	{
 		// Normalize coordinates to pad
-		x = (x-g_sdlControllerFaceButtonsRect.x)*ALTCONTROLLER_PAD_PIX_WIDTH/g_sdlControllerFaceButtonsRect.w;
-		y = (y-g_sdlControllerFaceButtonsRect.y)*ALTCONTROLLER_PAD_PIX_HEIGHT/g_sdlControllerFaceButtonsRect.h;
+		x = (x-g_sdlControllerFaceButtonsRect.x)*ALTCONTROLLER_FACEBUTTONS_PIX_DIM/g_sdlControllerFaceButtonsRect.w;
+		y = (y-g_sdlControllerFaceButtonsRect.y)*ALTCONTROLLER_FACEBUTTONS_PIX_DIM/g_sdlControllerFaceButtonsRect.h;
 		switch (pad_thumb_buttons_xpm[y+ALTCONTROLLER_PAD_XPM_ROW_OFFSET][x])
 		{
 			case '%':
@@ -1003,7 +1205,7 @@ static int BEL_ST_GetControllerUIScanCodeFromPointer(int x, int y)
 				return g_sdlFaceButtonsScanCodes[1];
 			case '#':
 				return g_sdlFaceButtonsScanCodes[2];
-			case '@':
+			case '+':
 				return g_sdlFaceButtonsScanCodes[3];
 			case ' ':
 				return -1; // Totally transparent
@@ -1015,8 +1217,8 @@ static int BEL_ST_GetControllerUIScanCodeFromPointer(int x, int y)
 	         && (y >= g_sdlControllerDpadRect.y) && (y < g_sdlControllerDpadRect.y+g_sdlControllerDpadRect.h))
 	{
 		// Normalize coordinates to pad
-		x = (x-g_sdlControllerDpadRect.x)*ALTCONTROLLER_PAD_PIX_WIDTH/g_sdlControllerDpadRect.w;
-		y = (y-g_sdlControllerDpadRect.y)*ALTCONTROLLER_PAD_PIX_HEIGHT/g_sdlControllerDpadRect.h;
+		x = (x-g_sdlControllerDpadRect.x)*ALTCONTROLLER_DPAD_PIX_DIM/g_sdlControllerDpadRect.w;
+		y = (y-g_sdlControllerDpadRect.y)*ALTCONTROLLER_DPAD_PIX_DIM/g_sdlControllerDpadRect.h;
 		switch (pad_dpad_xpm[y+ALTCONTROLLER_PAD_XPM_ROW_OFFSET][x])
 		{
 			case '%':
@@ -1025,7 +1227,7 @@ static int BEL_ST_GetControllerUIScanCodeFromPointer(int x, int y)
 				return g_sdlDpadScanCodes[1];
 			case '#':
 				return g_sdlDpadScanCodes[2];
-			case '@':
+			case '+':
 				return g_sdlDpadScanCodes[3];
 			case ' ':
 				return -1; // Totally transparent
@@ -1035,9 +1237,6 @@ static int BEL_ST_GetControllerUIScanCodeFromPointer(int x, int y)
 	}
 	return -1;
 }
-
-extern const BE_ST_ControllerMapping *g_sdlControllerMappingActualCurr;
-void BEL_ST_ReplaceControllerMapping(const BE_ST_ControllerMapping *mapping);
 
 void BEL_ST_CheckPressedPointerInControllerUI(int x, int y)
 {
@@ -1056,8 +1255,7 @@ void BEL_ST_CheckPressedPointerInControllerUI(int x, int y)
 	else if (g_sdlPointerSelectedPadButtonScanCode < 0)
 	{
 		g_sdlPointerSelectedPadButtonScanCode = 0;
-		if (g_sdlControllerMappingActualCurr->prevMapping)
-			BEL_ST_ReplaceControllerMapping(g_sdlControllerMappingActualCurr->prevMapping);
+		BEL_ST_AltControlScheme_HandleEntry(&g_sdlControllerMappingActualCurr->defaultMapping, g_sdlJoystickAxisMax, &g_sdlDefaultMappingBinaryState);
 	}
 
 }
@@ -1106,32 +1304,222 @@ void BEL_ST_CheckMovedPointerInControllerUI(int x, int y)
 	}
 }
 
+static int BEL_ST_GetPointedTouchControlIndex(int x, int y)
+{
+	if (!g_sdlControllerMappingActualCurr->touchMappings)
+		return -1;
+
+	BE_ST_TouchControlSingleMap *singleMap;
+	int i;
+	for (i = 0, singleMap = g_sdlControllerMappingActualCurr->touchMappings; singleMap->xpmImage; ++i, ++singleMap)
+	{
+		if ((x >= g_sdlInputTouchControlsRects[i].x) && (x < g_sdlInputTouchControlsRects[i].x+g_sdlInputTouchControlsRects[i].w)
+		    && (y >= g_sdlInputTouchControlsRects[i].y) && (y < g_sdlInputTouchControlsRects[i].y+g_sdlInputTouchControlsRects[i].h))
+		{
+			const char **xpmImage = singleMap->xpmImage;
+			int normalizedX = (x-g_sdlInputTouchControlsRects[i].x)*singleMap->xpmWidth/g_sdlInputTouchControlsRects[i].w;
+			int normalizedY = (y-g_sdlInputTouchControlsRects[i].y)*singleMap->xpmHeight/g_sdlInputTouchControlsRects[i].h;
+			if (xpmImage[normalizedY][normalizedX] != ' ') // Non-transparent pixel
+				return i;
+		}
+	}
+	return -1;
+}
+
+static void BEL_ST_HandleDefaultPointerActionInTouchControls(int touchControlIndex, bool isPressed)
+{
+	bool lastBinaryStatus = !isPressed;
+	BEL_ST_AltControlScheme_HandleEntry(
+		(touchControlIndex >= 0) ? &g_sdlControllerMappingActualCurr->touchMappings[touchControlIndex].mapping : &g_sdlControllerMappingActualCurr->defaultMapping,
+		isPressed ? g_sdlJoystickAxisMax : 0,
+		(touchControlIndex >= 0) ? &lastBinaryStatus : &g_sdlDefaultMappingBinaryState
+	);
+}
+
+static void BEL_ST_UpdateVirtualCursorPositionFromPointer(int x, int y)
+{
+	extern int16_t g_sdlEmuMouseMotionAccumulatedState[2];
+	extern int16_t g_sdlVirtualMouseCursorState[2];
+	//g_sdlForceGfxControlUiRefresh = true; // FIXME WHY???
+	if (x < g_sdlAspectCorrectionRect.x)
+		x = 0;
+	else if (x >= g_sdlAspectCorrectionRect.x + g_sdlAspectCorrectionRect.w)
+		x = GFX_TEX_WIDTH-1;
+	else
+		x = (x-g_sdlAspectCorrectionRect.x)*GFX_TEX_WIDTH/g_sdlAspectCorrectionRect.w;
+
+	if (y < g_sdlAspectCorrectionRect.y)
+		y = 0;
+	else if (y >= g_sdlAspectCorrectionRect.y + g_sdlAspectCorrectionRect.h)
+		y = GFX_TEX_HEIGHT-1;
+	else
+		y = (y-g_sdlAspectCorrectionRect.y)*GFX_TEX_HEIGHT/g_sdlAspectCorrectionRect.h;
+
+	g_sdlEmuMouseMotionAccumulatedState[0] += x-g_sdlVirtualMouseCursorState[0];
+	g_sdlEmuMouseMotionAccumulatedState[1] += y-g_sdlVirtualMouseCursorState[1];
+	g_sdlVirtualMouseCursorState[0] = x;
+	g_sdlVirtualMouseCursorState[1] = y;
+}
+
+extern int g_sdlEmuMouseButtonsState;
+
+void BEL_ST_CheckPressedPointerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
+{
+	int i;
+	for (i = 0; i < nOfTrackedFingers; ++i)
+		if ((g_sdlTrackedFingers[i].touchId == touchId) && (g_sdlTrackedFingers[i].fingerId == fingerId))
+		{
+			if (g_refKeenCfg.touchInputDebugging)
+			{
+				g_sdlTrackedFingers[i].lastX = x;
+				g_sdlTrackedFingers[i].lastY = y;
+				g_sdlForceGfxControlUiRefresh = true;
+			}
+			return; // In case of some mistaken double-tap of same finger
+		}
+
+
+	if (nOfTrackedFingers == MAX_NUM_OF_TRACKED_FINGERS)
+		return;
+
+	int touchControlIndex = BEL_ST_GetPointedTouchControlIndex(x, y);
+	BESDLTrackedFinger* trackedFinger = &g_sdlTrackedFingers[nOfTrackedFingers++];
+	trackedFinger->touchId = touchId;
+	trackedFinger->fingerId = fingerId;
+	trackedFinger->touchMappingIndex = touchControlIndex;
+	if (g_refKeenCfg.touchInputDebugging)
+	{
+		trackedFinger->lastX = x;
+		trackedFinger->lastY = y;
+		g_sdlForceGfxControlUiRefresh = true;
+	}
+
+	if ((touchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
+	{
+		g_sdlEmuMouseButtonsState |= 1;
+		BEL_ST_UpdateVirtualCursorPositionFromPointer(x, y);
+	}
+	else
+		BEL_ST_HandleDefaultPointerActionInTouchControls(touchControlIndex, true);
+}
+
+void BEL_ST_CheckPressedMouseInTouchControls(int x, int y)
+{
+	BEL_ST_CheckPressedPointerInTouchControls(0, 0, x, y); // Touch device id of 0 is invalid according to description of SDL_GetTouchDevice, so re-using this for mouse
+}
+
+void BEL_ST_CheckPressedFingerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId, float floatX, float floatY)
+{
+	BEL_ST_CheckPressedPointerInTouchControls(touchId, fingerId, floatX * g_sdlLastReportedWindowWidth, floatY * g_sdlLastReportedWindowHeight);
+}
+
+
+void BEL_ST_CheckReleasedPointerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId)
+{
+	int i;
+	for (i = 0; i < nOfTrackedFingers; ++i)
+		if ((g_sdlTrackedFingers[i].touchId == touchId) && (g_sdlTrackedFingers[i].fingerId == fingerId))
+			break;
+
+	if (i == nOfTrackedFingers)
+		return;
+
+	BESDLTrackedFinger* trackedFinger = &g_sdlTrackedFingers[i];
+	int prevTouchControlIndex = trackedFinger->touchMappingIndex;
+
+	if ((prevTouchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
+		g_sdlEmuMouseButtonsState &= ~1;
+	else
+		BEL_ST_HandleDefaultPointerActionInTouchControls(prevTouchControlIndex, false);
+
+	*trackedFinger = g_sdlTrackedFingers[--nOfTrackedFingers]; // Remove finger entry without moving the rest, except for maybe the last
+	if (g_refKeenCfg.touchInputDebugging)
+		g_sdlForceGfxControlUiRefresh = true; // Remove debugging finger mark from screen
+}
+
+void BEL_ST_CheckReleasedMouseInTouchControls(void)
+{
+	BEL_ST_CheckReleasedPointerInTouchControls(0, 0); // Touch device id of 0 is invalid according to description of SDL_GetTouchDevice, so re-using this for mouse
+}
+
+void BEL_ST_CheckReleasedFingerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId)
+{
+	BEL_ST_CheckReleasedPointerInTouchControls(touchId, fingerId);
+}
+
+
+void BEL_ST_CheckMovedPointerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
+{
+	int i;
+	for (i = 0; i < nOfTrackedFingers; ++i)
+		if ((g_sdlTrackedFingers[i].touchId == touchId) && (g_sdlTrackedFingers[i].fingerId == fingerId))
+			break;
+
+	if (i == nOfTrackedFingers)
+		return;
+
+	BESDLTrackedFinger* trackedFinger = &g_sdlTrackedFingers[i];
+	int prevTouchControlIndex = trackedFinger->touchMappingIndex;
+	int touchControlIndex = BEL_ST_GetPointedTouchControlIndex(x, y);
+	if (g_refKeenCfg.touchInputDebugging)
+	{
+		trackedFinger->lastX = x;
+		trackedFinger->lastY = y;
+		g_sdlForceGfxControlUiRefresh = true;
+	}
+	if (touchControlIndex != prevTouchControlIndex)
+	{
+		if ((prevTouchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
+			g_sdlEmuMouseButtonsState &= ~1;
+		else
+			BEL_ST_HandleDefaultPointerActionInTouchControls(prevTouchControlIndex, false);
+
+		if ((touchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
+			g_sdlEmuMouseButtonsState |= 1;
+		else
+			BEL_ST_HandleDefaultPointerActionInTouchControls(touchControlIndex, true);
+
+		trackedFinger->touchMappingIndex = touchControlIndex;
+	}
+	if ((touchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
+		BEL_ST_UpdateVirtualCursorPositionFromPointer(x, y);
+}
+
+void BEL_ST_CheckMovedMouseInTouchControls(int x, int y)
+{
+	BEL_ST_CheckMovedPointerInTouchControls(0, 0, x, y); // Touch device id of 0 is invalid according to description of SDL_GetTouchDevice, so re-using this for mouse
+}
+
+void BEL_ST_CheckMovedFingerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId, float floatX, float floatY)
+{
+	BEL_ST_CheckMovedPointerInTouchControls(touchId, fingerId, floatX * g_sdlLastReportedWindowWidth, floatY * (float)g_sdlLastReportedWindowHeight);
+}
 
 
 void BEL_ST_ReleasePressedKeysInTextInputUI(void)
 {
+	emulatedDOSKeyEvent dosKeyEvent;
+	dosKeyEvent.isSpecial = false;
+
 	if (g_sdlTextInputIsKeyPressed)
 	{
-		emulatedDOSKeyEvent dosKeyEvent;
-		dosKeyEvent.isSpecial = false;
-		dosKeyEvent.dosScanCode = g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX];
-		// Don't forget to "release" a key pressed in the text input UI
+		bool toggle = false;
+		dosKeyEvent.dosScanCode = BEL_ST_ToggleKeyPressInTextInputUI(&toggle);
+		if (dosKeyEvent.dosScanCode) // Don't forget to "release" a key pressed in the text input UI
+			BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
+	}
+
+	// Shift key may further be held, don't forget this too!
+	if (g_sdlTextInputIsShifted)
+	{
+		dosKeyEvent.dosScanCode = BE_ST_SC_LSHIFT;
 		BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
 
-		BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
-		g_sdlTextInputIsKeyPressed = false;
-		// Shift key may further be held, don't forget this too!
-		if ((dosKeyEvent.dosScanCode != BE_ST_SC_LSHIFT) && g_sdlTextInputIsShifted)
-		{
-			dosKeyEvent.dosScanCode = BE_ST_SC_LSHIFT;
-			BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
-
-			g_sdlTextInputIsShifted = false;
-			BEL_ST_RedrawWholeTextInputUI();
-
-		}
-		g_sdlForceGfxControlUiRefresh = true;
+		g_sdlTextInputIsShifted = false;
+		BEL_ST_RedrawWholeTextInputUI();
 	}
+
+	g_sdlForceGfxControlUiRefresh = true;
 }
 
 void BEL_ST_ReleasePressedKeysInDebugKeysUI(void)
@@ -1160,6 +1548,12 @@ void BEL_ST_ReleasePressedKeysInControllerUI(void)
 		BEL_ST_CheckReleasedPointerInControllerUI();
 }
 
+void BEL_ST_ReleasePressedButtonsInTouchControls(void)
+{
+	while (nOfTrackedFingers > 0)
+		BEL_ST_CheckReleasedPointerInTouchControls(g_sdlTrackedFingers[0].touchId, g_sdlTrackedFingers[0].fingerId);
+}
+
 /*static*/ void BEL_ST_HideAltInputUI(void)
 {
 	g_sdlFaceButtonsAreShown = false;
@@ -1172,6 +1566,74 @@ void BEL_ST_ReleasePressedKeysInControllerUI(void)
 	BEL_ST_ConditionallyShowAltInputPointer();
 }
 
+
+static void BEL_ST_SetTouchControlsRects(void)
+{
+	if (((g_sdlControllerMappingActualCurr == NULL) || g_sdlControllerMappingActualCurr->touchMappings == NULL))
+		return;
+
+	SDL_Rect *currRect;
+	int winWidth, winHeight;
+	SDL_GetWindowSize(g_sdlWindow, &winWidth, &winHeight);
+	int minWinDim = (winWidth >= winHeight) ? winHeight : winWidth;
+	{
+		BE_ST_OnscreenTouchControl *touchControl;
+		for (currRect = g_sdlOnScreenTouchControlsRects, touchControl = g_sdlControllerMappingActualCurr->onScreenTouchControls; touchControl->xpmImage; ++currRect, ++touchControl)
+		{
+			if (touchControl->xpmPosX >= BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM/2)
+			{
+				currRect->x = winWidth-(BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-touchControl->xpmPosX)*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			}
+			else
+			{
+				currRect->x = touchControl->xpmPosX*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			}
+			if (touchControl->xpmPosY >= BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM/2)
+			{
+				currRect->y = winHeight-(BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-touchControl->xpmPosY)*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			}
+			else
+			{
+				currRect->y = touchControl->xpmPosY*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			}
+			currRect->w = touchControl->xpmWidth*winWidth/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			currRect->h = touchControl->xpmHeight*winHeight/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			if (currRect->w > currRect->h)
+				currRect->w = currRect->h;
+			else
+				currRect->h = currRect->w;
+		}
+	}
+	// FIXME - Code duplication
+	{
+		BE_ST_TouchControlSingleMap *currMapping;
+		for (currRect = g_sdlInputTouchControlsRects, currMapping = g_sdlControllerMappingActualCurr->touchMappings; currMapping->xpmImage; ++currRect, ++currMapping)
+		{
+			if (currMapping->xpmPosX >= BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM/2)
+			{
+				currRect->x = winWidth-(BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-currMapping->xpmPosX)*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			}
+			else
+			{
+				currRect->x = currMapping->xpmPosX*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			}
+			if (currMapping->xpmPosY >= BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM/2)
+			{
+				currRect->y = winHeight-(BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM-currMapping->xpmPosY)*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			}
+			else
+			{
+				currRect->y = currMapping->xpmPosY*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			}
+			currRect->w = currMapping->xpmWidth*winWidth/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			currRect->h = currMapping->xpmHeight*winHeight/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+			if (currRect->w > currRect->h)
+				currRect->w = currRect->h;
+			else
+				currRect->h = currRect->w;
+		}
+	}
+}
 
 void BEL_ST_SetGfxOutputRects(bool allowResize)
 {
@@ -1203,6 +1665,9 @@ void BEL_ST_SetGfxOutputRects(bool allowResize)
 	int srcBorderedHeight = srcBorderTop+srcHeight+srcBorderBottom;
 	int winWidth, winHeight;
 	SDL_GetWindowSize(g_sdlWindow, &winWidth, &winHeight);
+
+	g_sdlLastReportedWindowWidth = winWidth;
+	g_sdlLastReportedWindowHeight = winHeight;
 
 	// Special case - We may resize window based on mode, but only if allowResize == true (to prevent any possible infinite resizes loop)
 	if (allowResize && g_sdlIsSoftwareRendered && !g_refKeenCfg.forceFullSoftScaling && (!(SDL_GetWindowFlags(g_sdlWindow) & SDL_WINDOW_FULLSCREEN)))
@@ -1285,26 +1750,36 @@ void BEL_ST_SetGfxOutputRects(bool allowResize)
 	// 1. Use same dimensions independently of scaling.
 	// 2. The dimensions of the controller UI are picked relatively to the host window's internal contents (without borders), not directly related to the client window size.
 	// 3. Also taking the whole window into account (this doesn't depend on "screen mode", borders and more).
-	int offset;
+	// 4. Finally, try to be consistent with the positioning and sizes of touch controls (even though it's not necessary).
 	int minWinDim = (winWidth >= winHeight) ? winHeight : winWidth;
-	g_sdlControllerFaceButtonsRect.w = g_sdlControllerFaceButtonsRect.h = minWinDim/ALTCONTROLLER_FACEBUTTONS_SCREEN_DIM_RATIO;
-	offset = minWinDim/(16*ALTCONTROLLER_FACEBUTTONS_SCREEN_DIM_RATIO);
-	g_sdlControllerFaceButtonsRect.x = winWidth-g_sdlControllerFaceButtonsRect.w-offset;
-	g_sdlControllerFaceButtonsRect.y = winHeight-g_sdlControllerFaceButtonsRect.h-offset;
+	g_sdlControllerFaceButtonsRect.w = g_sdlControllerFaceButtonsRect.h = 56*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+	g_sdlControllerFaceButtonsRect.x = winWidth-(56+8)*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+	g_sdlControllerFaceButtonsRect.y = winHeight-(56+8)*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
 	// Repeat for D-pad (same dimensions as the face buttons, other side)
-	g_sdlControllerDpadRect.w = g_sdlControllerDpadRect.h = g_sdlControllerFaceButtonsRect.w;
-	g_sdlControllerDpadRect.x = offset;
-	g_sdlControllerDpadRect.y = g_sdlControllerFaceButtonsRect.y;
+	g_sdlControllerDpadRect.w = g_sdlControllerDpadRect.h = 48*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+	g_sdlControllerDpadRect.x = minWinDim*8/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
+	g_sdlControllerDpadRect.y = winHeight-(48+8)*minWinDim/BE_ST_TOUCHCONTROL_MAX_WINDOW_DIM;
 	// Also this - text-input keyboard (somewhat different because the keyboard is rectangular, but not square-shaped)
-	g_sdlControllerTextInputRect.w = minWinDim;
-	g_sdlControllerTextInputRect.h = g_sdlControllerTextInputRect.w * ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT / ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH;
+	g_sdlControllerTextInputRect.w = winWidth;
+	g_sdlControllerTextInputRect.h = winHeight*3/8;
+	if (g_sdlControllerTextInputRect.w * ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT > g_sdlControllerTextInputRect.h * ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH)
+		g_sdlControllerTextInputRect.w = g_sdlControllerTextInputRect.h * ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH / ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT;
+	else
+		g_sdlControllerTextInputRect.h = g_sdlControllerTextInputRect.w * ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT / ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH;
 	g_sdlControllerTextInputRect.x = (winWidth-g_sdlControllerTextInputRect.w)/2;
 	g_sdlControllerTextInputRect.y = winHeight-g_sdlControllerTextInputRect.h;
 	// Same with debug keys
-	g_sdlControllerDebugKeysRect.w = minWinDim;
-	g_sdlControllerDebugKeysRect.h = g_sdlControllerDebugKeysRect.w * ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT / ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH;
+	g_sdlControllerDebugKeysRect.w = winWidth;
+	g_sdlControllerDebugKeysRect.h = winHeight*3/8;
+	if (g_sdlControllerDebugKeysRect.w * ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT > g_sdlControllerDebugKeysRect.h * ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH)
+		g_sdlControllerDebugKeysRect.w = g_sdlControllerDebugKeysRect.h * ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH / ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT;
+	else
+		g_sdlControllerDebugKeysRect.h = g_sdlControllerDebugKeysRect.w * ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT / ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH;
 	g_sdlControllerDebugKeysRect.x = (winWidth-g_sdlControllerDebugKeysRect.w)/2;
 	g_sdlControllerDebugKeysRect.y = winHeight-g_sdlControllerDebugKeysRect.h;
+
+	g_sdlDebugFingerRectSideLen = minWinDim/4;
+	BEL_ST_SetTouchControlsRects();
 }
 
 void BEL_ST_ForceHostDisplayUpdate(void)
@@ -1363,8 +1838,8 @@ void BE_ST_EGASetPelPanning(uint8_t panning)
 
 void BE_ST_EGASetLineWidth(uint8_t widthInBytes)
 {
-	g_sdlDoRefreshGfxOutput |= (g_sdlLineWidth != widthInBytes);
-	g_sdlLineWidth = widthInBytes;
+	g_sdlDoRefreshGfxOutput |= (g_sdlPixLineWidth != 8*widthInBytes);
+	g_sdlPixLineWidth = 8*widthInBytes;
 }
 
 void BE_ST_EGASetSplitScreen(int16_t linenum)
@@ -1384,65 +1859,60 @@ void BE_ST_EGASetSplitScreen(int16_t linenum)
 	g_sdlDoRefreshGfxOutput = true;
 }
 
-void BE_ST_EGAUpdateGFXByte(uint16_t destOff, uint8_t srcVal, uint16_t planeMask)
+void BE_ST_EGAUpdateGFXByteInPlane(uint16_t destOff, uint8_t srcVal, uint16_t planeNum)
 {
-	if (planeMask & 1)
-		g_sdlVidMem.egaGfx[0][destOff] = srcVal;
-	if (planeMask & 2)
-		g_sdlVidMem.egaGfx[1][destOff] = srcVal;
-	if (planeMask & 4)
-		g_sdlVidMem.egaGfx[2][destOff] = srcVal;
-	if (planeMask & 8)
-		g_sdlVidMem.egaGfx[3][destOff] = srcVal;
-	g_sdlDoRefreshGfxOutput = true;
-}
-
-// Same as BE_ST_EGAUpdateGFXByte but picking specific bits out of each byte, and WITHOUT plane mask
-void BE_ST_EGAUpdateGFXBits(uint16_t destOff, uint8_t srcVal, uint8_t bitsMask)
-{
-	g_sdlVidMem.egaGfx[0][destOff] = (g_sdlVidMem.egaGfx[0][destOff] & ~bitsMask) | (srcVal & bitsMask); 
-	g_sdlVidMem.egaGfx[1][destOff] = (g_sdlVidMem.egaGfx[1][destOff] & ~bitsMask) | (srcVal & bitsMask); 
-	g_sdlVidMem.egaGfx[2][destOff] = (g_sdlVidMem.egaGfx[2][destOff] & ~bitsMask) | (srcVal & bitsMask); 
-	g_sdlVidMem.egaGfx[3][destOff] = (g_sdlVidMem.egaGfx[3][destOff] & ~bitsMask) | (srcVal & bitsMask); 
+	g_sdlVidMem.egaGfx[destOff] = (g_sdlVidMem.egaGfx[destOff] & ~g_be_st_lookup_repeat[1 << planeNum]) | (g_be_st_lookup_linear_to_egaplane[srcVal] << planeNum);
 	g_sdlDoRefreshGfxOutput = true;
 }
 
 // Based on BE_Cross_LinearToWrapped_MemCopy
-static void BEL_ST_LinearToEGAPlane_MemCopy(uint8_t *planeDstPtr, uint16_t planeDstOff, const uint8_t *linearSrc, uint16_t num)
+static void BEL_ST_LinearToEGAPlane_MemCopy(uint16_t planeDstOff, const uint8_t *linearSrc, uint16_t num, uint16_t planeNum)
 {
+	uint64_t planeInvRepeatedMask = ~g_be_st_lookup_repeat[1 << planeNum];
+	uint64_t *planeDstPtr = &g_sdlVidMem.egaGfx[planeDstOff];
 	uint16_t bytesToEnd = 0x10000-planeDstOff;
 	if (num <= bytesToEnd)
 	{
-		memcpy(planeDstPtr+planeDstOff, linearSrc, num);
+		for (int i = 0; i < num; ++i, ++planeDstPtr, ++linearSrc)
+			*planeDstPtr = ((*planeDstPtr) & planeInvRepeatedMask) | (g_be_st_lookup_linear_to_egaplane[*linearSrc] << planeNum);
 	}
 	else
 	{
-		memcpy(planeDstPtr+planeDstOff, linearSrc, bytesToEnd);
-		memcpy(planeDstPtr, linearSrc+bytesToEnd, num-bytesToEnd);
+		for (int i = 0; i < bytesToEnd; ++i, ++planeDstPtr, ++linearSrc)
+			*planeDstPtr = ((*planeDstPtr) & planeInvRepeatedMask) | (g_be_st_lookup_linear_to_egaplane[*linearSrc] << planeNum);
+		planeDstPtr = g_sdlVidMem.egaGfx;
+		for (int i = 0; i < num-bytesToEnd; ++i, ++planeDstPtr, ++linearSrc)
+			*planeDstPtr = ((*planeDstPtr) & planeInvRepeatedMask) | (g_be_st_lookup_linear_to_egaplane[*linearSrc] << planeNum);
 	}
 	g_sdlDoRefreshGfxOutput = true;
 }
 
 // Based on BE_Cross_WrappedToLinear_MemCopy
-static void BEL_ST_EGAPlaneToLinear_MemCopy(uint8_t *linearDst, const uint8_t *planeSrcPtr, uint16_t planeSrcOff, uint16_t num)
+static void BEL_ST_EGAPlaneToLinear_MemCopy(uint8_t *linearDst, uint16_t planeSrcOff, uint16_t num, uint16_t planenum)
 {
+	const uint64_t *planeSrcPtr = &g_sdlVidMem.egaGfx[planeSrcOff];
 	uint16_t bytesToEnd = 0x10000-planeSrcOff;
 	if (num <= bytesToEnd)
 	{
-		memcpy(linearDst, planeSrcPtr+planeSrcOff, num);
+		for (int i = 0; i < num; ++i, ++linearDst, ++planeSrcPtr)
+			*linearDst = BEL_ST_Lookup_EGAPlaneToLinear((*planeSrcPtr)>>planenum);
 	}
 	else
 	{
-		memcpy(linearDst, planeSrcPtr+planeSrcOff, bytesToEnd);
-		memcpy(linearDst+bytesToEnd, planeSrcPtr, num-bytesToEnd);
+		for (int i = 0; i < bytesToEnd; ++i, ++linearDst, ++planeSrcPtr)
+			*linearDst = BEL_ST_Lookup_EGAPlaneToLinear((*planeSrcPtr)>>planenum);
+		planeSrcPtr = g_sdlVidMem.egaGfx;
+		for (int i = 0; i < num-bytesToEnd; ++i, ++linearDst, ++planeSrcPtr)
+			*linearDst = BEL_ST_Lookup_EGAPlaneToLinear((*planeSrcPtr)>>planenum);
 	}
 	//No need to since we just read screen data
 	//g_sdlDoRefreshGfxOutput = true;
 }
 
 // Based on BE_Cross_WrappedToWrapped_MemCopy
-static void BEL_ST_EGAPlaneToEGAPlane_MemCopy(uint8_t *planeCommonPtr, uint16_t planeDstOff, uint16_t planeSrcOff, uint16_t num)
+static void BEL_ST_EGAPlaneToEGAAllPlanes_MemCopy(uint16_t planeDstOff, uint16_t planeSrcOff, uint16_t num)
 {
+	uint64_t *planeCommonPtr = g_sdlVidMem.egaGfx;
 	uint16_t srcBytesToEnd = 0x10000-planeSrcOff;
 	uint16_t dstBytesToEnd = 0x10000-planeDstOff;
 	if (num <= srcBytesToEnd)
@@ -1450,153 +1920,112 @@ static void BEL_ST_EGAPlaneToEGAPlane_MemCopy(uint8_t *planeCommonPtr, uint16_t 
 		// Source is linear: Same as BE_Cross_LinearToWrapped_MemCopy here
 		if (num <= dstBytesToEnd)
 		{
-			memcpy(planeCommonPtr+planeDstOff, planeCommonPtr+planeSrcOff, num);
+			memcpy(planeCommonPtr+planeDstOff, planeCommonPtr+planeSrcOff, 8*num);
 		}
 		else
 		{
-			memcpy(planeCommonPtr+planeDstOff, planeCommonPtr+planeSrcOff, dstBytesToEnd);
-			memcpy(planeCommonPtr, planeCommonPtr+planeSrcOff+dstBytesToEnd, num-dstBytesToEnd);
+			memcpy(planeCommonPtr+planeDstOff, planeCommonPtr+planeSrcOff, 8*dstBytesToEnd);
+			memcpy(planeCommonPtr, planeCommonPtr+(planeSrcOff+dstBytesToEnd), 8*(num-dstBytesToEnd));
 		}
 	}
 	// Otherwise, check if at least the destination is linear
 	else if (num <= dstBytesToEnd)
 	{
 		// Destination is linear: Same as BE_Cross_WrappedToLinear_MemCopy, non-linear source
-		memcpy(planeCommonPtr+planeDstOff, planeCommonPtr+planeSrcOff, srcBytesToEnd);
-		memcpy(planeCommonPtr+planeDstOff+srcBytesToEnd, planeCommonPtr, num-srcBytesToEnd);
+		memcpy(planeCommonPtr+planeDstOff, planeCommonPtr+planeSrcOff, 8*srcBytesToEnd);
+		memcpy(planeCommonPtr+(planeDstOff+srcBytesToEnd), planeCommonPtr, 8*(num-srcBytesToEnd));
 	}
 	// BOTH buffers have wrapping. We don't check separately if
 	// srcBytesToEnd==dstBytesToEnd (in such a case planeDstOff==planeSrcOff...)
 	else if (srcBytesToEnd <= dstBytesToEnd)
 	{
-		memcpy(planeCommonPtr+planeDstOff, planeCommonPtr+planeSrcOff, srcBytesToEnd);
-		memcpy(planeCommonPtr+planeDstOff+srcBytesToEnd, planeCommonPtr, dstBytesToEnd-srcBytesToEnd);
-		memcpy(planeCommonPtr, planeCommonPtr+(dstBytesToEnd-srcBytesToEnd), num-dstBytesToEnd);
+		memcpy(planeCommonPtr+planeDstOff, planeCommonPtr+planeSrcOff, 8*srcBytesToEnd);
+		memcpy(planeCommonPtr+(planeDstOff+srcBytesToEnd), planeCommonPtr, 8*(dstBytesToEnd-srcBytesToEnd));
+		memcpy(planeCommonPtr, planeCommonPtr+(dstBytesToEnd-srcBytesToEnd), 8*(num-dstBytesToEnd));
 	}
 	else // srcBytesToEnd > dstBytesToEnd
 	{
-		memcpy(planeCommonPtr+planeDstOff, planeCommonPtr+planeSrcOff, dstBytesToEnd);
-		memcpy(planeCommonPtr, planeCommonPtr+planeSrcOff+dstBytesToEnd, srcBytesToEnd-dstBytesToEnd);
-		memcpy(planeCommonPtr+(srcBytesToEnd-dstBytesToEnd), planeCommonPtr, num-srcBytesToEnd);
+		memcpy(planeCommonPtr+planeDstOff, planeCommonPtr+planeSrcOff, 8*dstBytesToEnd);
+		memcpy(planeCommonPtr, planeCommonPtr+(planeSrcOff+dstBytesToEnd), 8*(srcBytesToEnd-dstBytesToEnd));
+		memcpy(planeCommonPtr+(srcBytesToEnd-dstBytesToEnd), planeCommonPtr, 8*(num-srcBytesToEnd));
 	}
 	g_sdlDoRefreshGfxOutput = true;
 }
 
-void BE_ST_EGAUpdateGFXBuffer(uint16_t destOff, const uint8_t *srcPtr, uint16_t num, uint16_t planeMask)
+// A similar analogue of memset
+static void BEL_ST_EGAPlane_MemSet(uint64_t *planeDstPtr, uint16_t planeDstOff, uint8_t value, uint16_t num)
 {
-	if (planeMask & 1)
-		BEL_ST_LinearToEGAPlane_MemCopy(g_sdlVidMem.egaGfx[0], destOff, srcPtr, num);
-	if (planeMask & 2)
-		BEL_ST_LinearToEGAPlane_MemCopy(g_sdlVidMem.egaGfx[1], destOff, srcPtr, num);
-	if (planeMask & 4)
-		BEL_ST_LinearToEGAPlane_MemCopy(g_sdlVidMem.egaGfx[2], destOff, srcPtr, num);
-	if (planeMask & 8)
-		BEL_ST_LinearToEGAPlane_MemCopy(g_sdlVidMem.egaGfx[3], destOff, srcPtr, num);
-	g_sdlDoRefreshGfxOutput = true;
-}
-
-void BE_ST_EGAUpdateGFXByteScrToScr(uint16_t destOff, uint16_t srcOff)
-{
-	g_sdlVidMem.egaGfx[0][destOff] = g_sdlVidMem.egaGfx[0][srcOff];
-	g_sdlVidMem.egaGfx[1][destOff] = g_sdlVidMem.egaGfx[1][srcOff];
-	g_sdlVidMem.egaGfx[2][destOff] = g_sdlVidMem.egaGfx[2][srcOff];
-	g_sdlVidMem.egaGfx[3][destOff] = g_sdlVidMem.egaGfx[3][srcOff];
-	g_sdlDoRefreshGfxOutput = true;
-}
-
-// Same as BE_ST_EGAUpdateGFXByteScrToScr but with plane mask (added for Catacomb Abyss vanilla bug reproduction/workaround)
-void BE_ST_EGAUpdateGFXByteWithPlaneMaskScrToScr(uint16_t destOff, uint16_t srcOff, uint16_t planeMask)
-{
-	if (planeMask & 1)
-		g_sdlVidMem.egaGfx[0][destOff] = g_sdlVidMem.egaGfx[0][srcOff];
-	if (planeMask & 2)
-		g_sdlVidMem.egaGfx[1][destOff] = g_sdlVidMem.egaGfx[1][srcOff];
-	if (planeMask & 4)
-		g_sdlVidMem.egaGfx[2][destOff] = g_sdlVidMem.egaGfx[2][srcOff];
-	if (planeMask & 8)
-		g_sdlVidMem.egaGfx[3][destOff] = g_sdlVidMem.egaGfx[3][srcOff];
-	g_sdlDoRefreshGfxOutput = true;
-}
-
-// Same as BE_ST_EGAUpdateGFXByteScrToScr but picking specific bits out of each byte
-void BE_ST_EGAUpdateGFXBitsScrToScr(uint16_t destOff, uint16_t srcOff, uint8_t bitsMask)
-{
-	g_sdlVidMem.egaGfx[0][destOff] = (g_sdlVidMem.egaGfx[0][destOff] & ~bitsMask) | (g_sdlVidMem.egaGfx[0][srcOff] & bitsMask); 
-	g_sdlVidMem.egaGfx[1][destOff] = (g_sdlVidMem.egaGfx[1][destOff] & ~bitsMask) | (g_sdlVidMem.egaGfx[1][srcOff] & bitsMask); 
-	g_sdlVidMem.egaGfx[2][destOff] = (g_sdlVidMem.egaGfx[2][destOff] & ~bitsMask) | (g_sdlVidMem.egaGfx[2][srcOff] & bitsMask); 
-	g_sdlVidMem.egaGfx[3][destOff] = (g_sdlVidMem.egaGfx[3][destOff] & ~bitsMask) | (g_sdlVidMem.egaGfx[3][srcOff] & bitsMask); 
-	g_sdlDoRefreshGfxOutput = true;
-}
-
-void BE_ST_EGAUpdateGFXBufferScrToScr(uint16_t destOff, uint16_t srcOff, uint16_t num)
-{
-	BEL_ST_EGAPlaneToEGAPlane_MemCopy(g_sdlVidMem.egaGfx[0], destOff, srcOff, num);
-	BEL_ST_EGAPlaneToEGAPlane_MemCopy(g_sdlVidMem.egaGfx[1], destOff, srcOff, num);
-	BEL_ST_EGAPlaneToEGAPlane_MemCopy(g_sdlVidMem.egaGfx[2], destOff, srcOff, num);
-	BEL_ST_EGAPlaneToEGAPlane_MemCopy(g_sdlVidMem.egaGfx[3], destOff, srcOff, num);
-	g_sdlDoRefreshGfxOutput = true;
-}
-
-uint8_t BE_ST_EGAFetchGFXByte(uint16_t destOff, uint16_t planenum)
-{
-	return g_sdlVidMem.egaGfx[planenum][destOff];
-}
-
-void BE_ST_EGAFetchGFXBuffer(uint8_t *destPtr, uint16_t srcOff, uint16_t num, uint16_t planenum)
-{
-	BEL_ST_EGAPlaneToLinear_MemCopy(destPtr, g_sdlVidMem.egaGfx[planenum], srcOff, num);
-}
-
-void BE_ST_EGAUpdateGFXPixel4bpp(uint16_t destOff, uint8_t color, uint8_t bitsMask)
-{
-	for (int currBitNum = 0, currBitMask = 1; currBitNum < 8; ++currBitNum, currBitMask <<= 1)
+	uint16_t bytesToEnd = 0x10000-planeDstOff;
+	if (num <= bytesToEnd)
 	{
-		if (bitsMask & currBitMask)
-		{
-			g_sdlVidMem.egaGfx[0][destOff] &= ~currBitMask;
-			g_sdlVidMem.egaGfx[0][destOff] |= ((color & 1) << currBitNum);
-			g_sdlVidMem.egaGfx[1][destOff] &= ~currBitMask;
-			g_sdlVidMem.egaGfx[1][destOff] |= (((color & 2) >> 1) << currBitNum);
-			g_sdlVidMem.egaGfx[2][destOff] &= ~currBitMask;
-			g_sdlVidMem.egaGfx[2][destOff] |= (((color & 4) >> 2) << currBitNum);
-			g_sdlVidMem.egaGfx[3][destOff] &= ~currBitMask;
-			g_sdlVidMem.egaGfx[3][destOff] |= (((color & 8) >> 3) << currBitNum);
-		}
+		memset(planeDstPtr+planeDstOff, value, 8*num);
 	}
-	g_sdlDoRefreshGfxOutput = true;
-}
-
-void BE_ST_EGAUpdateGFXPixel4bppRepeatedly(uint16_t destOff, uint8_t color, uint16_t count, uint8_t bitsMask)
-{
-	for (uint16_t loopVar = 0; loopVar < count; ++loopVar, ++destOff)
+	else
 	{
-		BE_ST_EGAUpdateGFXPixel4bpp(destOff, color, bitsMask);
+		memset(planeDstPtr+planeDstOff, value, 8*bytesToEnd);
+		memset(planeDstPtr, value, 8*(num-bytesToEnd));
 	}
-}
-
-void BE_ST_EGAXorGFXByte(uint16_t destOff, uint8_t srcVal, uint16_t planeMask)
-{
-	if (planeMask & 1)
-		g_sdlVidMem.egaGfx[0][destOff] ^= srcVal;
-	if (planeMask & 2)
-		g_sdlVidMem.egaGfx[1][destOff] ^= srcVal;
-	if (planeMask & 4)
-		g_sdlVidMem.egaGfx[2][destOff] ^= srcVal;
-	if (planeMask & 8)
-		g_sdlVidMem.egaGfx[3][destOff] ^= srcVal;
 	g_sdlDoRefreshGfxOutput = true;
 }
 
-// Like BE_ST_EGAXorGFXByte, but:
-// - OR instead of XOR.
-// - All planes are updated.
-// - Only specific bits are updated in each plane's byte.
-void BE_ST_EGAOrGFXBits(uint16_t destOff, uint8_t srcVal, uint8_t bitsMask)
+void BE_ST_EGAUpdateGFXBufferInPlane(uint16_t destOff, const uint8_t *srcPtr, uint16_t num, uint16_t planeNum)
 {
-	g_sdlVidMem.egaGfx[0][destOff] |= (srcVal & bitsMask); 
-	g_sdlVidMem.egaGfx[1][destOff] |= (srcVal & bitsMask); 
-	g_sdlVidMem.egaGfx[2][destOff] |= (srcVal & bitsMask); 
-	g_sdlVidMem.egaGfx[3][destOff] |= (srcVal & bitsMask); 
+	BEL_ST_LinearToEGAPlane_MemCopy(destOff, srcPtr, num, planeNum);
+	g_sdlDoRefreshGfxOutput = true;
+}
+
+void BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(uint16_t destOff, uint16_t srcOff)
+{
+	g_sdlVidMem.egaGfx[destOff] = g_sdlVidMem.egaGfx[srcOff];
+	g_sdlDoRefreshGfxOutput = true;
+}
+
+// Same as BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr but with a specific plane (added for Catacomb Abyss vanilla bug reproduction/workaround)
+void BE_ST_EGAUpdateGFXByteInPlaneScrToScr(uint16_t destOff, uint16_t srcOff, uint16_t planeNum)
+{
+	g_sdlVidMem.egaGfx[destOff] = (g_sdlVidMem.egaGfx[destOff] & ~g_be_st_lookup_repeat[1<<planeNum]) | (g_sdlVidMem.egaGfx[srcOff] & g_be_st_lookup_repeat[1<<planeNum]);
+	g_sdlDoRefreshGfxOutput = true;
+}
+
+// Same as BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr but picking specific bits out of each byte
+void BE_ST_EGAUpdateGFXBitsInAllPlanesScrToScr(uint16_t destOff, uint16_t srcOff, uint8_t bitsMask)
+{
+	g_sdlVidMem.egaGfx[destOff] = (g_sdlVidMem.egaGfx[destOff] & ~g_be_st_lookup_bitsmask[bitsMask]) | (g_sdlVidMem.egaGfx[srcOff] & g_be_st_lookup_bitsmask[bitsMask]);
+	g_sdlDoRefreshGfxOutput = true;
+}
+
+
+void BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(uint16_t destOff, uint16_t srcOff, uint16_t num)
+{
+	BEL_ST_EGAPlaneToEGAAllPlanes_MemCopy(destOff, srcOff, num);
+	g_sdlDoRefreshGfxOutput = true;
+}
+
+uint8_t BE_ST_EGAFetchGFXByteFromPlane(uint16_t destOff, uint16_t planenum)
+{
+	return BEL_ST_Lookup_EGAPlaneToLinear(g_sdlVidMem.egaGfx[destOff]>>planenum);
+}
+
+void BE_ST_EGAFetchGFXBufferFromPlane(uint8_t *destPtr, uint16_t srcOff, uint16_t num, uint16_t planenum)
+{
+	BEL_ST_EGAPlaneToLinear_MemCopy(destPtr, srcOff, num, planenum);
+}
+
+void BE_ST_EGAUpdateGFXBitsFrom4bitsPixel(uint16_t destOff, uint8_t color, uint8_t bitsMask)
+{
+	g_sdlVidMem.egaGfx[destOff] = (g_sdlVidMem.egaGfx[destOff] & ~g_be_st_lookup_bitsmask[bitsMask]) | (g_be_st_lookup_repeat[color] & g_be_st_lookup_bitsmask[bitsMask]);
+	g_sdlDoRefreshGfxOutput = true;
+}
+
+void BE_ST_EGAUpdateGFXBufferFrom4bitsPixel(uint16_t destOff, uint8_t color, uint16_t count)
+{
+	BEL_ST_EGAPlane_MemSet(g_sdlVidMem.egaGfx, destOff, color, count);
+	g_sdlDoRefreshGfxOutput = true;
+}
+
+void BE_ST_EGAXorGFXByteByPlaneMask(uint16_t destOff, uint8_t srcVal, uint16_t planeMask)
+{
+	g_sdlVidMem.egaGfx[destOff] ^= ((g_be_st_lookup_repeat[planeMask] & g_be_st_lookup_bitsmask[srcVal]));
 	g_sdlDoRefreshGfxOutput = true;
 }
 
@@ -1605,27 +2034,18 @@ void BE_ST_EGAOrGFXBits(uint16_t destOff, uint8_t srcVal, uint8_t bitsMask)
 void BE_ST_CGAUpdateGFXBufferFromWrappedMem(const uint8_t *segPtr, const uint8_t *offInSegPtr, uint16_t byteLineWidth)
 {
 	const uint8_t *endSegPtr = segPtr + 0x10000;
-	uint8_t *cgaHostPtr = g_sdlHostScrMem.cgaGfx, *cgaHostCachePtr = g_sdlHostScrMemCache.cgaGfx;
+	uint8_t *cgaHostPtr = g_sdlHostScrMem.cgaGfx;
 	// Remember this is a wrapped copy, offInSegPtr points inside a 65536-bytes long segment beginning at segPtr;
 	// But we still want to skip some bytes, assuming byteLineWidth sources bytes per line (picking 80 out of these)
-
 	int lineBytesLeft = byteLineWidth - GFX_TEX_WIDTH/4;
 	for (int line = 0, byteInLine; line < GFX_TEX_HEIGHT; ++line)
 	{
 		for (byteInLine = 0; byteInLine < GFX_TEX_WIDTH/4; ++byteInLine, ++offInSegPtr, offInSegPtr = (offInSegPtr == endSegPtr) ? segPtr : offInSegPtr)
 		{
-			*cgaHostPtr = ((*offInSegPtr) & 0xC0) >> 6;
-			g_sdlDoRefreshGfxOutput |= (*cgaHostPtr != *cgaHostCachePtr);
-			*(cgaHostCachePtr++) = *(cgaHostPtr++);
-			*cgaHostPtr = ((*offInSegPtr) & 0x30) >> 4;
-			g_sdlDoRefreshGfxOutput |= (*cgaHostPtr != *cgaHostCachePtr);
-			*(cgaHostCachePtr++) = *(cgaHostPtr++);
-			*cgaHostPtr = ((*offInSegPtr) & 0x0C) >> 2;
-			g_sdlDoRefreshGfxOutput |= (*cgaHostPtr != *cgaHostCachePtr);
-			*(cgaHostCachePtr++) = *(cgaHostPtr++);
-			*cgaHostPtr = ((*offInSegPtr) & 0x03);
-			g_sdlDoRefreshGfxOutput |= (*cgaHostPtr != *cgaHostCachePtr);
-			*(cgaHostCachePtr++) = *(cgaHostPtr++);
+			*cgaHostPtr++ = ((*offInSegPtr) & 0xC0) >> 6;
+			*cgaHostPtr++ = ((*offInSegPtr) & 0x30) >> 4;
+			*cgaHostPtr++ = ((*offInSegPtr) & 0x0C) >> 2;
+			*cgaHostPtr++ = ((*offInSegPtr) & 0x03);
 		}
 		offInSegPtr += lineBytesLeft;
 		if (offInSegPtr >= endSegPtr)
@@ -1633,6 +2053,8 @@ void BE_ST_CGAUpdateGFXBufferFromWrappedMem(const uint8_t *segPtr, const uint8_t
 			offInSegPtr = segPtr + (uint16_t)(offInSegPtr-segPtr);
 		}
 	}
+	g_sdlDoRefreshGfxOutput |= memcmp(g_sdlHostScrMemCache.cgaGfx, g_sdlHostScrMem.cgaGfx, sizeof(g_sdlHostScrMem.cgaGfx));
+	memcpy(g_sdlHostScrMemCache.cgaGfx, g_sdlHostScrMem.cgaGfx, sizeof(g_sdlHostScrMem.cgaGfx));
 }
 
 
@@ -1663,7 +2085,7 @@ void BE_ST_SetScreenMode(int mode)
 		memcpy(g_sdlEGACurrBGRAPaletteAndBorder, g_sdlEGABGRAScreenColors, sizeof(g_sdlEGABGRAScreenColors));
 		g_sdlEGACurrBGRAPaletteAndBorder[16] = g_sdlEGABGRAScreenColors[0];
 		g_sdlPelPanning = 0;
-		g_sdlLineWidth = 40;
+		g_sdlPixLineWidth = 8*40;
 		g_sdlSplitScreenLine = -1;
 		// HACK: Looks like this shouldn't be done if changing gfx->gfx
 		if (g_sdlScreenMode != 0xE)
@@ -1679,7 +2101,7 @@ void BE_ST_SetScreenMode(int mode)
 		memcpy(g_sdlEGACurrBGRAPaletteAndBorder, g_sdlEGABGRAScreenColors, sizeof(g_sdlEGABGRAScreenColors));
 		g_sdlEGACurrBGRAPaletteAndBorder[16] = g_sdlEGABGRAScreenColors[0];
 		g_sdlPelPanning = 0;
-		g_sdlLineWidth = 80;
+		g_sdlPixLineWidth = 8*80;
 		g_sdlSplitScreenLine = -1;
 		// HACK: Looks like this shouldn't be done if changing gfx->gfx
 		if (g_sdlScreenMode != 0xD)
@@ -1871,7 +2293,25 @@ static void BEL_ST_FinishHostDisplayUpdate(void)
 {
 	g_sdlForceGfxControlUiRefresh = false;
 
-	if (g_sdlShowControllerUI)
+	if (g_refKeenCfg.touchInputDebugging)
+	{
+		SDL_SetRenderDrawColor(g_sdlRenderer, 0xFF, 0x00, 0x00, 0xBF); // Includes some alpha
+		SDL_SetRenderDrawBlendMode(g_sdlRenderer, SDL_BLENDMODE_BLEND);
+		BESDLTrackedFinger *trackedFinger = g_sdlTrackedFingers;
+		for (int i = 0; i < nOfTrackedFingers; ++i, ++trackedFinger)
+		{
+			SDL_Rect rect = {trackedFinger->lastX-g_sdlDebugFingerRectSideLen/2, trackedFinger->lastY-g_sdlDebugFingerRectSideLen/2, g_sdlDebugFingerRectSideLen, g_sdlDebugFingerRectSideLen};
+			SDL_RenderFillRect(g_sdlRenderer, &rect);
+		}
+		SDL_SetRenderDrawBlendMode(g_sdlRenderer, SDL_BLENDMODE_NONE);
+	}
+
+	if (g_refKeenCfg.enableTouchInput && (g_sdlControllerMappingActualCurr->touchMappings != NULL)) // FIXME use a different state bool var?
+	{
+		for (int i = 0; i < g_sdlNumOfOnScreenTouchControls; ++i)
+			SDL_RenderCopy(g_sdlRenderer, g_sdlOnScreenTouchControlsTextures[i], NULL, &g_sdlOnScreenTouchControlsRects[i]);
+	}
+	if (g_sdlShowControllerUI || g_refKeenCfg.enableTouchInput)
 	{
 		if (g_sdlFaceButtonsAreShown)
 		{
@@ -1891,7 +2331,7 @@ static void BEL_ST_FinishHostDisplayUpdate(void)
 		}
 	}
 
-        SDL_RenderPresent(g_sdlRenderer);
+	SDL_RenderPresent(g_sdlRenderer);
 }
 
 
@@ -2005,56 +2445,37 @@ void BEL_ST_UpdateHostDisplay(void)
 				goto dorefresh;
 			return;
 		}
-		uint16_t currLineFirstByte = (g_sdlScreenStartAddress + g_sdlPelPanning/8) % 0x10000;
-		uint8_t panningWithinInByte = g_sdlPelPanning%8;
-		uint8_t *currPalPixPtr, *currPalPixCachePtr;
-		bool doUpdate = false;
-		for (int line = 0, col; line < GFX_TEX_HEIGHT; ++line)
+		uint32_t currLineFirstPixelNum = (8*g_sdlScreenStartAddress + g_sdlPelPanning) % 0x80000;
+		uint8_t *currPalPixPtr;
+		for (int line = 0; line < GFX_TEX_HEIGHT; ++line)
 		{
-			uint8_t currBitNum = 7-panningWithinInByte, currBitMask = 1<<currBitNum;
-			uint16_t currByte = currLineFirstByte;
 			currPalPixPtr = g_sdlHostScrMem.egaGfx + line*g_sdlTexWidth;
-			currPalPixCachePtr = g_sdlHostScrMemCache.egaGfx + line*g_sdlTexWidth;
-			for (col = 0; col < g_sdlTexWidth; ++col, ++currPalPixPtr, ++currPalPixCachePtr)
+			// REFKEEN - WARNING: Not checking if GFX_TEX_HEIGHT <= g_sdlPixLineWidth (but this isn't reproduced as of writing this)
+			int pixelsToEgaMemEnd = 0x80000-currLineFirstPixelNum;
+			if (g_sdlTexWidth <= pixelsToEgaMemEnd)
 			{
-				*currPalPixPtr = ((g_sdlVidMem.egaGfx[0][currByte]&currBitMask)>>currBitNum) |
-				                 (((g_sdlVidMem.egaGfx[1][currByte]&currBitMask)>>currBitNum)<<1) |
-				                 (((g_sdlVidMem.egaGfx[2][currByte]&currBitMask)>>currBitNum)<<2) |
-				                 (((g_sdlVidMem.egaGfx[3][currByte]&currBitMask)>>currBitNum)<<3);
-				doUpdate |= (*currPalPixPtr != *currPalPixCachePtr);
-				*currPalPixCachePtr = *currPalPixPtr;
-				if (!(1+col % 8*g_sdlLineWidth)) // Check if we need to re-scan line
-				{
-					currBitNum = 7-panningWithinInByte;
-					currBitMask = 1<<currBitNum;
-					currByte = currLineFirstByte;
-				}
-				else // Otherwise just update variables as usual
-				{
-					if (currBitNum == 0)
-					{
-						++currByte; // This is done mod 0x10000 (with an uint16_t)
-						currBitNum = 7;
-						currBitMask = 0x80;
-					}
-					else
-					{
-						--currBitNum;
-						currBitMask >>= 1;
-					}
-				}
+				memcpy(currPalPixPtr, (uint8_t *)g_sdlVidMem.egaGfx + currLineFirstPixelNum, g_sdlTexWidth);
+			}
+			else
+			{
+				memcpy(currPalPixPtr, (uint8_t *)g_sdlVidMem.egaGfx + currLineFirstPixelNum, pixelsToEgaMemEnd);
+				currPalPixPtr += pixelsToEgaMemEnd;
+				memcpy(currPalPixPtr, g_sdlVidMem.egaGfx, g_sdlTexWidth - pixelsToEgaMemEnd);
 			}
 
 			if (g_sdlSplitScreenLine == line)
 			{
-				currLineFirstByte = 0; // NEXT line begins split screen, NOT g_sdlSplitScreenLine
+				currLineFirstPixelNum = g_sdlPelPanning; // NEXT line begins split screen, NOT g_sdlSplitScreenLine
 			}
 			else
 			{
-				currLineFirstByte += g_sdlLineWidth;
-				currLineFirstByte %= 0x10000;
+				currLineFirstPixelNum += g_sdlPixLineWidth;
+				currLineFirstPixelNum %= 0x80000;
 			}
 		}
+
+		bool doUpdate = memcmp(g_sdlHostScrMemCache.egaGfx, g_sdlHostScrMem.egaGfx, sizeof(g_sdlHostScrMem.egaGfx));
+		memcpy(g_sdlHostScrMemCache.egaGfx, g_sdlHostScrMem.egaGfx, sizeof(g_sdlHostScrMem.egaGfx));
 		if (!doUpdate)
 		{
 			int paletteAndBorderEntry;
@@ -2089,10 +2510,12 @@ void BEL_ST_UpdateHostDisplay(void)
 	SDL_UnlockTexture(g_sdlTexture);
 
 dorefresh:
+
 	SDL_SetRenderDrawColor(g_sdlRenderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
 	SDL_RenderClear(g_sdlRenderer);
 	SDL_SetRenderDrawColor(g_sdlRenderer, (g_sdlEGACurrBGRAPaletteAndBorder[16]>>16)&0xFF, (g_sdlEGACurrBGRAPaletteAndBorder[16]>>8)&0xFF, g_sdlEGACurrBGRAPaletteAndBorder[16]&0xFF, SDL_ALPHA_OPAQUE);
 	SDL_RenderFillRect(g_sdlRenderer, &g_sdlAspectCorrectionBorderedRect);
+
 	if (g_sdlTargetTexture)
 	{
 		SDL_SetRenderTarget(g_sdlRenderer, g_sdlTargetTexture);

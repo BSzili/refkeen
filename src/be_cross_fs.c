@@ -19,6 +19,11 @@
 #error "FATAL ERROR: No Reflection port game macro is defined!"
 #endif
 
+// HACK - Adding a dependency on SDL2 for Android! (Used for external storage path)
+#ifdef REFKEEN_PLATFORM_ANDROID
+#include "SDL_system.h"
+#endif
+
 //#include "be_st.h" // For BE_ST_ExitWithErrorMsg
 
 #ifdef REFKEEN_PLATFORM_WINDOWS
@@ -359,7 +364,29 @@ void BE_Cross_PrepareAppPaths(void)
 		BEL_Cross_AddRootPathIfDir(path, "gog", "GOG Games (default)");
 #endif
 
-#ifdef REFKEEN_PLATFORM_UNIX
+#ifdef REFKEEN_PLATFORM_ANDROID
+	// HACK - Adding a dependency on SDL2 for Android!
+	const char *externalStoragePath = SDL_AndroidGetExternalStoragePath();
+	if (externalStoragePath && *externalStoragePath)
+	{
+		BEL_Cross_safeandfastctstringcopy(g_be_appDataPath, g_be_appDataPath+sizeof(g_be_appDataPath)/sizeof(TCHAR), externalStoragePath);
+		memcpy(g_be_appNewCfgPath, g_be_appDataPath, sizeof(g_be_appDataPath));
+		// HACK - We don't look at arguments set by the user, but then these are never sent on Android...
+	}
+
+	// FIXME - These environment variables don't seem to be shown in any
+	// official documentation for Android, but at least EXTERNAL_STORAGE
+	// appears to do the job, and they're simple to use from C/C++.
+	const char *primaryStorage = getenv("EXTERNAL_STORAGE");
+	if (primaryStorage && *primaryStorage)
+		BEL_Cross_AddRootPathIfDir(primaryStorage, "externalstorage", "Primary storage");
+	else
+		BE_Cross_LogMessage(BE_LOG_MSG_WARNING, "EXTERNAL_STORAGE environment variable is not properly defined.\n");
+	// Let's ignore SECONDARY_STORAGE for now, since we may get a colon-delimited list of paths
+	const char *externalSDCardStorage = getenv("EXTERNAL_SDCARD_STORAGE");
+	if (externalSDCardStorage && *externalSDCardStorage)
+		BEL_Cross_AddRootPathIfDir(externalSDCardStorage, "externalsdcardstorage", "External SD Card storage");
+#elif (defined REFKEEN_PLATFORM_UNIX)
 	const char *homeVar = getenv("HOME");
 	const char *envVar;
 
@@ -668,6 +695,7 @@ static const BE_GameFileDetails_T g_be_reqgameverfiles_catabyss113[] = {
 	{"CATABYSS.EXE", 82662, 0xbc3b015e},
 	{"EGAGRAPH.ABS", 336143, 0x3b2464a2},
 	{"GAMEMAPS.ABS", 20433, 0x97ddb354},
+	{"HELP.TXT", 15491, 0x7f8c4a59},
 	{"LAST.ABS", 1290, 0xc36ba646},
 	{"SHP01.ABS", 1376, 0xe04a6d1e},
 	{"SHP02.ABS", 15181, 0x0198b8f7},
@@ -716,8 +744,8 @@ static const BE_EmbeddedGameFileDetails_T g_be_embeddedgameverfiles_catabyss113[
 	{"AUDIODCT.ABS", 1024, 0xe9088011, 0x26f4c},
 	{"AUDIOHHD.ABS", 416, 0xfbfff495, 0x1bc10},
 	{"EGADICT.ABS", 1024, 0xbb760f1d, 0x2734c},
-	{"EGAHEAD.ABS", 1888, 0x58062b03, 0x1bdb0},
-	{"MTEMP.TMP", 848, 0x6517c97d, 0x1c510},
+	{"EGAHEAD.ABS", 1881, 0xe31e1c3b, 0x1bdb0},
+	{"MTEMP.TMP", 834, 0x5d9ccfb3, 0x1c510},
 	{0}
 };
 
@@ -738,6 +766,7 @@ static const BE_GameFileDetails_T g_be_reqgameverfiles_catabyss124[] = {
 	{"AUDIO.ABS", 6904, 0x462d2eb2},
 	{"EGAGRAPH.ABS", 335994, 0xfd9995ad},
 	{"GAMEMAPS.ABS", 20433, 0x97ddb354},
+	{"HELP.TXT", 15042, 0xc47ce06e},
 	{"SHP01.ABS", 1376, 0xe04a6d1e},
 	{"SHP02.ABS", 14912, 0xffc72620},
 	{"SHP03.ABS", 13186, 0x7b73bb7b},
@@ -1054,7 +1083,7 @@ static BE_FILE_T BEL_Cross_open_from_dir(const char *filename, bool isOverwriteR
 	return _tfopen(fullpath, _T("wb"));
 }
 
-// Returns 0 if not found, 1 if found by data mismatch detected, or 2 otherwise
+// Returns 0 if not found, 1 if found with some data mismatch, or 2 otherwise
 //
 // OPTIONAL ARGUMENT (used internally): outfullpath, if not NULL, should point to an out buffer which is BE_CROSS_PATH_LEN_BOUND chars long.
 static int BEL_Cross_CheckGameFileDetails(const BE_GameFileDetails_T *details, const TCHAR *searchdir, TCHAR *outfullpath)

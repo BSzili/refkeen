@@ -16,19 +16,30 @@ typedef enum BE_Log_Message_Class_T
 	BE_LOG_MSG_NORMAL, BE_LOG_MSG_WARNING, BE_LOG_MSG_ERROR
 } BE_Log_Message_Class_T;
 
+#define BE_Cross_TypedMax(T, x, y) ({T _x = (x), _y = (y); (_x > _y) ? _x : _y;})
+#define BE_Cross_TypedMin(T, x, y) ({T _x = (x), _y = (y); (_x < _y) ? _x : _y;})
+
 #define BE_Cross_Swap16(x) ((uint16_t)(((uint16_t)(x)<<8)|((uint16_t)(x)>>8)))
+
 #define BE_Cross_Swap32(x) ((uint32_t)(((uint32_t)(x)<<24)|(((uint32_t)(x)<<8)&0x00FF0000)|(((uint32_t)(x)>>8)&0x0000FF00)|((uint32_t)(x)>>24)))
+
+#define BE_Cross_Swap64(x) ((uint64_t)(((uint64_t)(x)<<56)|(((uint64_t)(x)<<40)&0x00FF000000000000UL)|(((uint64_t)(x)<<24)&0x0000FF0000000000UL)|(((uint64_t)(x)<<8)&0x000000FF00000000UL)| \
+                           (((uint64_t)(x)>>8)&0x00000000FF000000UL)|(((uint64_t)(x)>>24)&0x0000000000FF0000UL)|(((uint64_t)(x)>>40)&0x000000000000FF00UL)|((uint64_t)(x)>>56)))
 
 #ifdef REFKEEN_ARCH_LITTLE_ENDIAN
 #define BE_Cross_Swap16LE(x) (x)
 #define BE_Cross_Swap16BE(x) BE_Cross_Swap16(x)
 #define BE_Cross_Swap32LE(x) (x)
 #define BE_Cross_Swap32BE(x) BE_Cross_Swap32(x)
+#define BE_Cross_Swap64LE(x) (x)
+#define BE_Cross_Swap64BE(x) BE_Cross_Swap64(x)
 #else
 #define BE_Cross_Swap16LE(x) BE_Cross_Swap16(x)
 #define BE_Cross_Swap16BE(x) (x)
 #define BE_Cross_Swap32LE(x) BE_Cross_Swap32(x)
 #define BE_Cross_Swap32BE(x) (x)
+#define BE_Cross_Swap64LE(x) BE_Cross_Swap64(x)
+#define BE_Cross_Swap64BE(x) (x)
 #endif
 
 // Used for some resource definitions internally
@@ -286,7 +297,7 @@ size_t BE_Cross_write_booleans_To16LEBuffer(BE_FILE_T fp, const bool *ptr, size_
 void BE_Cross_Wrapped_Add(uint8_t *segPtr, uint8_t **offInSegPtrPtr, uint16_t count);
 // Same as above but with count == 1 forced
 void BE_Cross_Wrapped_Inc(uint8_t *segPtr, uint8_t **offInSegPtrPtr);
-// Similar; Used for copying from linear buffer to cyclic 10000 bytes long "segment"
+// Similar; Used for copying from linear buffer to cyclic 0x10000 bytes long "segment"
 void BE_Cross_LinearToWrapped_MemCopy(uint8_t *segDstPtr, uint8_t *offDstPtr, const uint8_t *linearSrc, uint16_t num);
 // Vice-versa
 void BE_Cross_WrappedToLinear_MemCopy(uint8_t *linearDst, const uint8_t *segSrcPtr, const uint8_t *offSrcPtr, uint16_t num);
