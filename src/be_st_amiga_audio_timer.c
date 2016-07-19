@@ -80,7 +80,8 @@ void BE_ST_ShutdownAudio(void);
 
 void BE_ST_InitAudio(void)
 {
-	UBYTE whichannel[] = {1, 2, 4, 8};
+	//UBYTE whichannel[] = {1, 2, 4, 8};
+	UBYTE whichannel[] = {3, 5, 10, 12};
 
 	g_sdlTimeCount = 0;
 	g_sdlEmulatedOPLChipReady = false;
