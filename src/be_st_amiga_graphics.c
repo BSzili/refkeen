@@ -15,13 +15,21 @@
 #define PAGE1START		0x900
 #define PAGE2START		0x2000
 #define	PAGE3START		0x3700
+#define VIEWWIDTH (33*8)
+#define VIEWHEIGHT	(18*8)
 #else
 #define STATUSLEN			0xc80
 #define PAGELEN			0x1700
 #define PAGE1START	STATUSLEN
 #define PAGE2START	(PAGE1START+PAGELEN)
 #define PAGE3START	(PAGE2START+PAGELEN)
+#define VIEWWIDTH (40*8)
+#define VIEWHEIGHT	(15*8)
 #endif
+#define VIEWX		0
+#define VIEWY		0 
+#define VIEWXH		(VIEWX+VIEWWIDTH-1)
+#define VIEWYH		(VIEWY+VIEWHEIGHT-1)
 
 #define GFX_TEX_WIDTH 320
 #define GFX_TEX_HEIGHT 200
@@ -86,6 +94,8 @@ static int g_sdlTxtColor = 7, g_sdlTxtBackground = 0;
 extern const uint8_t g_vga_8x16TextFont[256*8*16];
 #endif
 static UWORD *g_pointerMem = NULL;
+/*static*/unsigned char *g_chunkyBuffer = NULL;
+//uint8_t g_chunkyBuffer[VIEWWIDTH * VIEWHEIGHT];
 
 void BEL_ST_UpdateHostDisplay(void);
 void BE_ST_MarkGfxForUpdate(void)
@@ -260,6 +270,7 @@ void BE_ST_InitGfx(void)
 	}
 #endif
 	g_pointerMem = (UWORD *)AllocVec(16 * 16, MEMF_CLEAR | MEMF_CHIP);
+	g_chunkyBuffer = (UBYTE *)AllocVec(VIEWWIDTH * VIEWHEIGHT, MEMF_CLEAR | MEMF_FAST);
 
 	BE_ST_SetScreenMode(3);
 }
@@ -272,6 +283,7 @@ void BE_ST_ShutdownGfx(void)
 	FreeVec(g_vgaFont);
 #endif
 	FreeVec(g_pointerMem);
+	FreeVec(g_chunkyBuffer);
 }
 
 static int BEL_ST_AddressToBitMap(uint16_t crtc)
@@ -294,6 +306,40 @@ static int BEL_ST_AddressToBitMap(uint16_t crtc)
 	}
 
 	return curbm;
+}
+
+void BE_ST_DebugText(int x, int y, const char *fmt, ...)
+{
+	UBYTE buffer[256];
+	struct IntuiText WinText = {BLOCKPEN, DETAILPEN, JAM2, 0, 0, NULL, NULL, NULL};
+	va_list ap;
+	struct RastPort rp;
+
+	WinText.IText = buffer;
+
+	va_start(ap, fmt); 
+	vsnprintf(buffer, sizeof(buffer), fmt, ap);
+	va_end(ap);
+
+	//PrintIText(&g_amigaScreen->RastPort, &WinText, 0, GFX_TEX_HEIGHT);
+	InitRastPort(&rp);
+	rp.BitMap = &g_screenBitMaps[0];
+	PrintIText(&rp, &WinText, x, y);
+}
+
+void BE_ST_DebugColor(uint16_t color)
+{
+	custom.color[0] = color;
+}
+
+void BE_ST_DrawChunkyBuffer(uint16_t screenpage)
+{
+	{
+		struct RastPort rp;
+		InitRastPort(&rp);
+		rp.BitMap = &g_screenBitMaps[screenpage+1];
+		WriteChunkyPixels(&rp, VIEWX, VIEWY, VIEWXH, VIEWYH, g_chunkyBuffer, VIEWWIDTH);
+	}
 }
 
 void BE_ST_SetScreenStartAddress(uint16_t crtc)
@@ -423,6 +469,30 @@ void BE_ST_EGASetSplitScreen(int16_t linenum)
 	{
 		BEL_ST_FreeCopList();
 	}
+}
+
+void BE_ST_EGAMaskBlock(uint16_t destOff, uint8_t *src, uint16_t linedelta, uint16_t width, uint16_t height, uint16_t planesize)
+{
+	uint8_t *srcPtr = src;
+	uint16_t egaDestOff = destOff; // start at same place in all planes
+	uint16_t linesLeft = height; // scan lines to draw
+	// draw
+	do
+	{
+		uint16_t colsLeft = width;
+		do
+		{
+			g_sdlVidMem->egaGfx[0][egaDestOff] = (g_sdlVidMem->egaGfx[0][egaDestOff] & (*srcPtr)) | srcPtr[planesize*1];
+			g_sdlVidMem->egaGfx[1][egaDestOff] = (g_sdlVidMem->egaGfx[1][egaDestOff] & (*srcPtr)) | srcPtr[planesize*2];
+			g_sdlVidMem->egaGfx[2][egaDestOff] = (g_sdlVidMem->egaGfx[2][egaDestOff] & (*srcPtr)) | srcPtr[planesize*3];
+			g_sdlVidMem->egaGfx[3][egaDestOff] = (g_sdlVidMem->egaGfx[3][egaDestOff] & (*srcPtr)) | srcPtr[planesize*4];
+			++srcPtr;
+			++egaDestOff;
+			--colsLeft;
+		} while (colsLeft);
+		egaDestOff += linedelta;
+		--linesLeft;
+	} while (linesLeft);
 }
 
 void BE_ST_EGAUpdateGFXByte(uint16_t destOff, uint8_t srcVal, uint16_t planeMask)
@@ -561,6 +631,18 @@ void BE_ST_EGAUpdateGFXBitsScrToScr(uint16_t destOff, uint16_t srcOff, uint8_t b
 
 void BE_ST_EGAUpdateGFXBufferScrToScr(uint16_t destOff, uint16_t srcOff, uint16_t num)
 {
+	uint16_t srcBytesToEnd = 0x10000-srcOff;
+	uint16_t dstBytesToEnd = 0x10000-destOff;
+	if (num <= srcBytesToEnd && num <= dstBytesToEnd)
+	{
+		// fast(?) linear case
+		memcpy(g_sdlVidMem->egaGfx[0]+destOff, g_sdlVidMem->egaGfx[0]+srcOff, num);
+		memcpy(g_sdlVidMem->egaGfx[1]+destOff, g_sdlVidMem->egaGfx[1]+srcOff, num);
+		memcpy(g_sdlVidMem->egaGfx[2]+destOff, g_sdlVidMem->egaGfx[2]+srcOff, num);
+		memcpy(g_sdlVidMem->egaGfx[3]+destOff, g_sdlVidMem->egaGfx[3]+srcOff, num);
+		return;
+	}
+
 	BEL_ST_EGAPlaneToEGAPlane_MemCopy(g_sdlVidMem->egaGfx[0], destOff, srcOff, num);
 	BEL_ST_EGAPlaneToEGAPlane_MemCopy(g_sdlVidMem->egaGfx[1], destOff, srcOff, num);
 	BEL_ST_EGAPlaneToEGAPlane_MemCopy(g_sdlVidMem->egaGfx[2], destOff, srcOff, num);

@@ -1765,6 +1765,11 @@ void ClearScreen (void)
 	// clear the screen
 	//
 
+#ifdef __AMIGA__
+	extern uint8_t *g_chunkyBuffer;
+	memset(g_chunkyBuffer, (id0_byte_t)topcolor, VIEWWIDTH*(CENTERY+1));
+	memset(&g_chunkyBuffer[VIEWWIDTH*(CENTERY+1)], (id0_byte_t)bottomcolor, VIEWWIDTH*(CENTERY+1));
+#else
 	id0_unsigned_t egaDestOff = bufferofs + ((SCREENWIDTH*VIEWY)+(VIEWX/8));
 	// top loop
 	for (int loopVar = CENTERY+1; loopVar; --loopVar)
@@ -1786,6 +1791,7 @@ void ClearScreen (void)
 		// no need to add (40-VIEWWIDTH/8) i.e., 0 modulo
 		egaDestOff += ((VIEWWIDTH/16)*2+1) /*+ (40-VIEWWIDTH/8)*/;
 	}
+#endif
 
 #if USE_STRIPS
 	}
@@ -2284,6 +2290,11 @@ asm	rep stosw
 
 	EGAWRITEMODE(0);
 	EGABITMASK(0xff);
+
+#ifdef __AMIGA__
+	extern void BE_ST_DrawChunkyBuffer(uint16_t screenpage);
+	BE_ST_DrawChunkyBuffer(screenpage);
+#endif
 
 //
 // draw hand

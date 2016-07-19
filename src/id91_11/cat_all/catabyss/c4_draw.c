@@ -1396,6 +1396,11 @@ void ClearScreen (void)
 	// clear the screen
 	//
 
+#ifdef __AMIGA__
+	extern uint8_t *g_chunkyBuffer;
+	memset(g_chunkyBuffer, (id0_byte_t)topcolor, VIEWWIDTH*(CENTERY+1));
+	memset(&g_chunkyBuffer[VIEWWIDTH*(CENTERY+1)], (id0_byte_t)bottomcolor, VIEWWIDTH*(CENTERY+1));
+#else
 	id0_unsigned_t egaDestOff = bufferofs + ((SCREENWIDTH*VIEWY)+(VIEWX/8));
 	// top loop
 	for (int loopVar = CENTERY+1; loopVar; --loopVar)
@@ -1415,6 +1420,7 @@ void ClearScreen (void)
 		BE_ST_EGAUpdateGFXPixel4bppRepeatedly(egaDestOff, (id0_byte_t)bottomcolor, (VIEWWIDTH/16)*2+1, 0xFF);
 		egaDestOff += ((VIEWWIDTH/16)*2+1) + (40-VIEWWIDTH/8);
 	}
+#endif
 #if 0
 asm	mov	dx,GC_INDEX
 asm	mov	ax,GC_MODE + 256*2		// read mode 0, write mode 2
@@ -1860,6 +1866,10 @@ asm	rep stosw
 	EGAWRITEMODE(0);
 	EGABITMASK(0xff);
 
+#ifdef __AMIGA__
+	extern void BE_ST_DrawChunkyBuffer(uint16_t screenpage);
+	BE_ST_DrawChunkyBuffer(screenpage);
+#endif
 //
 // draw hand
 //

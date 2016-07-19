@@ -747,6 +747,12 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 //
 // draw lines
 //
+#ifdef __AMIGA__
+	id0_long_t		step;
+	id0_int_t			toppix;
+	step = ((id0_long_t)scale<<17)/64;
+	toppix = (viewheight-2*scale)/2;
+#endif
 	do		// while (1)
 	{
 	//
@@ -761,6 +767,61 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 		if ((id0_unsigned_t)longtemp == badcodeptr)
 			Quit ("ScaleShape: codehandle past end!");
 #endif
+#ifdef __AMIGA__
+		const id0_byte_t *srcGfxPtr = (id0_byte_t *)compshape;
+		const id0_byte_t *codePtr = (id0_byte_t *)compshape + (*codehandle);
+		const id0_byte_t *currCodePtr = codePtr;
+
+		while (*currCodePtr != 0xcb)
+		{
+			id0_int_t lastpix = (*(id0_int_t *)(currCodePtr+2))/2;
+			id0_int_t firstpix = (*(id0_int_t *)(currCodePtr+10))/2;
+			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_int_t *)(currCodePtr+19));
+			{
+				extern uint8_t *g_chunkyBuffer;
+				//id0_long_t		step;
+				id0_unsigned_t	src;
+				id0_int_t			startpix,endpix/*,toppix*/;
+
+				// from notstiller's port
+				/*
+				step = ((id0_long_t)scale<<17)/64;
+				toppix = (viewheight-2*scale)/2;
+				*/
+
+				for (src=firstpix;src<lastpix;src++)
+				{
+					startpix = (src*step)>>16;
+					endpix = ((src+1)*step)>>16;
+
+					if (startpix == endpix)
+						continue;
+
+					endpix += toppix;
+
+					if (endpix < 0)
+						continue;
+
+					if (endpix > VIEWYH+1)
+						endpix = VIEWYH+1;
+
+					startpix += toppix;
+
+					if (startpix >= VIEWYH+1)
+						break;
+
+					if (startpix < 0)
+						startpix = 0;
+
+					for (;startpix<endpix;startpix++)
+						//memset(g_chunkyBuffer+startpix*VIEWWIDTH+pixel, srcPtr[src], pixwidth);
+						for (id0_unsigned_t i=0; i<pixwidth; i++)
+							g_chunkyBuffer[startpix*VIEWWIDTH+pixel+i] = srcPtr[src];
+				}
+			}
+			currCodePtr += 29;
+		}
+#else
 		id0_unsigned_t egaDestOff = ((id0_unsigned_t)pixel>>3) + bufferofs;
 		// scale the line of pixels
 		ExecuteCompShape((id0_byte_t *)compshape + (*codehandle), (id0_byte_t *)comptable, egaDestOff, (id0_byte_t *)compshape, bitmasks1[pixel&7][pixwidth-1]);
@@ -833,6 +894,7 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 	// advance to the next drawn line
 	//
 nosecond:;
+#endif
 #endif
 		if ( (pixel+=pixwidth) == rightclip )
 		{

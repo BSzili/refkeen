@@ -297,6 +297,10 @@ void VW_MaskBlock(memptr segm,id0_unsigned_t ofs,id0_unsigned_t dest,
 	planemask = 1;
 	planenum = 0;
 	linedelta = linewidth-wide; // amount to add after drawing each line
+#ifdef __AMIGA__
+	extern void BE_ST_EGAMaskBlock(uint16_t destOff, uint8_t *src, uint16_t linedelta, uint16_t width, uint16_t height, uint16_t planesize);
+	BE_ST_EGAMaskBlock(dest, (id0_byte_t *)segm + ofs, linedelta, wide, height, planesize);
+#else
 	id0_unsigned_t dataLoc = planesize;
 	do
 	{
@@ -322,6 +326,7 @@ void VW_MaskBlock(memptr segm,id0_unsigned_t ofs,id0_unsigned_t dest,
 		++planenum;
 		planemask <<= 1; // shift plane mask over for next plane
 	} while (planemask != 0x10); // done all four planes?
+#endif
 }
 
 #if 0
