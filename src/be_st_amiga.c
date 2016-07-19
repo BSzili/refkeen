@@ -14,6 +14,7 @@
 
 #include "be_cross.h"
 #include "be_st.h"
+#include "be_gamever.h"
 
 #define BE_ST_MAXJOYSTICKS 8
 #define BE_ST_EMU_JOYSTICK_RANGEMAX 5000 // id_in.c MaxJoyValue
@@ -344,8 +345,9 @@ void BE_ST_ShutdownAll(void)
 
 void BE_ST_HandleExit(int status)
 {
-#ifdef REFKEEN_VER_CATABYSS_SHAR_ALL
-	BE_ST_BiosScanCode(0);
+#ifdef REFKEEN_VER_CATABYSS
+	if (refkeen_current_gamever == BE_GAMEVER_CATABYSS113)
+		BE_ST_BiosScanCode(0);
 #endif
 	BE_ST_ShutdownAll();
 	exit(0);
