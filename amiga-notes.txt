@@ -78,6 +78,43 @@ cat3d_exe_main
 							BE_ST_EGAUpdateGFXByte
 							BE_ST_EGAFetchGFXByte
 
+status bar
+cat3d_exe_main
+	GameLoop
+		DrawPlayScreen
+			RedrawStatusWindow
+				DrawLevelNumber
+					VW_Bar
+						BE_ST_EGAUpdateGFXPixel4bppRepeatedly
+						BE_ST_EGAUpdateGFXPixel4bpp
+					US_PrintUnsigned
+						US_Print
+							VWB_DrawPropString
+								VW_DrawPropString
+									VWL_XORBuffer
+										BE_ST_EGAXorGFXByte
+								VW_MarkUpdateBlock
+				DrawChar
+					BE_ST_EGAUpdateGFXByteScrToScr
+				AddPoints
+					DrawChar
+						BE_ST_EGAUpdateGFXByteScrToScr
+				DrawBars
+					VW_Bar
+						BE_ST_EGAUpdateGFXPixel4bppRepeatedly
+						BE_ST_EGAUpdateGFXPixel4bpp
+					BE_ST_EGAUpdateGFXBufferScrToScr
+
+T_Player
+	DrawText
+	DrawCompass
+		LatchDrawPic
+			BE_ST_EGAUpdateGFXBufferScrToScr
+
+PostFullDisplay
+PlayLoop
+GameLoop
+...
 RedrawStatusWindow
 	DrawNum
 		DrawChar
@@ -93,13 +130,48 @@ RedrawStatusWindow
 			BE_ST_EGAUpdateGFXBufferScrToScr
 		RadarBlip
 			BE_ST_EGAUpdateGFXPixel4bpp
-		DrawNSEWIcons
+	DrawNSEWIcons
+		VWB_DrawSprite
+			VW_MarkUpdateBlock
 			VW_MaskBlock
 				BE_ST_EGAUpdateGFXByte
 				BE_ST_EGAFetchGFXByte
 	DrawGems
 		LatchDrawPic
 			BE_ST_EGAUpdateGFXBufferScrToScr
+	DrawScrolls
+		VW_Bar
+			BE_ST_EGAUpdateGFXPixel4bppRepeatedly
+			BE_ST_EGAUpdateGFXPixel4bpp
+		DrawChar
+			BE_ST_EGAUpdateGFXByteScrToScr
+
+T_Player
+	DrawText
+		DisplayMsg
+			VW_Bar
+			US_CPrintLine
+				USL_DrawString
+					VWB_DrawPropString
+	DrawHealth-
+	DrawFreezeTime
+		DrawNum
+			DrawChar
+				...
+	DrawRadar
+	DrawNSEWIcons+
+	DrawGems
+
+
+VW_ClearVideo
+	BE_ST_EGAUpdateGFXPixel4bppRepeatedly
+
+VW_Hlin
+	BE_ST_EGAUpdateGFXPixel4bppRepeatedly
+
+VW_Bar
+	BE_ST_EGAUpdateGFXPixel4bppRepeatedly
+	BE_ST_EGAUpdateGFXPixel4bpp
 
 // drawing functions
 void BE_ST_EGAUpdateGFXByte(uint16_t destOff, uint8_t srcVal, uint16_t planeMask)
@@ -197,3 +269,66 @@ xl, xh, yl, yh OK
 	 
 size
 	MINDIST
+
+IN_Startup
+	INL_StartJoy
+		IN_GetJoyAbs
+			BE_ST_GetJoyAbs
+		IN_SetupJoy
+			INL_SetJoyScale
+
+IN_ReadCursor
+IN_GetJoyButtonsDB
+	INL_GetJoyButtons
+		BE_ST_GetJoyButtons
+
+JoysPresent
+ctrl_Joystick1 = ctrl_Joystick,ctrl_Joystick2, 
+JoystickCalibrated
+ControlTypeUsed
+
+RefKeen_PrepareAltControllerScheme
+ g_beStControllerMappingDebugKeys
+ g_refKeenCfg
+
+chunky wall
+
+Target->Width
+VIEWXH+1
+
+Target->Height
+VIEWYH+1
+
+ScaleWalls
+SPG_ScaleWalls
+
+chunky shape
+
+int ColorKey
+const	id0_byte_t		BACKGROUNDPIX	=   5;
+
+shape = shapedirectory[farthest->state->shapenum-FIRSTSCALEPIC];
+
+DeplanePic (picnum); -> spotvis
+shapesize[scnum] = BuildCompShape (&shapedirectory[scnum]);
+
+void ExecuteCompScale(const id0_byte_t *codePtr, id0_unsigned_t egaDestOff, const id0_byte_t *srcPtr, id0_byte_t mask)
+ExecuteCompScale(comptablebuff + *(id0_int_t *)(comptablebuff+(*(id0_int_t *)(currCodePtr+10))), egaDestOff, srcGfxPtr+(*(id0_int_t *)(currCodePtr+19)), mask);
+
+ExecuteCompShape((id0_byte_t *)compshape + (*codehandle), (id0_byte_t *)comptable, egaDestOff, (id0_byte_t *)compshape, bitmasks1[pixel&7][pixwidth-1]);
+static void ExecuteCompShape(const id0_byte_t *codePtr, id0_byte_t *comptablebuff, id0_unsigned_t egaDestOff, const id0_byte_t *srcGfxPtr, id0_byte_t mask)
+id0_byte_t *scalerFarRetPtr = comptablebuff + *(id0_int_t *)(comptablebuff+(*(id0_int_t *)(currCodePtr+2)));
+			// 2
+			*code++ = 0x8b;		// mov bx,[lastpix*2]
+			*code++ = 0x1e;
+			*((id0_unsigned_t id0_far *)code)++ = lastpix*2;
+
+comptablebuff + *(id0_int_t *)(comptablebuff+(*(id0_int_t *)(currCodePtr+10)))
+			// 10
+			*code++ = 0xa1;		// mov ax,[firstpix*2]	/*************
+			*((id0_unsigned_t id0_far *)code)++ = firstpix*2;
+
+srcGfxPtr+(*(id0_int_t *)(currCodePtr+19))
+			// 19
+			*code++ = 0xbe;		// mov si,OFFSET pixelofs-firstpixel
+			*((id0_unsigned_t id0_far *)code)++ = pixelofs-firstpix;
