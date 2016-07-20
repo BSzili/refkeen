@@ -153,7 +153,7 @@ static void BEL_ST_PrepareBitmap(struct BitMap *BM, uint16_t firstByte)
 
 static void BEL_ST_CloseScreen(void)
 {
-	bug("%s()\n", __FUNCTION__);
+	D(bug("%s()\n", __FUNCTION__));
 
 	if (g_amigaWindow)
 	{
@@ -204,7 +204,7 @@ static BOOL BEL_ST_ReopenScreen(void)
 		NULL // CustomBitMap
 	};
 
-	bug("%s()\n", __FUNCTION__);
+	D(bug("%s()\n", __FUNCTION__));
 
 	BEL_ST_CloseScreen();
 
@@ -381,7 +381,7 @@ void BE_ST_SetBorderColor(uint8_t color)
 
 void BE_ST_EGASetPaletteAndBorder(const uint8_t *palette)
 {
-	bug("%s(%p)\n", __FUNCTION__, palette);
+	D(bug("%s(%p)\n", __FUNCTION__, palette));
 
 	BEL_ST_SetPalette(16, 0, palette);
 	BE_ST_SetBorderColor(palette[16]);
@@ -459,7 +459,7 @@ void BE_ST_EGASetSplitScreen(int16_t linenum)
 	else
 		g_sdlSplitScreenLine = linenum;
 
-	bug("g_sdlSplitScreenLine %d\n", g_sdlSplitScreenLine);
+	D(bug("g_sdlSplitScreenLine %d\n", g_sdlSplitScreenLine));
 
 	if (g_sdlSplitScreenLine > 0)
 	{
@@ -706,7 +706,7 @@ void BE_ST_EGAXorGFXByteByPlaneMask(uint16_t destOff, uint8_t srcVal, uint16_t p
 
 void BE_ST_SetScreenMode(int mode)
 {
-	bug("%s(%x)\n", __FUNCTION__, mode);
+	D(bug("%s(%x)\n", __FUNCTION__, mode));
 
 	if (g_sdlScreenMode == mode)
 		return;

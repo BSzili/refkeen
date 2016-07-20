@@ -1,20 +1,12 @@
 VERDIRNAME=catapoc
 
-DEBUG=1
-BUILDASCPP=0
+DEBUG=0
 BINPREFIX=m68k-amigaos-
 
-ifeq ($(BUILDASCPP), 1)
-	CXX=$(BINPREFIX)g++
-else
-	CXX=$(BINPREFIX)gcc
-endif
+CXX=$(BINPREFIX)gcc
 
 STRIPBIN=$(BINPREFIX)strip
-WINDRESBIN=$(BINPREFIX)windres
-SDLCONFIG=sdl2-config
 SRC=.
-RSRC=../../../../rsrc
 C3DCOMMONSRC=..
 CATLATECOMMONSRC=../cat_late
 IDSRC=../..
@@ -82,27 +74,16 @@ INTCXXFLAGS=-I$(SRC) -I$(C3DCOMMONSRC) -I$(CATLATECOMMONSRC) -I$(IDSRC) -I$(EXTS
 EXENAME=reflection-catapoc
 
 ifeq ($(DEBUG),1)
-	INTCXXFLAGS+= -ggdb -ftrapv -fstack-check -DREFKEEN_CONFIG_DEBUG
+	INTCXXFLAGS+= -ggdb -ftrapv -fstack-check -DREFKEEN_CONFIG_DEBUG -DDEBUG
 	CXXOPT=
 else
 	CXXOPT=-O2
 endif
 
-INTCXXFLAGS+= $(CXXOPT) -Wall -Wno-missing-braces -Wno-switch -Wno-parentheses -m68020 -msoft-float
-#We need -lm for dbopl
-INTLDFLAGS= -lm -noixemul -ldebug
-
-ifeq ($(BUILDASCPP), 0)
-	INTCXXFLAGS+= -std=c99
-endif
-
-RES_PATH=$(OBJ)/$(EXENAME).res
-
-ifeq ($(PLATFORM), WINDOWS)
-	EXE_EXT=.exe
-	OBJECTS+= $(RES_PATH)
-	INTCXXFLAGS+= -mno-ms-bitfields #To make __attribute__((__packed__)) work...
-	INTLDFLAGS+= -lshlwapi #We need this for registry entry retrieval
+INTCXXFLAGS+= $(CXXOPT) -Wall -Wno-missing-braces -Wno-switch -Wno-parentheses -m68020 -msoft-float -std=c99
+INTLDFLAGS= -lm -noixemul
+ifeq ($(DEBUG),1)
+	INTLDFLAGS+= -ldebug
 endif
 
 EXE_PATH=$(BESRC)/$(EXENAME)$(EXE_EXT)
@@ -119,13 +100,7 @@ ifeq ($(DEBUG),0)
 	$(STRIPBIN) $(EXE_PATH)
 endif
 
-$(RES_PATH): $(RSRC)/reflection-kdreams.rc
-	$(WINDRESBIN) $< -O coff -o $@
-
 $(BEOBJ)/crc32.o: $(BESRC)/crc32/crc32.c | $(BEOBJ)
-	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
-
-$(BEOBJ)/dbopl.o: $(BESRC)/opl/dbopl.c | $(BEOBJ)
 	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
 
 $(BEOBJ)/unlzexe.o: $(BESRC)/unlzexe/unlzexe.c | $(BEOBJ)
