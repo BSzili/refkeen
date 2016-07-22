@@ -2,6 +2,7 @@
 //#include "SDL.h"
 #include <graphics/gfxmacros.h>
 #include <graphics/videocontrol.h>
+#include <exec/execbase.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/exec.h>
@@ -332,14 +333,26 @@ void BE_ST_DebugColor(uint16_t color)
 	custom.color[0] = color;
 }
 
+#ifdef KALMS_C2P
+extern void c2p1x1_4_c5_bm(
+	register WORD chunkyx __asm("d0"),
+	register WORD chunkyy __asm("d1"),
+	register WORD offsx __asm("d2"),
+	register WORD offsy __asm("d3"),
+	register APTR chunkyscreen __asm("a0"),
+	register struct BitMap *bitmap __asm("a1"));
+#endif
+
 void BE_ST_DrawChunkyBuffer(uint16_t screenpage)
 {
-	{
-		struct RastPort rp;
-		InitRastPort(&rp);
-		rp.BitMap = &g_screenBitMaps[screenpage+1];
-		WriteChunkyPixels(&rp, VIEWX, VIEWY, VIEWXH, VIEWYH, g_chunkyBuffer, VIEWWIDTH);
-	}
+#ifdef KALMS_C2P
+	c2p1x1_4_c5_bm(VIEWWIDTH, VIEWHEIGHT, VIEWX, VIEWY, g_chunkyBuffer, &g_screenBitMaps[screenpage+1]);
+#else
+	struct RastPort rp;
+	InitRastPort(&rp);
+	rp.BitMap = &g_screenBitMaps[screenpage+1];
+	WriteChunkyPixels(&rp, VIEWX, VIEWY, VIEWXH, VIEWYH, g_chunkyBuffer, VIEWWIDTH);
+#endif
 }
 
 void BE_ST_SetScreenStartAddress(uint16_t crtc)
