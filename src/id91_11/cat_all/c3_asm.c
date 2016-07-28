@@ -270,10 +270,22 @@ void ScaleWalls(void)
 			if (startpix < 0)
 				startpix = 0;
 
+#if 1
+			uint8_t *destPtr = &g_chunkyBuffer[colNum + startpix*VIEWWIDTH];
+
+			for (;startpix<endpix;startpix++)
+			{
+				for (id0_unsigned_t i=0; i<wallwidth[colNum]; i++)
+					destPtr[i] = wallSrcPtr[src];
+
+				destPtr += VIEWWIDTH;
+			}
+#else
 			for (;startpix<endpix;startpix++)
 				//memset(g_chunkyBuffer+startpix*VIEWWIDTH+colNum, wallSrcPtr[src], wallwidth[colNum]);
 				for (id0_unsigned_t i=0; i<wallwidth[colNum]; i++)
 					g_chunkyBuffer[startpix*VIEWWIDTH+colNum+i] = wallSrcPtr[src];
+#endif
 		}
 #else
 		id0_unsigned_t egaDestOff = screenbyte[colNum] + bufferofs;

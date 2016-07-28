@@ -777,6 +777,7 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 			id0_int_t lastpix = (*(id0_int_t *)(currCodePtr+2))/2;
 			id0_int_t firstpix = (*(id0_int_t *)(currCodePtr+10))/2;
 			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_int_t *)(currCodePtr+19));
+
 			{
 				extern uint8_t *g_chunkyBuffer;
 				//id0_long_t		step;
@@ -813,10 +814,22 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 					if (startpix < 0)
 						startpix = 0;
 
+#if 1
+					uint8_t *destPtr = &g_chunkyBuffer[pixel + startpix*VIEWWIDTH];
+
+					for (;startpix<endpix;startpix++)
+					{
+						for (id0_unsigned_t i=0; i<pixwidth; i++)
+							destPtr[i] = srcPtr[src];
+
+						destPtr += VIEWWIDTH;
+					}
+#else
 					for (;startpix<endpix;startpix++)
 						//memset(g_chunkyBuffer+startpix*VIEWWIDTH+pixel, srcPtr[src], pixwidth);
 						for (id0_unsigned_t i=0; i<pixwidth; i++)
 							g_chunkyBuffer[startpix*VIEWWIDTH+pixel+i] = srcPtr[src];
+#endif
 				}
 			}
 			currCodePtr += 29;
