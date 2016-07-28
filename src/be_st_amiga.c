@@ -102,12 +102,12 @@ const emulatedDOSKeyEvent sdlKeyMappings[128] = {
 	{false,  BE_ST_SC_L},
 	{false,  BE_ST_SC_SEMICOLON},
 	{false,  BE_ST_SC_QUOTE},
-	emptyDOSKeyEvent, // key next to Enter
+	emptyDOSKeyEvent, // international key next to Enter
 	emptyDOSKeyEvent,
 	{false,  BE_ST_SC_KP_4},
 	{false,  BE_ST_SC_KP_5},
 	{false,  BE_ST_SC_KP_6},
-	{false,  BE_ST_SC_LESSTHAN},
+	{false,  BE_ST_SC_LESSTHAN}, // international key between the left Shift and Z
 	{false,  BE_ST_SC_Z},
 	{false,  BE_ST_SC_X},
 	{false,  BE_ST_SC_C},
