@@ -2,8 +2,10 @@ VERDIRNAME=catapoc
 
 DEBUG=0
 BINPREFIX=m68k-amigaos-
+KALMS_C2P=1
 
 CXX=$(BINPREFIX)gcc
+AS=vasm -Faout
 
 STRIPBIN=$(BINPREFIX)strip
 SRC=.
@@ -80,6 +82,11 @@ else
 	CXXOPT=-O2
 endif
 
+ifeq ($(KALMS_C2P),1)
+INTCXXFLAGS+= -DKALMS_C2P
+BEOBJECTS+=$(BEOBJ)/c2p1x1_4_c5_bm.o
+endif
+
 INTCXXFLAGS+= $(CXXOPT) -Wall -Wno-missing-braces -Wno-switch -Wno-parentheses -m68020 -msoft-float -std=c99
 INTLDFLAGS= -lm -noixemul
 ifeq ($(DEBUG),1)
@@ -121,6 +128,9 @@ $(OBJ)/%.o: $(C3DCOMMONSRC)/%.c | $(OBJ)
 
 $(OBJ)/%.o: $(SRC)/%.c | $(OBJ)
 	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
+
+$(BEOBJ)/%.o: $(BESRC)/%.s $(BEOBJ)
+	$(AS) $< -o $@
 
 $(EXTOBJ): | $(OBJ)
 	-mkdir $(EXTOBJ)
