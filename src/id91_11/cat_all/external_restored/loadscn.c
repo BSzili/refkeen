@@ -83,8 +83,10 @@ void id0_loadscn_exe_main (void)
 		TrashProg("ERROR : Can't load image.");
 	ext_MoveGfxDst(0, 200);
 	UnpackEGAShapeToScreen(&armashape, 0, 0);
+#ifndef __AMIGA__
 	// (REFKEEN) Add an artificial (screen not shown immediately on older machines)
 	BE_ST_Delay(250);
+#endif
 	ScreenToScreen(8000, 0, 40, 200);
 	for (step = 0; step < 10; ++step)
 	{
@@ -93,6 +95,9 @@ void id0_loadscn_exe_main (void)
 		{
 			pressedkey = true;
 			WaitForKeyRelease();
+#ifdef __AMIGA__
+			break;
+#endif
 		}
 	}
 	if (!pressedkey)
