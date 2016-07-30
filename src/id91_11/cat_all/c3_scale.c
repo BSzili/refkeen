@@ -206,12 +206,19 @@ id0_unsigned_t BuildCompScale (id0_int_t height, memptr *finalspot)
 		if (startpix == endpix || endpix < 0 || startpix >= VIEWHEIGHT || src == 64)
 			continue;
 
+#ifdef __AMIGA__
+	//
+	// d1: colNum
+	// a0: wallSrc
+	//
+#else
 	//
 	// mov al,[si+src]
 	//
 		*code++ = 0x8a;
 		*code++ = 0x44;
 		*code++ = src;
+#endif
 
 		for (;startpix<endpix;startpix++)
 		{
@@ -220,6 +227,28 @@ id0_unsigned_t BuildCompScale (id0_int_t height, memptr *finalspot)
 			if (startpix < 0)
 				continue;					// not into the view area
 
+#ifdef __AMIGA__
+			extern uint8_t *g_chunkyBuffer;
+			uint8_t *destPtr = &g_chunkyBuffer[startpix*VIEWWIDTH];
+
+		//
+		// movel #destPtr,a1
+		//
+			*code++ = 0x22;
+			*code++ = 0x7c;
+			*((id0_longword_t *)code) = (id0_longword_t)destPtr;
+			code += 4/*sizeof(id0_longword_t)*/;
+
+		//
+		// moveb a0@(src),a1@(d1:l)
+		//
+			*code++ = 0x13;
+			*code++ = 0xa8;
+			*((id0_unsigned_t *)code) = src;
+			code += 2;
+			*code++ = 0x18;
+			*code++ = 0x00;
+#else
 		//
 		// and [es:di+heightofs],al
 		//
@@ -229,14 +258,23 @@ id0_unsigned_t BuildCompScale (id0_int_t height, memptr *finalspot)
 			*((id0_unsigned_t id0_far *)code) = startpix*screenbwide;
 			code += 2;
 			//*((id0_unsigned_t id0_far *)code)++ = startpix*screenbwide;
+#endif
 		}
 
 	}
 
+#ifdef __AMIGA__
+//
+// rts
+//
+	*code++ = 0x4e;
+	*code++ = 0x75;
+#else
 //
 // retf
 //
 	*code++ = 0xcb;
+#endif
 
 	// (REFKEEN) Kind of backwards compatibility
 	totalsize = (code-(id0_byte_t *)work);
@@ -747,12 +785,6 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 //
 // draw lines
 //
-#ifdef __AMIGA__
-	id0_long_t		step;
-	id0_int_t			toppix;
-	step = ((id0_long_t)scale<<17)/64;
-	toppix = (viewheight-2*scale)/2;
-#endif
 	do		// while (1)
 	{
 	//
@@ -770,25 +802,22 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 #ifdef __AMIGA__
 		const id0_byte_t *srcGfxPtr = (id0_byte_t *)compshape;
 		const id0_byte_t *codePtr = (id0_byte_t *)compshape + (*codehandle);
-		const id0_byte_t *currCodePtr = codePtr;
 
-		while (*currCodePtr != 0xcb)
+		while (*codePtr != 0xcb)
 		{
-			id0_int_t lastpix = (*(id0_int_t *)(currCodePtr+2))/2;
-			id0_int_t firstpix = (*(id0_int_t *)(currCodePtr+10))/2;
-			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_int_t *)(currCodePtr+19));
+			id0_int_t lastpix = (*(id0_int_t *)(codePtr+2))/2;
+			id0_int_t firstpix = (*(id0_int_t *)(codePtr+10))/2;
+			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_int_t *)(codePtr+19));
 
 			{
 				extern uint8_t *g_chunkyBuffer;
-				//id0_long_t		step;
+				id0_long_t		step;
 				id0_unsigned_t	src;
-				id0_int_t			startpix,endpix/*,toppix*/;
+				id0_int_t			startpix,endpix,toppix;
 
 				// from notstiller's port
-				/*
 				step = ((id0_long_t)scale<<17)/64;
-				toppix = (viewheight-2*scale)/2;
-				*/
+				toppix = (VIEWHEIGHT-2*scale)/2;
 
 				for (src=firstpix;src<lastpix;src++)
 				{
@@ -814,7 +843,6 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 					if (startpix < 0)
 						startpix = 0;
 
-#if 1
 					uint8_t *destPtr = &g_chunkyBuffer[pixel + startpix*VIEWWIDTH];
 
 					for (;startpix<endpix;startpix++)
@@ -824,15 +852,9 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 
 						destPtr += VIEWWIDTH;
 					}
-#else
-					for (;startpix<endpix;startpix++)
-						//memset(g_chunkyBuffer+startpix*VIEWWIDTH+pixel, srcPtr[src], pixwidth);
-						for (id0_unsigned_t i=0; i<pixwidth; i++)
-							g_chunkyBuffer[startpix*VIEWWIDTH+pixel+i] = srcPtr[src];
-#endif
 				}
 			}
-			currCodePtr += 29;
+			codePtr += 29;
 		}
 #else
 		id0_unsigned_t egaDestOff = ((id0_unsigned_t)pixel>>3) + bufferofs;

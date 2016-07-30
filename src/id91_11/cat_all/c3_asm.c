@@ -219,6 +219,35 @@ void ScaleWalls(void)
 	id0_unsigned_t colNum = 0;
 	do
 	{
+#ifdef __AMIGA__
+		// on the amiga there's no problem with reading from the zero page
+		id0_byte_t *wallSrcPtr = wallseg[colNum]+wallofs[colNum];
+
+		// interpreter to test the m68k chunky scaler
+		/*
+		const id0_byte_t *codePtr = &scaledirectory[wallheight[colNum]]->code[0];
+		while (*((id0_unsigned_t *)codePtr) != 0x4e75)
+		{
+			while (*((id0_unsigned_t *)codePtr) == 0x227c)
+			{
+				codePtr += 2;
+				uint8_t *destPtr = *((id0_longword_t *)codePtr);
+				codePtr += sizeof(id0_longword_t);
+
+				codePtr += 2;
+				id0_unsigned_t src = *((id0_unsigned_t *)codePtr);
+				codePtr += 2;
+				codePtr += 2;
+
+				destPtr[colNum] = wallSrcPtr[src];
+			}
+		}
+		*/
+		typedef void (*CompScaleFunc)(register id0_byte_t *wallSrc __asm("a0"), register id0_unsigned_t colNum __asm("d1"));
+		CompScaleFunc scaleFunc = &scaledirectory[wallheight[colNum]]->code[0];
+		scaleFunc(wallSrcPtr, colNum);
+		colNum++;
+#else
 		if (!wallwidth[colNum])
 		{
 			++colNum;
@@ -244,7 +273,7 @@ void ScaleWalls(void)
 
 		// from notstiller's port
 		step = ((id0_long_t)height<<17)/64;
-		toppix = (viewheight-2*height)/2;
+		toppix = (VIEWHEIGHT-2*height)/2;
 
 		for (src=0;src<64;src++)
 		{
@@ -270,7 +299,6 @@ void ScaleWalls(void)
 			if (startpix < 0)
 				startpix = 0;
 
-#if 1
 			uint8_t *destPtr = &g_chunkyBuffer[colNum + startpix*VIEWWIDTH];
 
 			for (;startpix<endpix;startpix++)
@@ -280,12 +308,6 @@ void ScaleWalls(void)
 
 				destPtr += VIEWWIDTH;
 			}
-#else
-			for (;startpix<endpix;startpix++)
-				//memset(g_chunkyBuffer+startpix*VIEWWIDTH+colNum, wallSrcPtr[src], wallwidth[colNum]);
-				for (id0_unsigned_t i=0; i<wallwidth[colNum]; i++)
-					g_chunkyBuffer[startpix*VIEWWIDTH+colNum+i] = wallSrcPtr[src];
-#endif
 		}
 #else
 		id0_unsigned_t egaDestOff = screenbyte[colNum] + bufferofs;
@@ -299,6 +321,7 @@ void ScaleWalls(void)
 		}
 #endif
 		colNum += wallwidth[colNum];
+#endif
 	} while (colNum < VIEWWIDTH);
 }
 
