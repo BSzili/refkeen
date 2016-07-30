@@ -159,8 +159,10 @@ void intro_exe_main(void)
 	UnpackEGAShapeToScreen(&app_start_shape, (320-app_start_shape.bmHdr.w)/2, (200-app_start_shape.bmHdr.h)/2);
 	ScreenToScreen(8000, 0, 40, 200);
 	ext_FreeShape(&app_start_shape);
+#ifndef __AMIGA__
 	// (REFKEEN) Add an artificial delay so we can actually see loading message...
 	BE_ST_Delay(250);
+#endif
 	WaitForKeyRelease();
 
 #ifdef REFKEEN_VER_CATABYSS

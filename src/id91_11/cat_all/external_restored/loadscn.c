@@ -88,6 +88,7 @@ void id0_loadscn_exe_main (void)
 	BE_ST_Delay(250);
 #endif
 	ScreenToScreen(8000, 0, 40, 200);
+#ifndef __AMIGA__
 	for (step = 0; step < 10; ++step)
 	{
 		BE_ST_Delay(500);
@@ -95,11 +96,9 @@ void id0_loadscn_exe_main (void)
 		{
 			pressedkey = true;
 			WaitForKeyRelease();
-#ifdef __AMIGA__
-			break;
-#endif
 		}
 	}
+#endif
 	if (!pressedkey)
 		BE_ST_BiosScanCode(0);
 	if (!ext_BLoad("LAST.ABS", &bufferptr))
