@@ -58,7 +58,11 @@
 
 #define VIEWX		0		// corner of view window
 #define VIEWY		0
+#ifdef KALMS_C2P
+#define VIEWWIDTH (32*8)	// must be an even multiple of 32
+#else
 #define VIEWWIDTH	(33*8)		// size of view window
+#endif
 #define VIEWHEIGHT	(18*8)
 #define VIEWXH		(VIEWX+VIEWWIDTH-1)
 #define VIEWYH		(VIEWY+VIEWHEIGHT-1)

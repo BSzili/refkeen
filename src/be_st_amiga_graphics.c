@@ -16,7 +16,11 @@
 #define PAGE1START		0x900
 #define PAGE2START		0x2000
 #define	PAGE3START		0x3700
+#ifdef KALMS_C2P
+#define VIEWWIDTH (32*8)
+#else
 #define VIEWWIDTH (33*8)
+#endif
 #define VIEWHEIGHT	(18*8)
 #else
 #define STATUSLEN			0xc80
@@ -330,7 +334,23 @@ void BE_ST_DebugText(int x, int y, const char *fmt, ...)
 
 void BE_ST_DebugColor(uint16_t color)
 {
+#if 1
 	custom.color[0] = color;
+#endif
+}
+
+// this doesn't really belong here
+void BE_ST_ClearCache(void *address, uint32_t length)
+{
+	if ((SysBase->AttnFlags & AFF_68040) && !(address == NULL && length == ~0))
+	{
+		CacheClearE(address, length, CACRF_ClearI | CACRF_ClearD);
+	}
+	else
+	{
+		// according to the docs, this is faster on the 030 and below
+		CacheClearU();
+	}
 }
 
 #ifdef KALMS_C2P

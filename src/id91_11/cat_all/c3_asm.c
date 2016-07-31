@@ -21,7 +21,9 @@
 #define VIEWWIDTH (40*8)
 #else
 #include "c3_def.h"
+#ifndef __AMIGA__
 #define VIEWWIDTH (33*8)
+#endif
 #endif
 
 //=================== Tables filled in by DrawVWall ==========================
@@ -243,7 +245,7 @@ void ScaleWalls(void)
 			}
 		}
 		*/
-		typedef void (*CompScaleFunc)(register id0_byte_t *wallSrc __asm("a0"), register id0_unsigned_t colNum __asm("d1"));
+		typedef void (*CompScaleFunc)(register id0_byte_t *wallSrc __asm("a0"), register id0_unsigned_t/*id0_longword_t*/ colNum __asm("d1"));
 		CompScaleFunc scaleFunc = &scaledirectory[wallheight[colNum]]->code[0];
 		scaleFunc(wallSrcPtr, colNum);
 		colNum++;

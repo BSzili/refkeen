@@ -1326,6 +1326,14 @@ void ReadScroll (id0_int_t scroll)
 	IN_Ack();
 	// REFKEEN - Alternative controllers support
 	BE_ST_AltControlScheme_Pop();
+#ifdef KALMS_C2P
+	// we don't use the whole view area, avoid HOM after reading the scroll
+	for (i=0;i<3;i++)
+	{
+		bufferofs = screenloc[i];
+		VW_Bar(VIEWWIDTH,0,(33*8)-VIEWWIDTH,VIEWHEIGHT,7);
+	}
+#endif
 
 }
 
