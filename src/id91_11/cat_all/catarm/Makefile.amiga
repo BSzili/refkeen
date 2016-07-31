@@ -79,7 +79,7 @@ ifeq ($(DEBUG),1)
 	INTCXXFLAGS+= -ggdb -ftrapv -fstack-check -DREFKEEN_CONFIG_DEBUG -DDEBUG
 	CXXOPT=
 else
-	CXXOPT=-O2
+	CXXOPT=-O2 -fomit-frame-pointer
 endif
 
 ifeq ($(KALMS_C2P),1)

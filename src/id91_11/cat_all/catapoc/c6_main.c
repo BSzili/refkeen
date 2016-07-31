@@ -1087,6 +1087,11 @@ void SetupScaling (void)
 	for (i=1;i<=VIEWWIDTH/2;i++)
 		// REFKEEN - Possibly-working-but-bad cast for C++
 		BuildCompScale (i*2,(void **)&scaledirectory[i]);
+
+#ifdef __AMIGA__
+	extern void BE_ST_ClearCache(void *address, uint32_t length);
+	BE_ST_ClearCache(NULL, ~0);
+#endif
 }
 
 //===========================================================================
