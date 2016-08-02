@@ -1671,8 +1671,8 @@ asm	rep stosw
 	EGABITMASK(0xff);
 
 #ifdef __AMIGA__
-	extern void BE_ST_DrawChunkyBuffer(uint16_t screenpage);
-	BE_ST_DrawChunkyBuffer(screenpage);
+	extern void BE_ST_DrawChunkyBuffer(uint16_t bufferofs);
+	BE_ST_DrawChunkyBuffer(bufferofs);
 #endif
 //
 // draw hand

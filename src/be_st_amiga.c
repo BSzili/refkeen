@@ -311,15 +311,16 @@ void BE_ST_PrepareForGameStartup(void)
 		}
 	}
 
-	BE_ST_ShutdownAll();
+	//BE_ST_ShutdownAll();
+	BE_ST_HandleExit(0);
 }
 
-void __chkabort(void)
+/*void __chkabort(void)
 {
 #ifdef DEBUG
 	BE_ST_ShutdownAll();
 #endif
-}
+}*/
 
 void BE_ST_ShutdownAll(void)
 {
@@ -350,13 +351,13 @@ void BE_ST_HandleExit(int status)
 		BE_ST_BiosScanCode(0);
 #endif
 	BE_ST_ShutdownAll();
-	exit(0);
+	exit(status);
 }
 
 void BE_ST_ExitWithErrorMsg(const char *msg)
 {
-	BE_ST_SetScreenMode(3);
-	BE_ST_puts(msg);
+	/*BE_ST_SetScreenMode(3);
+	BE_ST_puts(msg);*/
 	BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "%s\n", msg);
 	BE_ST_HandleExit(1);
 }
@@ -523,6 +524,10 @@ void BE_ST_AltControlScheme_PrepareTextInput(void)
 }
 
 void BE_ST_AltControlScheme_PrepareControllerMapping(const BE_ST_ControllerMapping *mapping)
+{
+}
+
+void BE_ST_AltControlScheme_UpdateVirtualMouseCursor(int x, int y)
 {
 }
 

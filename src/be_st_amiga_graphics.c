@@ -13,9 +13,6 @@
 
 // for the PAGE?START macros
 #ifdef REFKEEN_VER_CAT3D
-#define PAGE1START		0x900
-#define PAGE2START		0x2000
-#define	PAGE3START		0x3700
 #ifdef KALMS_C2P
 #define VIEWWIDTH (32*8)
 #else
@@ -23,11 +20,6 @@
 #endif
 #define VIEWHEIGHT	(18*8)
 #else
-#define STATUSLEN			0xc80
-#define PAGELEN			0x1700
-#define PAGE1START	STATUSLEN
-#define PAGE2START	(PAGE1START+PAGELEN)
-#define PAGE3START	(PAGE2START+PAGELEN)
 #define VIEWWIDTH (40*8)
 #define VIEWHEIGHT	(15*8)
 #endif
@@ -83,12 +75,15 @@ struct Window *g_amigaWindow = NULL;
 
 static union bufferType *g_sdlVidMem;
 static uint8_t g_textMemory[TXT_COLS_NUM*TXT_ROWS_NUM*2];
-static int g_sdlScreenMode = 3;
+static uint8_t g_textMemoryOld[TXT_COLS_NUM*TXT_ROWS_NUM*2];
+static uint16_t g_sdlScreenStartAddress = 0;
+static int g_sdlScreenMode = -1;
 static int g_sdlTexWidth, g_sdlTexHeight;
+static uint8_t g_sdlPelPanning = 0;
 static int16_t g_sdlSplitScreenLine = -1;
 
-static struct BitMap g_screenBitMaps[4];
-static int g_bitMapOffsets[4] = {0, PAGE1START, PAGE2START, PAGE3START};
+static struct BitMap g_screenBitMaps[/*4*/2];
+static int g_currentBitMap;
 static struct DBufInfo *dbuf = NULL;
 static struct UCopList *ucl = NULL;
 #ifdef ENABLE_TEXT
@@ -185,16 +180,33 @@ static void BEL_ST_CloseScreen(void)
 
 static BOOL BEL_ST_ReopenScreen(void)
 {
-	// TODO: use only the NewScreen structure
+	/*ULONG modeid = BestModeID(
+		BIDTAG_NominalWidth, g_sdlTexWidth,
+		BIDTAG_NominalHeight, g_sdlTexHeight,
+		BIDTAG_Depth, 4,
+		BIDTAG_DIPFMustHave, (g_sdlTexHeight > GFX_TEX_HEIGHT) ? DIPF_IS_LACE : 0,
+		BIDTAG_MonitorID, DEFAULT_MONITOR_ID,
+		TAG_DONE);*/
+
+	static struct Rectangle rect;
+	rect.MinX = 0;
+	rect.MaxX = g_sdlTexWidth - 1;
+	rect.MinY = 0;
+	rect.MaxY = g_sdlTexHeight - 1;
+
+	g_currentBitMap = 0;
 	struct TagItem screenTags[] =
 	{
-		{SA_Width, g_sdlTexWidth},
+		//{SA_DisplayID, modeid},
+		{SA_DClip, (ULONG)&rect},
+		{SA_Width, g_sdlTexWidth+8},
 		{SA_Height, g_sdlTexHeight},
 		{SA_Depth, 4},
 		{SA_ShowTitle, FALSE},
 		{SA_Quiet, TRUE},
 		//{SA_Draggable, FALSE},
-		{SA_BitMap, (IPTR)&g_screenBitMaps[0]},
+		{SA_BitMap, (IPTR)&g_screenBitMaps[g_currentBitMap]},
+		{SA_Type, CUSTOMSCREEN},
 		{TAG_DONE, 0}
 	};
 	struct NewScreen ns =
@@ -213,12 +225,8 @@ static BOOL BEL_ST_ReopenScreen(void)
 
 	BEL_ST_CloseScreen();
 
-	for (int i = 0; i < 4; i++)
-	{
-		BEL_ST_PrepareBitmap(&g_screenBitMaps[i], g_bitMapOffsets[i]);
-	}
+	BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], 0);
 
-#warning HACK!
 	if (g_sdlTexWidth > GFX_TEX_WIDTH)
 		ns.ViewModes |= HIRES;
 	if (g_sdlTexHeight > GFX_TEX_HEIGHT)
@@ -291,34 +299,11 @@ void BE_ST_ShutdownGfx(void)
 	FreeVec(g_chunkyBuffer);
 }
 
-static int BEL_ST_AddressToBitMap(uint16_t crtc)
-{
-	int curbm;
-
-	switch (crtc)
-	{
-		case PAGE1START:
-			curbm = 1;
-			break;
-		case PAGE2START:
-			curbm = 2;
-			break;
-		case PAGE3START:
-			curbm = 3;
-			break;
-		default:
-			curbm = 0;
-	}
-
-	return curbm;
-}
-
 void BE_ST_DebugText(int x, int y, const char *fmt, ...)
 {
 	UBYTE buffer[256];
 	struct IntuiText WinText = {BLOCKPEN, DETAILPEN, JAM2, 0, 0, NULL, NULL, NULL};
 	va_list ap;
-	struct RastPort rp;
 
 	WinText.IText = buffer;
 
@@ -326,10 +311,7 @@ void BE_ST_DebugText(int x, int y, const char *fmt, ...)
 	vsnprintf(buffer, sizeof(buffer), fmt, ap);
 	va_end(ap);
 
-	//PrintIText(&g_amigaScreen->RastPort, &WinText, 0, GFX_TEX_HEIGHT);
-	InitRastPort(&rp);
-	rp.BitMap = &g_screenBitMaps[0];
-	PrintIText(&rp, &WinText, x, y);
+	PrintIText(&g_amigaScreen->RastPort, &WinText, x, y);
 }
 
 void BE_ST_DebugColor(uint16_t color)
@@ -363,36 +345,35 @@ extern void c2p1x1_4_c5_bm(
 	register struct BitMap *bitmap __asm("a1"));
 #endif
 
-void BE_ST_DrawChunkyBuffer(uint16_t screenpage)
+void BE_ST_DrawChunkyBuffer(uint16_t bufferofs)
 {
+	struct BitMap bm;
+
+	D(bug("%s(%u)\n", __FUNCTION__, bufferofs));
+
+	BEL_ST_PrepareBitmap(&bm, bufferofs);
 #ifdef KALMS_C2P
-	c2p1x1_4_c5_bm(VIEWWIDTH, VIEWHEIGHT, VIEWX, VIEWY, g_chunkyBuffer, &g_screenBitMaps[screenpage+1]);
+	c2p1x1_4_c5_bm(VIEWWIDTH, VIEWHEIGHT, VIEWX, VIEWY, g_chunkyBuffer, &bm);
 #else
 	struct RastPort rp;
 	InitRastPort(&rp);
-	rp.BitMap = &g_screenBitMaps[screenpage+1];
+	rp.BitMap = &bm;
 	WriteChunkyPixels(&rp, VIEWX, VIEWY, VIEWXH, VIEWYH, g_chunkyBuffer, VIEWWIDTH);
 #endif
 }
 
 void BE_ST_SetScreenStartAddress(uint16_t crtc)
 {
-	int curbm;
-
 	D(bug("%s(%d) %x\n", __FUNCTION__, crtc, crtc));
 
-	curbm = BEL_ST_AddressToBitMap(crtc);
-
-#if 0
-	while (!GetMsg(dbuf->dbi_DispMessage.mn_ReplyPort))
-		WaitPort(dbuf->dbi_DispMessage.mn_ReplyPort);
-#endif
-
-	D(bug("changing to bitmap %d\n", curbm));
-
-	//WaitBlit();
-	WaitTOF();
-	ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[curbm], dbuf);
+	if (g_sdlScreenStartAddress != crtc)
+	{
+		g_sdlScreenStartAddress = crtc;
+		WaitTOF();
+		g_currentBitMap ^= 1;
+		BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], g_sdlScreenStartAddress);
+		ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
+	}
 }
 
 uint8_t *BE_ST_GetTextModeMemoryPtr(void)
@@ -422,6 +403,12 @@ void BE_ST_EGASetPaletteAndBorder(const uint8_t *palette)
 
 void BE_ST_EGASetPelPanning(uint8_t panning)
 {
+	if (g_sdlPelPanning != panning)
+	{
+		g_sdlPelPanning = panning;
+		g_amigaScreen->ViewPort.RasInfo->RxOffset = g_sdlPelPanning % 8;
+		ScrollVPort(&g_amigaScreen->ViewPort);
+	}
 }
 
 void BE_ST_EGASetLineWidth(uint8_t widthInBytes)
@@ -445,6 +432,8 @@ void BEL_ST_FreeCopList(void)
 
 #define BPLPTH(p) (*((UWORD *)&custom.bplpt[0] + (2 * (p))))
 #define BPLPTL(p) (*((UWORD *)&custom.bplpt[0] + (2 * (p)) + 1))
+#define HIWORD(x) ((ULONG)(x)>>16 & 0xffff)
+#define LOWORD(x) ((ULONG)(x) & 0xffff)
 
 void BEL_ST_AddSplitlineCopList(uint16_t splitline)
 {
@@ -454,7 +443,6 @@ void BEL_ST_AddSplitlineCopList(uint16_t splitline)
 		{VTAG_END_CM, NULL}
 	};
 	int i;
-	long planeaddr;
 
 	if ((ucl = AllocMem(sizeof(struct UCopList), MEMF_PUBLIC|MEMF_CLEAR)))
 	{
@@ -462,10 +450,10 @@ void BEL_ST_AddSplitlineCopList(uint16_t splitline)
 		CWAIT(ucl, splitline, 0);
 		for (i = 0; i < 4; i++)
 		{
-			planeaddr = (long)g_screenBitMaps[0].Planes[i];
-			CMOVE(ucl, BPLPTH(i), (long)(planeaddr >> 16) & 0xffff);
-			CMOVE(ucl, BPLPTL(i), (long)planeaddr & 0xffff);
+			CMOVE(ucl, BPLPTH(i), HIWORD(&g_sdlVidMem->egaGfx[i][0]));
+			CMOVE(ucl, BPLPTL(i), LOWORD(&g_sdlVidMem->egaGfx[i][0]));
 		}
+		//CMOVE(ucl, custom.bplcon1, 0x0000); // fine scroll
 		CEND(ucl);
 
 		Forbid();
@@ -737,6 +725,10 @@ void BE_ST_EGAXorGFXByteByPlaneMask(uint16_t destOff, uint8_t srcVal, uint16_t p
 		g_sdlVidMem->egaGfx[3][destOff] ^= srcVal;
 }
 
+void BE_ST_CGAUpdateGFXBufferFromWrappedMem(const uint8_t *segPtr, const uint8_t *offInSegPtr, uint16_t byteLineWidth)
+{
+}
+
 void BE_ST_SetScreenMode(int mode)
 {
 	D(bug("%s(%x)\n", __FUNCTION__, mode));
@@ -752,11 +744,12 @@ void BE_ST_SetScreenMode(int mode)
 		g_sdlTxtBackground = 0;
 		g_sdlTxtCursorPosX = g_sdlTxtCursorPosY = 0;
 		BE_ST_clrscr();
-		g_sdlTexWidth = GFX_TEX_WIDTH;
+		g_sdlTexWidth = 2*GFX_TEX_WIDTH;
 		g_sdlTexHeight = 2*GFX_TEX_HEIGHT;
 		g_sdlSplitScreenLine = -1;
 		// TODO should the contents of A0000 be backed up?
 		memset(g_sdlVidMem->egaGfx, 0, sizeof(g_sdlVidMem->egaGfx));
+		memset(g_textMemoryOld, 0, sizeof(g_textMemoryOld));
 		BEL_ST_ReopenScreen();
 #else
 		BEL_ST_CloseScreen();
@@ -1000,15 +993,21 @@ static void BEL_ST_DrawChar(struct RastPort *rp, int x, int y, bool cursor)
 void BEL_ST_UpdateHostDisplay(void)
 {
 #ifdef ENABLE_TEXT
+	int bufCounter = 0;
 	if (g_sdlScreenMode == 3) // Text mode
 	{
 		for (int currCharY = 0; currCharY < TXT_ROWS_NUM; ++currCharY)
 		{
 			for (int currCharX = 0; currCharX < TXT_COLS_NUM; ++currCharX)
 			{
-				BEL_ST_DrawChar(&g_amigaScreen->RastPort, currCharX, currCharY, (currCharX == g_sdlTxtCursorPosX && currCharY == g_sdlTxtCursorPosY));
+				if (g_textMemoryOld[bufCounter] != g_textMemory[bufCounter] || g_textMemoryOld[bufCounter+1] != g_textMemory[bufCounter+1])
+				{
+					BEL_ST_DrawChar(&g_amigaScreen->RastPort, currCharX, currCharY, (currCharX == g_sdlTxtCursorPosX && currCharY == g_sdlTxtCursorPosY));
+				}
+				bufCounter+=2;
 			}
 		}
 	}
+	memcpy(g_textMemoryOld, g_textMemory, sizeof(g_textMemoryOld));
 #endif
 }

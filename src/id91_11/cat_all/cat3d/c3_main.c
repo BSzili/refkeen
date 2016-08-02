@@ -627,6 +627,9 @@ void Quit (const id0_char_t *error)
 
 			memcpy(BE_ST_GetTextModeMemoryPtr(), finscreen, 4000);
 			//movedata (finscreen,0,0xb800,0,4000);
+#ifdef __AMIGA__
+			BE_ST_MarkGfxForUpdate();
+#endif
 			BE_ST_BiosScanCode (0);
 			BE_ST_clrscr();
 		}
