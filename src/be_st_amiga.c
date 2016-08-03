@@ -350,6 +350,9 @@ void BE_ST_HandleExit(int status)
 	if (refkeen_current_gamever == BE_GAMEVER_CATABYSS113)
 		BE_ST_BiosScanCode(0);
 #endif
+#ifdef REFKEEN_VER_KDREAMS
+	BE_ST_BiosScanCode(0);
+#endif
 	BE_ST_ShutdownAll();
 	exit(status);
 }

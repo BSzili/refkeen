@@ -279,6 +279,9 @@ void 	VW_SetScreen_EGA (id0_unsigned_t CRTC, id0_unsigned_t pelpan);
 void	VW_SetScreenMode (id0_int_t grmode);
 void	VW_ClearVideo (id0_int_t color);
 
+#ifdef __AMIGA__
+static
+#endif
 inline void VW_WaitVBL (id0_int_t number)
 {
 #if WAITFORVBL

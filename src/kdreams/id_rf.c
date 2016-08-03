@@ -281,6 +281,9 @@ void RF_Startup (void)
 				compatability = true;
 				break;
 			}
+#ifdef __AMIGA__
+	compatability = true;
+#endif
 
 	for (i=0;i<PORTTILESHIGH;i++)
 		uwidthtable[i] = UPDATEWIDE*i;

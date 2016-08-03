@@ -80,6 +80,7 @@ static uint16_t g_sdlScreenStartAddress = 0;
 static int g_sdlScreenMode = -1;
 static int g_sdlTexWidth, g_sdlTexHeight;
 static uint8_t g_sdlPelPanning = 0;
+static int g_sdlPixLineWidth = 8*40; // Originally stored a byte, while measuring this in bytes instead of pixels
 static int16_t g_sdlSplitScreenLine = -1;
 
 static struct BitMap g_screenBitMaps[/*4*/2];
@@ -143,7 +144,7 @@ static void BEL_ST_SetPalette(int colors, int firstcolor, const uint8_t *palette
 
 static void BEL_ST_PrepareBitmap(struct BitMap *BM, uint16_t firstByte)
 {
-	InitBitMap(BM, 4, g_sdlTexWidth, g_sdlTexHeight);
+	InitBitMap(BM, 4, /*g_sdlTexWidth*/g_sdlPixLineWidth, g_sdlTexHeight);
 
 	BM->Planes[0] = &g_sdlVidMem->egaGfx[0][firstByte];
 	BM->Planes[1] = &g_sdlVidMem->egaGfx[1][firstByte];
@@ -199,7 +200,7 @@ static BOOL BEL_ST_ReopenScreen(void)
 	{
 		//{SA_DisplayID, modeid},
 		{SA_DClip, (ULONG)&rect},
-		{SA_Width, g_sdlTexWidth+8},
+		{SA_Width, /*g_sdlTexWidth+8*/g_sdlPixLineWidth},
 		{SA_Height, g_sdlTexHeight},
 		{SA_Depth, 4},
 		{SA_ShowTitle, FALSE},
@@ -304,6 +305,7 @@ void BE_ST_DebugText(int x, int y, const char *fmt, ...)
 	UBYTE buffer[256];
 	struct IntuiText WinText = {BLOCKPEN, DETAILPEN, JAM2, 0, 0, NULL, NULL, NULL};
 	va_list ap;
+	struct RastPort rp;
 
 	WinText.IText = buffer;
 
@@ -311,7 +313,10 @@ void BE_ST_DebugText(int x, int y, const char *fmt, ...)
 	vsnprintf(buffer, sizeof(buffer), fmt, ap);
 	va_end(ap);
 
-	PrintIText(&g_amigaScreen->RastPort, &WinText, x, y);
+	//PrintIText(&g_amigaScreen->RastPort, &WinText, x, y);
+	InitRastPort(&rp);
+	rp.BitMap = g_amigaScreen->ViewPort.RasInfo->BitMap;
+	PrintIText(&rp, &WinText, x, y);
 }
 
 void BE_ST_DebugColor(uint16_t color)
@@ -364,7 +369,7 @@ void BE_ST_DrawChunkyBuffer(uint16_t bufferofs)
 
 void BE_ST_SetScreenStartAddress(uint16_t crtc)
 {
-	D(bug("%s(%d) %x\n", __FUNCTION__, crtc, crtc));
+	D(bug("%s(%u)\n", __FUNCTION__, crtc));
 
 	if (g_sdlScreenStartAddress != crtc)
 	{
@@ -373,6 +378,25 @@ void BE_ST_SetScreenStartAddress(uint16_t crtc)
 		g_currentBitMap ^= 1;
 		BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], g_sdlScreenStartAddress);
 		ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
+	}
+}
+
+// combined function for smooth(?) scrolling
+void BE_ST_SetScreenStartAddressAndPelPanning(uint16_t crtc, uint8_t panning)
+{
+	D(bug("%s(%u,%u)\n", __FUNCTION__, crtc, panning));
+
+	if (g_sdlScreenStartAddress != crtc || g_sdlPelPanning != panning)
+	{
+		g_sdlScreenStartAddress = crtc;
+		g_sdlPelPanning = panning;
+		WaitTOF();
+		g_currentBitMap ^= 1;
+		BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], (g_sdlScreenStartAddress & (uint16_t)~1));
+		g_amigaScreen->ViewPort.RasInfo->RxOffset = g_sdlPelPanning + (g_sdlScreenStartAddress % 2)*8;
+		//WaitTOF();
+		ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
+		ScrollVPort(&g_amigaScreen->ViewPort);
 	}
 }
 
@@ -403,10 +427,12 @@ void BE_ST_EGASetPaletteAndBorder(const uint8_t *palette)
 
 void BE_ST_EGASetPelPanning(uint8_t panning)
 {
+	D(bug("%s(%u)\n", __FUNCTION__, panning));
+
 	if (g_sdlPelPanning != panning)
 	{
 		g_sdlPelPanning = panning;
-		g_amigaScreen->ViewPort.RasInfo->RxOffset = g_sdlPelPanning % 8;
+		g_amigaScreen->ViewPort.RasInfo->RxOffset = g_sdlPelPanning;
 		ScrollVPort(&g_amigaScreen->ViewPort);
 	}
 }
@@ -414,9 +440,9 @@ void BE_ST_EGASetPelPanning(uint8_t panning)
 void BE_ST_EGASetLineWidth(uint8_t widthInBytes)
 {
 	int newWidth = widthInBytes * 8;
-	if (newWidth != g_sdlTexWidth)
+	if (newWidth != g_sdlPixLineWidth)
 	{
-		g_sdlTexWidth = newWidth;
+		g_sdlPixLineWidth = newWidth;
 		BEL_ST_ReopenScreen();
 	}
 }
@@ -740,12 +766,15 @@ void BE_ST_SetScreenMode(int mode)
 	{
 	case 3:
 #ifdef ENABLE_TEXT
+		/*g_sdlTexWidth = VGA_TXT_TEX_WIDTH;
+		g_sdlTexHeight = VGA_TXT_TEX_HEIGHT;*/
 		g_sdlTxtColor = 7;
 		g_sdlTxtBackground = 0;
 		g_sdlTxtCursorPosX = g_sdlTxtCursorPosY = 0;
 		BE_ST_clrscr();
 		g_sdlTexWidth = 2*GFX_TEX_WIDTH;
 		g_sdlTexHeight = 2*GFX_TEX_HEIGHT;
+		g_sdlPixLineWidth = 8*80;
 		g_sdlSplitScreenLine = -1;
 		// TODO should the contents of A0000 be backed up?
 		memset(g_sdlVidMem->egaGfx, 0, sizeof(g_sdlVidMem->egaGfx));
@@ -762,6 +791,7 @@ void BE_ST_SetScreenMode(int mode)
 	case 0xD:
 		g_sdlTexWidth = GFX_TEX_WIDTH;
 		g_sdlTexHeight = GFX_TEX_HEIGHT;
+		g_sdlPixLineWidth = 8*40;
 		g_sdlSplitScreenLine = -1;
 		// HACK: Looks like this shouldn't be done if changing gfx->gfx
 		if (g_sdlScreenMode != 0xE)
@@ -773,6 +803,7 @@ void BE_ST_SetScreenMode(int mode)
 	case 0xE:
 		g_sdlTexWidth = 2*GFX_TEX_WIDTH;
 		g_sdlTexHeight = GFX_TEX_HEIGHT;
+		g_sdlPixLineWidth = 8*80;
 		g_sdlSplitScreenLine = -1;
 		// HACK: Looks like this shouldn't be done if changing gfx->gfx
 		if (g_sdlScreenMode != 0xD)
