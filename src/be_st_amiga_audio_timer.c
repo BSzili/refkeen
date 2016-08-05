@@ -24,12 +24,16 @@
 #define PC_PIT_RATE 1193182
 #define SQUARE_SAMPLES 2
 
+#define TIMER_SIGNAL
+
 static bool g_sdlEmulatedOPLChipReady;
 static void (*g_sdlCallbackSDFuncPtr)(void) = 0;
 
 // A PRIVATE g_sdlTimeCount variable we store
 // (SD_GetTimeCount/SD_SetTimeCount should be called instead)
 static uint32_t g_sdlTimeCount;
+static uint32_t g_dstTimeCount;
+static struct Task *g_mainTask;
 
 static uint32_t g_timerDelay = 0;
 
@@ -44,6 +48,15 @@ extern void SD_SetUserHook(void (*hook)(void));
 static void MySoundUserHook(void)
 {
 	g_sdlTimeCount++;
+#ifdef TIMER_SIGNAL
+	Forbid();
+	if (g_sdlTimeCount >= g_dstTimeCount)
+	{
+		Signal(g_mainTask, SIGBREAKF_CTRL_F);
+		g_dstTimeCount = (uint32_t)~1;
+	}
+	Permit();
+#endif
 }
 
 
@@ -61,6 +74,8 @@ static BOOL BEL_ST_AddTimerInt(void)
 
 	if ((g_timerIntHandle = AddTimerInt((APTR)BEL_ST_TimerInterrupt, NULL)))
 	{
+		g_dstTimeCount = (uint32_t)~1;
+		g_mainTask = FindTask(NULL);
 		StartTimerInt(g_timerIntHandle, g_timerDelay, TRUE);
 		return TRUE;
 	}
@@ -251,16 +266,32 @@ void BE_ST_SetTimeCount(uint32_t newcount)
 
 void BE_ST_TimeCountWaitForDest(uint32_t dsttimecount)
 {
-	//BEL_ST_UpdateHostDisplay();
+#ifdef TIMER_SIGNAL
+	if (g_sdlTimeCount >= dsttimecount)
+		return;
+
+	SetSignal(0, SIGBREAKF_CTRL_F);
+	g_dstTimeCount = dsttimecount;
+	Wait(SIGBREAKF_CTRL_F);
+#else
 	while (g_sdlTimeCount<dsttimecount)
 		BE_ST_ShortSleep();
+#endif
 }
 
 void BE_ST_TimeCountWaitFromSrc(uint32_t srctimecount, int16_t timetowait)
 {
-	//BEL_ST_UpdateHostDisplay();
+#ifdef TIMER_SIGNAL
+	if (g_sdlTimeCount >= srctimecount+timetowait)
+		return;
+//printf("BE_ST_TimeCountWaitFromSrc %u %d %u\n", srctimecount, timetowait, g_sdlTimeCount);
+	SetSignal(0, SIGBREAKF_CTRL_F);
+	g_dstTimeCount = srctimecount+timetowait;
+	Wait(SIGBREAKF_CTRL_F);
+#else
 	while (g_sdlTimeCount-srctimecount<timetowait)
 		BE_ST_ShortSleep();
+#endif
 }
 
 void BE_ST_WaitVBL(int16_t number)
@@ -278,6 +309,7 @@ void BE_ST_ShortSleep(void)
 	task = FindTask(NULL);
 	oldpri = SetTaskPri(task, -10);
 	SetTaskPri(task, oldpri);*/
+	//TimeDelay(UNIT_MICROHZ, 0, 500);
 }
 
 void BE_ST_Delay(uint16_t msec) // Replacement for delay from dos.h
