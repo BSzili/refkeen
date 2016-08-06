@@ -28,6 +28,10 @@
 #define VIEWXH		(VIEWX+VIEWWIDTH-1)
 #define VIEWYH		(VIEWY+VIEWHEIGHT-1)
 
+#ifdef REFKEEN_VER_KDREAMS
+#define	SCREENWIDTH_EGA		64
+#endif
+
 #define GFX_TEX_WIDTH 320
 #define GFX_TEX_HEIGHT 200
 
@@ -80,7 +84,7 @@ static uint16_t g_sdlScreenStartAddress = 0;
 static int g_sdlScreenMode = -1;
 static int g_sdlTexWidth, g_sdlTexHeight;
 static uint8_t g_sdlPelPanning = 0;
-static int g_sdlPixLineWidth = 8*40; // Originally stored a byte, while measuring this in bytes instead of pixels
+static int g_sdlLineWidth = 40;
 static int16_t g_sdlSplitScreenLine = -1;
 
 static struct BitMap g_screenBitMaps[/*4*/2];
@@ -144,7 +148,7 @@ static void BEL_ST_SetPalette(int colors, int firstcolor, const uint8_t *palette
 
 static void BEL_ST_PrepareBitmap(struct BitMap *BM, uint16_t firstByte)
 {
-	InitBitMap(BM, 4, /*g_sdlTexWidth*/g_sdlPixLineWidth, g_sdlTexHeight);
+	InitBitMap(BM, 4, /*g_sdlTexWidth*/8*g_sdlLineWidth, g_sdlTexHeight);
 
 	BM->Planes[0] = &g_sdlVidMem->egaGfx[0][firstByte];
 	BM->Planes[1] = &g_sdlVidMem->egaGfx[1][firstByte];
@@ -200,7 +204,7 @@ static BOOL BEL_ST_ReopenScreen(void)
 	{
 		//{SA_DisplayID, modeid},
 		{SA_DClip, (ULONG)&rect},
-		{SA_Width, /*g_sdlTexWidth+8*/g_sdlPixLineWidth},
+		{SA_Width, /*g_sdlTexWidth+8*/8*g_sdlLineWidth},
 		{SA_Height, g_sdlTexHeight},
 		{SA_Depth, 4},
 		{SA_ShowTitle, FALSE},
@@ -322,7 +326,9 @@ void BE_ST_DebugText(int x, int y, const char *fmt, ...)
 void BE_ST_DebugColor(uint16_t color)
 {
 #if 1
-	custom.color[0] = color;
+	UWORD colors[16] = {0x0000,0x000A,0x00A0,0x00AA,0x0A00,0x0A0A,0x0A50,0x0AAA,
+						0x0555,0x055F,0x05F5,0x05FF,0x0F55,0x0F5F,0x0FF5,0x0FFF};
+	custom.color[0] = colors[color%16];
 #endif
 }
 
@@ -394,7 +400,6 @@ void BE_ST_SetScreenStartAddressAndPelPanning(uint16_t crtc, uint8_t panning)
 		g_currentBitMap ^= 1;
 		BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], (g_sdlScreenStartAddress & (uint16_t)~1));
 		g_amigaScreen->ViewPort.RasInfo->RxOffset = g_sdlPelPanning + (g_sdlScreenStartAddress % 2)*8;
-		//WaitTOF();
 		ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
 		ScrollVPort(&g_amigaScreen->ViewPort);
 	}
@@ -439,10 +444,9 @@ void BE_ST_EGASetPelPanning(uint8_t panning)
 
 void BE_ST_EGASetLineWidth(uint8_t widthInBytes)
 {
-	int newWidth = widthInBytes * 8;
-	if (newWidth != g_sdlPixLineWidth)
+	if (widthInBytes != g_sdlLineWidth)
 	{
-		g_sdlPixLineWidth = newWidth;
+		g_sdlLineWidth = widthInBytes;
 		BEL_ST_ReopenScreen();
 	}
 }
@@ -523,15 +527,15 @@ void BE_ST_EGAUpdateGFXByteInPlane(uint16_t destOff, uint8_t srcVal, uint16_t pl
 	g_sdlVidMem->egaGfx[planeNum][destOff] = srcVal;
 }
 
-void BE_ST_EGAMaskBlock(uint16_t destOff, uint8_t *src, uint16_t linedelta, uint16_t width, uint16_t height, uint16_t planesize)
+/*void BE_ST_EGAMaskBlock(uint16_t destOff, uint8_t *src, uint16_t linedelta, uint16_t width, uint16_t height, uint16_t planesize)
 {
 	uint8_t *srcPtr = src;
-	uint16_t egaDestOff = destOff; // start at same place in all planes
-	uint16_t linesLeft = height; // scan lines to draw
+	int egaDestOff = destOff; // start at same place in all planes
+	int linesLeft = height; // scan lines to draw
 	// draw
 	do
 	{
-		uint16_t colsLeft = width;
+		int colsLeft = width;
 		do
 		{
 			g_sdlVidMem->egaGfx[0][egaDestOff] = (g_sdlVidMem->egaGfx[0][egaDestOff] & (*srcPtr)) | srcPtr[planesize*1];
@@ -545,7 +549,7 @@ void BE_ST_EGAMaskBlock(uint16_t destOff, uint8_t *src, uint16_t linedelta, uint
 		egaDestOff += linedelta;
 		--linesLeft;
 	} while (linesLeft);
-}
+}*/
 
 // Based on BE_Cross_LinearToWrapped_MemCopy
 static void BEL_ST_LinearToEGAPlane_MemCopy(uint8_t *planeDstPtr, uint16_t planeDstOff, const uint8_t *linearSrc, uint16_t num)
@@ -663,18 +667,6 @@ void BE_ST_EGAUpdateGFXBitsInAllPlanesScrToScr(uint16_t destOff, uint16_t srcOff
 
 void BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(uint16_t destOff, uint16_t srcOff, uint16_t num)
 {
-	uint16_t srcBytesToEnd = 0x10000-srcOff;
-	uint16_t dstBytesToEnd = 0x10000-destOff;
-	if (num <= srcBytesToEnd && num <= dstBytesToEnd)
-	{
-		// fast(?) linear case
-		memcpy(g_sdlVidMem->egaGfx[0]+destOff, g_sdlVidMem->egaGfx[0]+srcOff, num);
-		memcpy(g_sdlVidMem->egaGfx[1]+destOff, g_sdlVidMem->egaGfx[1]+srcOff, num);
-		memcpy(g_sdlVidMem->egaGfx[2]+destOff, g_sdlVidMem->egaGfx[2]+srcOff, num);
-		memcpy(g_sdlVidMem->egaGfx[3]+destOff, g_sdlVidMem->egaGfx[3]+srcOff, num);
-		return;
-	}
-
 	BEL_ST_EGAPlaneToEGAPlane_MemCopy(g_sdlVidMem->egaGfx[0], destOff, srcOff, num);
 	BEL_ST_EGAPlaneToEGAPlane_MemCopy(g_sdlVidMem->egaGfx[1], destOff, srcOff, num);
 	BEL_ST_EGAPlaneToEGAPlane_MemCopy(g_sdlVidMem->egaGfx[2], destOff, srcOff, num);
@@ -774,7 +766,7 @@ void BE_ST_SetScreenMode(int mode)
 		BE_ST_clrscr();
 		g_sdlTexWidth = 2*GFX_TEX_WIDTH;
 		g_sdlTexHeight = 2*GFX_TEX_HEIGHT;
-		g_sdlPixLineWidth = 8*80;
+		g_sdlLineWidth = 80;
 		g_sdlSplitScreenLine = -1;
 		// TODO should the contents of A0000 be backed up?
 		memset(g_sdlVidMem->egaGfx, 0, sizeof(g_sdlVidMem->egaGfx));
@@ -791,7 +783,7 @@ void BE_ST_SetScreenMode(int mode)
 	case 0xD:
 		g_sdlTexWidth = GFX_TEX_WIDTH;
 		g_sdlTexHeight = GFX_TEX_HEIGHT;
-		g_sdlPixLineWidth = 8*40;
+		g_sdlLineWidth = 40;
 		g_sdlSplitScreenLine = -1;
 		// HACK: Looks like this shouldn't be done if changing gfx->gfx
 		if (g_sdlScreenMode != 0xE)
@@ -803,7 +795,7 @@ void BE_ST_SetScreenMode(int mode)
 	case 0xE:
 		g_sdlTexWidth = 2*GFX_TEX_WIDTH;
 		g_sdlTexHeight = GFX_TEX_HEIGHT;
-		g_sdlPixLineWidth = 8*80;
+		g_sdlLineWidth = 80;
 		g_sdlSplitScreenLine = -1;
 		// HACK: Looks like this shouldn't be done if changing gfx->gfx
 		if (g_sdlScreenMode != 0xD)
@@ -1041,4 +1033,368 @@ void BEL_ST_UpdateHostDisplay(void)
 	}
 	memcpy(g_textMemoryOld, g_textMemory, sizeof(g_textMemoryOld));
 #endif
+}
+
+// unrolled functions for Keen Dreams
+
+#define IS_WORD_ALIGNED(x) (((intptr_t)(x) & 1) == 0)
+
+#define SCR_COPY_WORD \
+	*(uint16_t *)&g_sdlVidMem->egaGfx[0][destOff] = *(uint16_t *)&g_sdlVidMem->egaGfx[0][srcOff]; \
+	*(uint16_t *)&g_sdlVidMem->egaGfx[1][destOff] = *(uint16_t *)&g_sdlVidMem->egaGfx[1][srcOff]; \
+	*(uint16_t *)&g_sdlVidMem->egaGfx[2][destOff] = *(uint16_t *)&g_sdlVidMem->egaGfx[2][srcOff]; \
+	*(uint16_t *)&g_sdlVidMem->egaGfx[3][destOff] = *(uint16_t *)&g_sdlVidMem->egaGfx[3][srcOff]; \
+	destOff += 2; \
+	srcOff += 2;
+
+#define SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_WORD \
+	srcOff += SCREENWIDTH_EGA-2; \
+	destOff += SCREENWIDTH_EGA-2;
+
+#define SRC_COPY_PLANES_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED \
+	SCR_COPY_ROW_ALIGNED
+
+#define SCR_COPY_BYTE \
+	g_sdlVidMem->egaGfx[0][destOff] = g_sdlVidMem->egaGfx[0][srcOff]; \
+	g_sdlVidMem->egaGfx[1][destOff] = g_sdlVidMem->egaGfx[1][srcOff]; \
+	g_sdlVidMem->egaGfx[2][destOff] = g_sdlVidMem->egaGfx[2][srcOff]; \
+	g_sdlVidMem->egaGfx[3][destOff] = g_sdlVidMem->egaGfx[3][srcOff]; \
+	destOff++; \
+	srcOff++;
+
+#define SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_BYTE \
+	SCR_COPY_BYTE \
+	srcOff += SCREENWIDTH_EGA-2; \
+	destOff += SCREENWIDTH_EGA-2;
+
+#define SRC_COPY_PLANES_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED \
+	SCR_COPY_ROW_UNALIGNED
+
+void BE_ST_EGADrawTile16ScrToScr(int destOff, int srcOff)
+{
+	if (IS_WORD_ALIGNED(destOff) && IS_WORD_ALIGNED(srcOff))
+	{
+		SRC_COPY_PLANES_ALIGNED
+		return;
+	}
+
+	SRC_COPY_PLANES_UNALIGNED
+}
+
+#define MEM_START_PLANE(p) \
+	int egaDestOff##p = destOff;
+
+#define MEM_COPY_WORD(p) \
+	*(uint16_t *)&g_sdlVidMem->egaGfx[p][egaDestOff##p] = *(uint16_t *)srcPtr; \
+	egaDestOff##p += 2; \
+	srcPtr += 2;
+
+#define MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_WORD(p) \
+	egaDestOff##p += SCREENWIDTH_EGA-2;
+
+#define MEM_COPY_PLANE_ALIGNED(p) \
+	MEM_START_PLANE(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p) \
+	MEM_COPY_ROW_ALIGNED(p)
+
+#define MEM_COPY_BYTE(p) \
+	g_sdlVidMem->egaGfx[p][egaDestOff##p++] = *srcPtr++;
+
+#define MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_BYTE(p) \
+	MEM_COPY_BYTE(p) \
+	egaDestOff##p += SCREENWIDTH_EGA-2;
+
+#define MEM_COPY_PLANE_UNALIGNED(p) \
+	MEM_START_PLANE(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p) \
+	MEM_COPY_ROW_UNALIGNED(p)
+
+void BE_ST_EGADrawTile16MemToScr(int destOff, const uint8_t *srcPtr)
+{
+	if (IS_WORD_ALIGNED(destOff))
+	{
+		MEM_COPY_PLANE_ALIGNED(0)
+		MEM_COPY_PLANE_ALIGNED(1)
+		MEM_COPY_PLANE_ALIGNED(2)
+		MEM_COPY_PLANE_ALIGNED(3)
+		return;
+	}
+	MEM_COPY_PLANE_UNALIGNED(0)
+	MEM_COPY_PLANE_UNALIGNED(1)
+	MEM_COPY_PLANE_UNALIGNED(2)
+	MEM_COPY_PLANE_UNALIGNED(3)
+}
+
+// TODO calculate the mask location from foreScrPtr
+#define MEM_MASKED_START_PLANE(p) \
+	int egaDestOff##p = destOff; \
+	const uint8_t *maskPtr##p = foreSrcPtr; \
+	const uint8_t *dataPtr##p = &foreSrcPtr[2*16*(p+1)];
+
+#define MEM_MASKED_COPY_BYTE(p) \
+	g_sdlVidMem->egaGfx[p][egaDestOff##p] = ((*backSrcPtr) & (*maskPtr##p)) | (*dataPtr##p); \
+	egaDestOff##p++; \
+	backSrcPtr++; \
+	maskPtr##p++; \
+	dataPtr##p++;
+
+#define MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_BYTE(p) \
+	MEM_MASKED_COPY_BYTE(p) \
+	egaDestOff##p += SCREENWIDTH_EGA-2;
+
+#define MEM_MASKED_COPY_PLANE_UNALIGNED(p) \
+	MEM_MASKED_START_PLANE(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p) \
+	MEM_MASKED_COPY_ROW_UNALIGNED(p)
+
+#define MEM_MASKED_COPY_WORD(p) \
+	*(uint16_t *)&g_sdlVidMem->egaGfx[p][egaDestOff##p] = ((*(uint16_t *)backSrcPtr) & (*(uint16_t *)maskPtr##p)) | (*(uint16_t *)dataPtr##p); \
+	egaDestOff##p += 2; \
+	backSrcPtr += 2; \
+	maskPtr##p += 2; \
+	dataPtr##p += 2;
+
+#define MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_WORD(p) \
+	egaDestOff##p += SCREENWIDTH_EGA-2;
+
+#define MEM_MASKED_COPY_PLANE_ALIGNED(p) \
+	MEM_MASKED_START_PLANE(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p) \
+	MEM_MASKED_COPY_ROW_ALIGNED(p)
+
+void BE_ST_EGADrawTile16MaskedMemToScr(int destOff, const uint8_t *backSrcPtr, const uint8_t *foreSrcPtr)
+{
+	if (IS_WORD_ALIGNED(destOff))
+	{
+		MEM_MASKED_COPY_PLANE_ALIGNED(0)
+		MEM_MASKED_COPY_PLANE_ALIGNED(1)
+		MEM_MASKED_COPY_PLANE_ALIGNED(2)
+		MEM_MASKED_COPY_PLANE_ALIGNED(3)
+		return;
+	}
+
+	MEM_MASKED_COPY_PLANE_UNALIGNED(0)
+	MEM_MASKED_COPY_PLANE_UNALIGNED(1)
+	MEM_MASKED_COPY_PLANE_UNALIGNED(2)
+	MEM_MASKED_COPY_PLANE_UNALIGNED(3)
+}
+
+// TODO calculate the mask location from foreScrPtr
+#define SRC_MASKED_START_PLANE(p) \
+	int egaDestOff##p = destOff; \
+	const uint8_t *maskPtr##p = srcPtr; \
+	const uint8_t *dataPtr##p = &srcPtr[2*16*(p+1)];
+
+#define SRC_MASKED_COPY_BYTE(p) \
+	g_sdlVidMem->egaGfx[p][egaDestOff##p] = (g_sdlVidMem->egaGfx[p][egaDestOff##p] & (*maskPtr##p)) | (*dataPtr##p); \
+	egaDestOff##p++; \
+	maskPtr##p++; \
+	dataPtr##p++;
+
+#define SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_BYTE(p) \
+	SRC_MASKED_COPY_BYTE(p) \
+	egaDestOff##p += SCREENWIDTH_EGA-2;
+
+#define SRC_MASKED_COPY_PLANE_UNALIGNED(p) \
+	SRC_MASKED_START_PLANE(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p) \
+	SRC_MASKED_COPY_ROW_UNALIGNED(p)
+
+#define SRC_MASKED_COPY_WORD(p) \
+	*(uint16_t *)&g_sdlVidMem->egaGfx[p][egaDestOff##p] = ((*(uint16_t *)&g_sdlVidMem->egaGfx[p][egaDestOff##p]) & (*(uint16_t *)maskPtr##p)) | (*(uint16_t *)dataPtr##p); \
+	egaDestOff##p += 2; \
+	maskPtr##p += 2; \
+	dataPtr##p += 2;
+
+#define SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_WORD(p) \
+	egaDestOff##p += SCREENWIDTH_EGA-2;
+
+#define SRC_MASKED_COPY_PLANE_ALIGNED(p) \
+	SRC_MASKED_START_PLANE(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p) \
+	SRC_MASKED_COPY_ROW_ALIGNED(p)
+
+void BE_ST_EGADrawTile16MaskedSrcToScr(int destOff, const uint8_t *srcPtr)
+{
+	if (IS_WORD_ALIGNED(destOff))
+	{
+		SRC_MASKED_COPY_PLANE_ALIGNED(0)
+		SRC_MASKED_COPY_PLANE_ALIGNED(1)
+		SRC_MASKED_COPY_PLANE_ALIGNED(2)
+		SRC_MASKED_COPY_PLANE_ALIGNED(3)
+		return;
+	}
+
+	SRC_MASKED_COPY_PLANE_UNALIGNED(0)
+	SRC_MASKED_COPY_PLANE_UNALIGNED(1)
+	SRC_MASKED_COPY_PLANE_UNALIGNED(2)
+	SRC_MASKED_COPY_PLANE_UNALIGNED(3)
+}
+
+// common with Catacomb 3D
+// TODO: add word/dword aligned copies, unroll loops, etc.
+void BE_ST_EGACopyBlockScrToScr(int destOff, int linedelta, int srcOff, int width, int height)
+{
+	do
+	{
+		int colsLeft = width;
+		do
+		{
+			g_sdlVidMem->egaGfx[0][destOff] = g_sdlVidMem->egaGfx[0][srcOff];
+			g_sdlVidMem->egaGfx[1][destOff] = g_sdlVidMem->egaGfx[1][srcOff];
+			g_sdlVidMem->egaGfx[2][destOff] = g_sdlVidMem->egaGfx[2][srcOff];
+			g_sdlVidMem->egaGfx[3][destOff] = g_sdlVidMem->egaGfx[3][srcOff];
+			++srcOff;
+			++destOff;
+			--colsLeft;
+		} while (colsLeft);
+		destOff += linedelta;
+		srcOff += linedelta;
+		--height;
+	} while (height);
+}
+
+// used by Catacomb 3D too to draw the hand
+// TODO: add unrolled versions for common Keen Dreams sprite sizes (largest: 10 average: 4)
+void BE_ST_EGAMaskBlockSrcToSrc(int destOff, int linedelta, uint8_t *srcPtr, int width, int height, int planesize)
+{
+	bool aligned = IS_WORD_ALIGNED(destOff);
+	do
+	{
+		int colsLeft = width;
+		do
+		{
+			g_sdlVidMem->egaGfx[0][destOff] = (g_sdlVidMem->egaGfx[0][destOff] & (*srcPtr)) | srcPtr[planesize*1];
+			g_sdlVidMem->egaGfx[1][destOff] = (g_sdlVidMem->egaGfx[1][destOff] & (*srcPtr)) | srcPtr[planesize*2];
+			g_sdlVidMem->egaGfx[2][destOff] = (g_sdlVidMem->egaGfx[2][destOff] & (*srcPtr)) | srcPtr[planesize*3];
+			g_sdlVidMem->egaGfx[3][destOff] = (g_sdlVidMem->egaGfx[3][destOff] & (*srcPtr)) | srcPtr[planesize*4];
+			++srcPtr;
+			++destOff;
+			--colsLeft;
+		} while (colsLeft);
+		destOff += linedelta;
+		--height;
+	} while (height);
 }

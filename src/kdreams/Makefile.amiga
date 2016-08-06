@@ -1,6 +1,6 @@
 VERDIRNAME=kdreams
 
-DEBUG=1
+DEBUG=0
 BINPREFIX=m68k-amigaos-
 
 CXX=$(BINPREFIX)gcc

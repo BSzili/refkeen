@@ -200,6 +200,10 @@ void RFL_NewTile_EGA (id0_unsigned_t updateoffset)
 			//=============
 			id0_unsigned_t egaSrcOff = tilecache[backtilenum];
 			id0_unsigned_t egaDestOff = screenstartcs;
+#ifdef __AMIGA__
+			extern void BE_ST_EGADrawTile16ScrToScr(int destOff, int srcOff);
+			BE_ST_EGADrawTile16ScrToScr(egaDestOff, egaSrcOff);
+#else
 			for (int loopVar = 15; loopVar; --loopVar)
 			{
 				BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff++, egaSrcOff++);
@@ -209,6 +213,7 @@ void RFL_NewTile_EGA (id0_unsigned_t updateoffset)
 			}
 			BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff++, egaSrcOff++);
 			BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff, egaSrcOff);
+#endif
 
 			return;
 		}
@@ -220,6 +225,10 @@ void RFL_NewTile_EGA (id0_unsigned_t updateoffset)
 		//=============
 		tilecache[backtilenum] = screenstartcs; // next time it can be drawn from here with latch
 		const id0_byte_t *backSrcPtr = (id0_byte_t *)grsegs[STARTTILE16+backtilenum];
+#ifdef __AMIGA__
+		extern void BE_ST_EGADrawTile16MemToScr(int destOff, const uint8_t *srcPtr);
+		BE_ST_EGADrawTile16MemToScr(screenstartcs, backSrcPtr);
+#else
 		backSrcPtr = backSrcPtr ? backSrcPtr : g_be_cross_dosZeroSeg; // VANILLA KEEN BUG WORKAROUND ("Empty" tile found in map)
 		for (int currentPlane = 0; currentPlane < 4; ++currentPlane) // draw four planes
 		{
@@ -233,6 +242,7 @@ void RFL_NewTile_EGA (id0_unsigned_t updateoffset)
 			BE_ST_EGAUpdateGFXBufferInPlane(egaDestOff, backSrcPtr, TILEWIDTH_EGA, currentPlane);
 			backSrcPtr += TILEWIDTH_EGA;
 		}
+#endif
 
 		return;
 	}
@@ -243,6 +253,10 @@ void RFL_NewTile_EGA (id0_unsigned_t updateoffset)
 	// Interupts are disabled and the stack segment is reassigned
 	//
 	//=========
+#ifdef __AMIGA__
+	extern void BE_ST_EGADrawTile16MaskedMemToScr(int destOff, const uint8_t *backSrcPtr, const uint8_t *foreSrcPtr);
+	BE_ST_EGADrawTile16MaskedMemToScr(screenstartcs, grsegs[STARTTILE16+backtilenum], grsegs[STARTTILE16M+foretilenum]);
+#else
 	const id0_byte_t *backSrcPtr = (id0_byte_t *)grsegs[STARTTILE16+backtilenum];
 	backSrcPtr = backSrcPtr ? backSrcPtr : g_be_cross_dosZeroSeg; // VANILLA KEEN BUG WORKAROUND ("Empty" tile found in map)
 	id0_unsigned_t egaDestOff = screenstartcs;
@@ -263,6 +277,7 @@ void RFL_NewTile_EGA (id0_unsigned_t updateoffset)
 			++foreSrcPtr;
 		}
 	}
+#endif
 }
 
 //#endif
@@ -350,6 +365,10 @@ void RFL_UpdateTiles (void)
 			{
 				id0_word_t egaDestOff = tileLoc+bufferofs; // dest in current screen
 				id0_word_t egaSrcOff = tileLoc+masterofs; // source in master screen
+#ifdef __AMIGA__
+				extern void BE_ST_EGADrawTile16ScrToScr(int destOff, int srcOff);
+				BE_ST_EGADrawTile16ScrToScr(egaDestOff, egaSrcOff);
+#else
 				for (int loopVar = 15; loopVar; --loopVar)
 				{
 					BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(egaDestOff, egaSrcOff, TILEWIDTH_EGA);
@@ -357,6 +376,7 @@ void RFL_UpdateTiles (void)
 					egaDestOff += SCREENWIDTH_EGA;
 				}
 				BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(egaDestOff, egaSrcOff, TILEWIDTH_EGA);
+#endif
 			}
 			continue;
 		}
@@ -409,6 +429,16 @@ void RFL_UpdateTiles (void)
 		{
 			id0_word_t egaDestOff = tileLoc+bufferofs; // dest in current screen
 			id0_word_t egaSrcOff = tileLoc+masterofs; // source in master screen
+#ifdef __AMIGA__
+			extern void BE_ST_EGADrawTile16ScrToScr(int destOff, int srcOff);
+			for (int i = (scanPtr - rowScanStartPtr); i-- > 0; )
+			{
+				BE_ST_EGADrawTile16ScrToScr(egaDestOff, egaSrcOff);
+				egaSrcOff += 2;
+				egaDestOff += 2;
+			}
+			iterationsToDo = 0;
+#else
 			id0_word_t bytesToSkip = SCREENWIDTH_EGA-bytesPerRow;
 			for (int loopVar = 15; loopVar; --loopVar)
 			{
@@ -421,6 +451,7 @@ void RFL_UpdateTiles (void)
 			iterationsToDo = bytesPerRow;
 			BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(egaDestOff, egaSrcOff, iterationsToDo);
 			iterationsToDo = 0;
+#endif
 		}
 
 		// was 0, now 0xFFFF for above loop
@@ -538,6 +569,10 @@ void RFL_MaskForegroundTiles (void)
 			id0_word_t tileLoc = blockstarts[scanPtr-updateptr-1];
 			screenstartcs = (id0_unsigned_t)(tileLoc + bufferofs);
 
+#ifdef __AMIGA__
+			extern void BE_ST_EGADrawTile16MaskedSrcToScr(int destOff, const uint8_t *srcPtr);
+			BE_ST_EGADrawTile16MaskedSrcToScr(screenstartcs, grsegs[STARTTILE16M+foretilenum]);
+#else
 			id0_unsigned_t dataLoc = 32; // data starts 32 bytes after mask
 
 			do // plane loop
@@ -558,6 +593,7 @@ void RFL_MaskForegroundTiles (void)
 				++planenum;
 				//planemask <<= 1; // shift plane mask over for next plane
 			} while (planenum != 4/*planemask != 0x10*/);
+#endif
 		}
 
 		iterationsToDo = 0xFFFF; // definitely scan the entire thing

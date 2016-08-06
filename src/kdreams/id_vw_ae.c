@@ -294,13 +294,13 @@ id0_byte_t planenum;
 void VW_MaskBlock_EGA(memptr segm,id0_unsigned_t ofs,id0_unsigned_t dest,
 	id0_unsigned_t wide,id0_unsigned_t height,id0_unsigned_t planesize)
 {
+#ifdef __AMIGA__
+	void BE_ST_EGAMaskBlockSrcToSrc(int destOff, int linedelta, uint8_t *srcPtr, int width, int height, int planesize);
+	BE_ST_EGAMaskBlockSrcToSrc(dest, linewidth-wide, (id0_byte_t *)segm + ofs, wide, height, planesize);
+#else
 	//planemask = 1;
 	planenum = 0;
 	linedelta = linewidth-wide; // amount to add after drawing each line
-#ifdef __AMIGA__
-	extern void BE_ST_EGAMaskBlock(uint16_t destOff, uint8_t *src, uint16_t linedelta, uint16_t width, uint16_t height, uint16_t planesize);
-	BE_ST_EGAMaskBlock(dest, (id0_byte_t *)segm + ofs, linedelta, wide, height, planesize);
-#else
 	id0_unsigned_t dataLoc = planesize;
 	do
 	{
@@ -626,10 +626,15 @@ ENDP
 void VW_ScreenToScreen_EGA(id0_unsigned_t source, id0_unsigned_t dest,
 	id0_unsigned_t wide, id0_unsigned_t height)
 {
+#ifdef __AMIGA__
+	void BE_ST_EGACopyBlockScrToScr(int destOff, int linedelta, int srcOff, int width, int height);
+	BE_ST_EGACopyBlockScrToScr(dest, linewidth-wide, source, wide, height);
+#else
 	for (id0_unsigned_t lineCounter = height; lineCounter; --lineCounter, source += linewidth, dest += linewidth)
 	{
 		BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(dest, source, wide);
 	}
+#endif
 
 }
 #if 0

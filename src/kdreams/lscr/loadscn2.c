@@ -209,6 +209,9 @@ static id0_int_t ReadPtr(void **infile, id0_unsigned_t PtrType)
 static void id0_far lzwDecompress(void id0_far *infile, void id0_far *outfile, id0_unsigned_long_t DataLength, id0_unsigned_t PtrTypes)
 {
 	id0_int_t  i, j, k, r, c;
+#ifdef __AMIGA__
+	volatile // gcc optimizer bug workaround
+#endif
 	id0_unsigned_int_t flags;
 
 	for (i = 0; i < LZW_N - LZW_F; i++)
