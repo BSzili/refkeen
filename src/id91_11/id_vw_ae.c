@@ -294,13 +294,13 @@ id0_byte_t planenum;
 void VW_MaskBlock(memptr segm,id0_unsigned_t ofs,id0_unsigned_t dest,
 	id0_unsigned_t wide,id0_unsigned_t height,id0_unsigned_t planesize)
 {
+#ifdef __AMIGA__
+	void BE_ST_EGAMaskBlockSrcToSrc(int destOff, int linedelta, uint8_t *srcPtr, int width, int height, int planesize);
+	BE_ST_EGAMaskBlockSrcToSrc(dest, linewidth-wide, (id0_byte_t *)segm + ofs, wide, height, planesize);
+#else
 	//planemask = 1;
 	planenum = 0;
 	linedelta = linewidth-wide; // amount to add after drawing each line
-#ifdef __AMIGA__
-	extern void BE_ST_EGAMaskBlock(uint16_t destOff, uint8_t *src, uint16_t linedelta, uint16_t width, uint16_t height, uint16_t planesize);
-	BE_ST_EGAMaskBlock(dest, (id0_byte_t *)segm + ofs, linedelta, wide, height, planesize);
-#else
 	id0_unsigned_t dataLoc = planesize;
 	do
 	{

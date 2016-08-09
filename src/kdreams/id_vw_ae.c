@@ -627,8 +627,8 @@ void VW_ScreenToScreen_EGA(id0_unsigned_t source, id0_unsigned_t dest,
 	id0_unsigned_t wide, id0_unsigned_t height)
 {
 #ifdef __AMIGA__
-	void BE_ST_EGACopyBlockScrToScr(int destOff, int linedelta, int srcOff, int width, int height);
-	BE_ST_EGACopyBlockScrToScr(dest, linewidth-wide, source, wide, height);
+	void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height);
+	BE_ST_EGACopyBlockScrToScr(dest, linewidth-wide, source, linewidth-wide, wide, height);
 #else
 	for (id0_unsigned_t lineCounter = height; lineCounter; --lineCounter, source += linewidth, dest += linewidth)
 	{

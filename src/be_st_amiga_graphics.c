@@ -30,6 +30,8 @@
 
 #ifdef REFKEEN_VER_KDREAMS
 #define	SCREENWIDTH_EGA		64
+#else
+#define	SCREENWIDTH_EGA		g_sdlLineWidth
 #endif
 
 #define GFX_TEX_WIDTH 320
@@ -268,7 +270,7 @@ void BE_ST_InitGfx(void)
 {
 	g_sdlVidMem = AllocVec(sizeof(*g_sdlVidMem), MEMF_CHIP | MEMF_CLEAR);
 #ifdef ENABLE_TEXT
-	g_vgaFont = AllocVec(16*16*256, MEMF_CHIP | MEMF_CLEAR);
+	g_vgaFont = AllocVec(2*16*256, MEMF_CHIP | MEMF_CLEAR);
 	UWORD *ptr = g_vgaFont;
 
 	const uint8_t *currCharFontPtr;
@@ -694,34 +696,21 @@ void BE_ST_EGAUpdateGFXBitsFrom4bitsPixel(uint16_t destOff, uint8_t color, uint8
 void BE_ST_EGAUpdateGFXBufferFrom4bitsPixel(uint16_t destOff, uint8_t color, uint16_t count)
 {
 #if 1
-	uint32_t plane0color = 0;
-	uint32_t plane1color = 0;
-	uint32_t plane2color = 0;
-	uint32_t plane3color = 0;
-	uint32_t *plane0 = (uint32_t *)&g_sdlVidMem->egaGfx[0][destOff];
-	uint32_t *plane1 = (uint32_t *)&g_sdlVidMem->egaGfx[1][destOff];
-	uint32_t *plane2 = (uint32_t *)&g_sdlVidMem->egaGfx[2][destOff];
-	uint32_t *plane3 = (uint32_t *)&g_sdlVidMem->egaGfx[3][destOff];
+	uint8_t plane0color = -(color & 1);
+	uint8_t plane1color = -((color & 2) >> 1);
+	uint8_t plane2color = -((color & 4) >> 2);
+	uint8_t plane3color = -((color & 8) >> 3);
+	uint8_t *plane0 = (uint8_t *)&g_sdlVidMem->egaGfx[0][destOff];
+	uint8_t *plane1 = (uint8_t *)&g_sdlVidMem->egaGfx[1][destOff];
+	uint8_t *plane2 = (uint8_t *)&g_sdlVidMem->egaGfx[2][destOff];
+	uint8_t *plane3 = (uint8_t *)&g_sdlVidMem->egaGfx[3][destOff];
 
-	plane0color = -(color & 1);
-	plane1color = -((color & 2) >> 1);
-	plane2color = -((color & 4) >> 2);
-	plane3color = -((color & 8) >> 3);
-
-	for (int loopVar = 0; loopVar < count / 4; ++loopVar)
+	for (int loopVar = 0; loopVar < count; ++loopVar)
 	{
 		*plane0++ = plane0color;
 		*plane1++ = plane1color;
 		*plane2++ = plane2color;
 		*plane3++ = plane3color;
-	}
-
-	for (int loopVar = 0; loopVar < count % 4; ++loopVar)
-	{
-		((uint8_t *)plane0)[loopVar] = (uint8_t)plane0color;
-		((uint8_t *)plane1)[loopVar] = (uint8_t)plane1color;
-		((uint8_t *)plane2)[loopVar] = (uint8_t)plane2color;
-		((uint8_t *)plane3)[loopVar] = (uint8_t)plane3color;
 	}
 #else
 	BEL_ST_EGAPlane_MemSet(g_sdlVidMem->egaGfx[0], destOff, (uint8_t)(-(color&1)), count);
@@ -1355,7 +1344,7 @@ void BE_ST_EGADrawTile16MaskedSrcToScr(int destOff, const uint8_t *srcPtr)
 
 // common with Catacomb 3D
 // TODO: add word/dword aligned copies, unroll loops, etc.
-void BE_ST_EGACopyBlockScrToScr(int destOff, int linedelta, int srcOff, int width, int height)
+void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height)
 {
 	do
 	{
@@ -1370,8 +1359,8 @@ void BE_ST_EGACopyBlockScrToScr(int destOff, int linedelta, int srcOff, int widt
 			++destOff;
 			--colsLeft;
 		} while (colsLeft);
-		destOff += linedelta;
-		srcOff += linedelta;
+		destOff += dstLineDelta;
+		srcOff += srcLineDelta;
 		--height;
 	} while (height);
 }
@@ -1380,7 +1369,7 @@ void BE_ST_EGACopyBlockScrToScr(int destOff, int linedelta, int srcOff, int widt
 // TODO: add unrolled versions for common Keen Dreams sprite sizes (largest: 10 average: 4)
 void BE_ST_EGAMaskBlockSrcToSrc(int destOff, int linedelta, uint8_t *srcPtr, int width, int height, int planesize)
 {
-	bool aligned = IS_WORD_ALIGNED(destOff);
+	//bool aligned = IS_WORD_ALIGNED(destOff);
 	do
 	{
 		int colsLeft = width;
