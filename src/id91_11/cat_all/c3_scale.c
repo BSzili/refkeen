@@ -785,6 +785,56 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 //
 // draw lines
 //
+
+#ifdef __AMIGA__
+	// TODO: precalculate these for 1-MAXSCALE
+	static id0_long_t screenpixels[64][3];
+
+	extern uint8_t *g_chunkyBuffer;
+	id0_long_t		step;
+	int	src;
+	int			startpix,endpix,toppix;
+
+	// from notstiller's port
+	step = ((id0_long_t)scale<<17)/64;
+	toppix = (VIEWHEIGHT-2*scale)/2;
+
+	for (src=0;src<64;src++)
+	{
+		screenpixels[src][0] = screenpixels[src][1] = 0;
+
+		startpix = (src*step)>>16;
+		endpix = ((src+1)*step)>>16;
+
+		if (startpix == endpix)
+			continue;
+
+		endpix += toppix;
+
+		if (endpix < 0)
+			continue;
+
+		if (endpix > VIEWYH+1)
+			endpix = VIEWYH+1;
+
+		startpix += toppix;
+
+		if (startpix >= VIEWYH+1)
+		{
+			// starting pixel is off screen, terminate
+			screenpixels[src+1][0] = -1;
+			continue;
+		}
+
+		if (startpix < 0)
+			startpix = 0;
+
+		screenpixels[src][0] = startpix;
+		screenpixels[src][1] = endpix;
+		screenpixels[src][2] = (id0_long_t)&g_chunkyBuffer[startpix*VIEWWIDTH];
+	}
+#endif
+
 	do		// while (1)
 	{
 	//
@@ -805,53 +855,30 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 
 		while (*codePtr != 0xcb)
 		{
-			id0_int_t lastpix = (*(id0_int_t *)(codePtr+2))/2;
-			id0_int_t firstpix = (*(id0_int_t *)(codePtr+10))/2;
+			int lastpix = (*(id0_int_t *)(codePtr+2))/2;
+			int firstpix = (*(id0_int_t *)(codePtr+10))/2;
 			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_int_t *)(codePtr+19));
 
+			for (src=firstpix;src<lastpix;src++)
 			{
-				extern uint8_t *g_chunkyBuffer;
-				id0_long_t		step;
-				id0_unsigned_t	src;
-				id0_int_t			startpix,endpix,toppix;
+				startpix = screenpixels[src][0];
+				endpix = screenpixels[src][1];
 
-				// from notstiller's port
-				step = ((id0_long_t)scale<<17)/64;
-				toppix = (VIEWHEIGHT-2*scale)/2;
+				if (startpix < 0)
+					break;
 
-				for (src=firstpix;src<lastpix;src++)
+				if (startpix == endpix)
+					continue;
+
+				//uint8_t *destPtr = &g_chunkyBuffer[pixel + startpix*VIEWWIDTH];
+				uint8_t *destPtr = (uint8_t *)screenpixels[src][2] + pixel;
+
+				for (;startpix<endpix;startpix++)
 				{
-					startpix = (src*step)>>16;
-					endpix = ((src+1)*step)>>16;
+					for (id0_unsigned_t i=0; i<pixwidth; i++)
+						destPtr[i] = srcPtr[src];
 
-					if (startpix == endpix)
-						continue;
-
-					endpix += toppix;
-
-					if (endpix < 0)
-						continue;
-
-					if (endpix > VIEWYH+1)
-						endpix = VIEWYH+1;
-
-					startpix += toppix;
-
-					if (startpix >= VIEWYH+1)
-						break;
-
-					if (startpix < 0)
-						startpix = 0;
-
-					uint8_t *destPtr = &g_chunkyBuffer[pixel + startpix*VIEWWIDTH];
-
-					for (;startpix<endpix;startpix++)
-					{
-						for (id0_unsigned_t i=0; i<pixwidth; i++)
-							destPtr[i] = srcPtr[src];
-
-						destPtr += VIEWWIDTH;
-					}
+					destPtr += VIEWWIDTH;
 				}
 			}
 			codePtr += 29;
