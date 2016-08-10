@@ -4,6 +4,7 @@
 #include <graphics/gfxbase.h>
 //#include <dos/dostags.h>
 #include <devices/audio.h>
+#include <hardware/cia.h>
 #include <proto/dos.h>
 #include <proto/graphics.h>
 #include <proto/exec.h>
@@ -41,6 +42,9 @@ static struct MsgPort *g_audioPort;
 static struct IOAudio *g_audioReq;
 static BYTE *g_squareWave;
 static LONG g_audioClock;
+static APTR g_timerIntHandle = NULL;
+static struct CIA *ciaa = (struct CIA *)0xbfe001;
+static bool g_restoreFilter;
 
 // hack to add my own timer
 extern void SD_SetUserHook(void (*hook)(void));
@@ -58,9 +62,6 @@ static void MySoundUserHook(void)
 	Permit();
 #endif
 }
-
-
-APTR g_timerIntHandle = NULL;
 
 static void BEL_ST_TimerInterrupt(register APTR *data __asm("a1"))
 {
@@ -121,6 +122,9 @@ void BE_ST_InitAudio(void)
 				{
 					g_squareWave[0] = 127;
 					g_squareWave[1] = -127;
+					// turn off the 3.2 kHz low-pass filter
+					g_restoreFilter = !(ciaa->ciapra & CIAF_LED) ? true : false;
+					ciaa->ciapra |= CIAF_LED;
 					return;
 				}
 			}
@@ -153,6 +157,12 @@ void BE_ST_ShutdownAudio(void)
 	{
 		FreeVec(g_squareWave);
 		g_squareWave = NULL;
+	}
+	
+	if (g_restoreFilter)
+	{
+		// restore filter
+		ciaa->ciapra &= ~CIAF_LED;
 	}
 }
 
@@ -249,8 +259,6 @@ void BE_ST_SetTimer(uint16_t speed, bool isALMusicOn)
 	}
 	D(bug("%s(%d,%d) delay %d\n", __FUNCTION__, speed, isALMusicOn, g_timerDelay));
 }
-
-void BEL_ST_UpdateHostDisplay(void);
 
 uint32_t BE_ST_GetTimeCount(void)
 {
