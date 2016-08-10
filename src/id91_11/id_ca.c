@@ -763,11 +763,19 @@ void CAL_SetupGrFile (void)
 	CAL_GetGrChunkLength(STRUCTPICM);		// position file pointer
 	MM_GetPtr(&compseg,chunkcomplen);
 	CA_FarRead (grhandle,(id0_byte_t *)compseg,chunkcomplen);
+#ifdef __AMIGA__
+	CAL_HuffExpand ((id0_byte_t *)compseg, (id0_byte_t id0_huge *)picmtable,NUMPICM*sizeof(pictabletype),grhuffman);
+#else
 	CAL_HuffExpand ((id0_byte_t *)compseg, (id0_byte_t id0_huge *)picmtable,NUMPICS*sizeof(pictabletype),grhuffman);
+#endif
 	MM_FreePtr(&compseg);
 	// REFKEEN - Big Endian support (including above vanilla bug with NUMPICS?)
 #ifdef REFKEEN_ARCH_BIG_ENDIAN
+#ifdef __AMIGA__
+	for (int i = 0; i < NUMPICM; ++i)
+#else
 	for (int i = 0; i < NUMPICS; ++i)
+#endif
 	{
 		picmtable[i].width = BE_Cross_Swap16LE(picmtable[i].width);
 		picmtable[i].height = BE_Cross_Swap16LE(picmtable[i].height);
