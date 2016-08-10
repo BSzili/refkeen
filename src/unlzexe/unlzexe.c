@@ -505,7 +505,14 @@ static int unpack(FILE *ifile,unsigned char *obuff){
     int16_t span;
     long fpos;
     bitstream bits;
+#ifdef __AMIGA__
+	BYTE *p, *data;
+
+	p=data=calloc(1, 0x4500);
+	if (!data) { BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "unpack (unlzexe) - memory error\n"); return(FAILURE); }
+#else
     static BYTE data[0x4500], *p=data;
+#endif
 
     fpos=((long)ihead[0x0b]-(long)inf[4]+(long)ihead[4])<<4;
     fseek(ifile,fpos,SEEK_SET);
@@ -568,6 +575,9 @@ static int unpack(FILE *ifile,unsigned char *obuff){
     //loadsize=ftell(ofile)-fpos;
     BE_Cross_LogMessage(BE_LOG_MSG_NORMAL, "unpack (unlzexe) - end\n");
     //printf("end\n");
+#ifdef __AMIGA__
+	free(data);
+#endif
     return(SUCCESS);
 }
 

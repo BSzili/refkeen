@@ -247,21 +247,28 @@ const char *refkeen_gamever_strs[BE_GAMEVER_LAST] = {
 
 
 static TCHAR g_be_appDataPath[BE_CROSS_PATH_LEN_BOUND];
+#ifndef __AMIGA__
 static TCHAR g_be_appNewCfgPath[BE_CROSS_PATH_LEN_BOUND];
+#endif
 
 extern const char *be_main_arg_datadir;
 extern const char *be_main_arg_newcfgdir;
 
+#ifndef __AMIGA__
 // A list of "root paths" from which one can choose a game dir (using just ASCII characters)
 static TCHAR g_be_rootPaths[BE_CROSS_MAX_ROOT_PATHS][BE_CROSS_PATH_LEN_BOUND];
 static const char *g_be_rootPathsKeys[BE_CROSS_MAX_ROOT_PATHS];
 static const char *g_be_rootPathsNames[BE_CROSS_MAX_ROOT_PATHS];
 static int g_be_rootPathsNum;
+#endif
 #ifdef REFKEEN_PLATFORM_WINDOWS
 static const wchar_t *g_be_rootDrivePaths[] = {L"a:",L"b:",L"c:",L"d:",L"e:",L"f:",L"g:",L"h:",L"i:",L"j:",L"k:",L"l:",L"m:",L"n:",L"o:",L"p:",L"q:",L"r:",L"s:",L"t:",L"u:",L"v:",L"w:",L"x:",L"y:",L"z:"};
 static const char *g_be_rootDrivePathsNames[] = {"a:","b:","c:","d:","e:","f:","g:","h:","i:","j:","k:","l:","m:","n:","o:","p:","q:","r:","s:","t:","u:","v:","w:","x:","y:","z:"};
 #endif
 
+#ifdef __AMIGA__
+#define REFKEEN_PLATFORM_UNIX
+#endif
 static bool BEL_Cross_IsDir(const TCHAR* path)
 {
 #ifdef REFKEEN_PLATFORM_WINDOWS
@@ -272,7 +279,11 @@ static bool BEL_Cross_IsDir(const TCHAR* path)
 	return ((stat(path, &info) == 0) && S_ISDIR(info.st_mode));
 #endif
 }
+#ifdef __AMIGA__
+#undef REFKEEN_PLATFORM_UNIX
+#endif
 
+#ifndef __AMIGA__
 /*** WARNING: The key and name are assumed to be C STRING LITERALS, and so are *NOT* copied! ***/
 static void BEL_Cross_AddRootPath(const TCHAR *rootPath, const char *rootPathKey, const char *rootPathName)
 {
@@ -291,6 +302,7 @@ static void BEL_Cross_AddRootPathIfDir(const TCHAR *rootPath, const char *rootPa
 	if (BEL_Cross_IsDir(rootPath))
 		BEL_Cross_AddRootPath(rootPath, rootPathKey, rootPathName);
 }
+#endif
 
 
 void BE_Cross_PrepareAppPaths(void)
@@ -1292,6 +1304,7 @@ BE_FILE_T BE_Cross_open_rewritable_for_overwriting(const char *filename)
 	return BEL_Cross_open_from_dir(filename, true, g_be_selectedGameInstallation->writableFilesPath, NULL);
 }
 
+#ifndef __AMIGA__
 // Used for e.g., the RefKeen cfg file
 BE_FILE_T BE_Cross_open_additionalfile_for_reading(const char *filename)
 {
@@ -1305,6 +1318,7 @@ BE_FILE_T BE_Cross_open_additionalfile_for_overwriting(const char *filename)
 
 	return BEL_Cross_open_from_dir(filename, true, g_be_appNewCfgPath, NULL);
 }
+#endif
 
 // Loads a file originally embedded into the EXE (for DOS) to a newly allocated
 // chunk of memory. Should be freed with BE_Cross_free_mem_loaded_embedded_rsrc.
@@ -1514,6 +1528,7 @@ void BE_Cross_PrepareGameInstallations(void)
 #endif
 #endif
 	}
+#ifndef __AMIGA__
 	/*** Finally check any custom dir ***/
 	char buffer[2*BE_CROSS_PATH_LEN_BOUND];
 	for (int i = 0; i < BE_GAMEVER_LAST; ++i)
@@ -1559,9 +1574,11 @@ void BE_Cross_PrepareGameInstallations(void)
 		BEL_Cross_safeandfastcstringcopytoctstring(BEL_Cross_safeandfastctstringcopy_2strs(path, pathEnd, g_be_rootPaths[j], _T("/")), pathEnd, dirWithoutRoot);
 		BEL_Cross_ConditionallyAddGameInstallation(details, path, details->customInstDescription);
 	}
+#endif
 }
 
 
+#ifndef __AMIGA__
 // Use for game versions selection
 int BE_Cross_DirSelection_GetNumOfRootPaths(void)
 {
@@ -1751,6 +1768,7 @@ int BE_Cross_DirSelection_TryAddGameInstallation(void)
 	}
 	return verId;
 }
+#endif
 
 
 // gameVer should be BE_GAMEVER_LAST if no specific version is desired
