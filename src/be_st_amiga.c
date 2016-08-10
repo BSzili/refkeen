@@ -28,10 +28,32 @@
 #define IPTR ULONG
 #endif
 
+// 16KB stack minimum
+unsigned long __attribute__((used)) __stack=0x4000;
+
 // TODO: fix these
 RefKeenConfig g_refKeenCfg;
 BE_ST_ControllerMapping g_beStControllerMappingTextInput;
 BE_ST_ControllerMapping g_beStControllerMappingDebugKeys;
+// more alt controller stubs from altcontroller.c
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu_help;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_notenoughmemorytostart;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_simpledialog;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu_confirm;
+#ifdef REFKEEN_VER_CATACOMB_ALL
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_menu_paddle;
+#endif
+#ifdef REFKEEN_VER_CATADVENTURES
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_soundoptions;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_keychoice;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_help;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_waitforspace;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_intro;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_intro_skillselection;
+BE_ST_ControllerMapping g_ingame_altcontrol_mapping_saveoverwriteconfirm;
+#endif
 
 static void (*g_sdlKeyboardInterruptFuncPtr)(uint8_t) = 0;
 extern struct Screen *g_amigaScreen;
@@ -351,7 +373,8 @@ void BE_ST_HandleExit(int status)
 		BE_ST_BiosScanCode(0);
 #endif
 #ifdef REFKEEN_VER_KDREAMS
-	BE_ST_BiosScanCode(0);
+	if (refkeen_current_gamever == BE_GAMEVER_KDREAMSE113)
+		BE_ST_BiosScanCode(0);
 #endif
 	BE_ST_ShutdownAll();
 	exit(status);
@@ -537,6 +560,18 @@ void BE_ST_AltControlScheme_UpdateVirtualMouseCursor(int x, int y)
 void BE_ST_PollEvents(void)
 {
 	//BE_ST_PrepareForManualAudioSDServiceCall();
+}
+
+void FillControlPanelTouchMappings(bool withmouse)
+{
+}
+
+void PrepareGamePlayControllerMapping(void)
+{
+}
+
+void RefKeen_PrepareAltControllerScheme(void)
+{
 }
 
 #ifdef BE_ST_ENABLE_FARPTR_CFG

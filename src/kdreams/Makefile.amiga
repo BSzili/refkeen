@@ -5,7 +5,7 @@ BINPREFIX=m68k-amigaos-
 
 CXX=$(BINPREFIX)gcc
 
-STRIPBIN=$(BINPREFIX)strip
+STRIPBIN=$(BINPREFIX)strip -K ___stack
 SRC=.
 BESRC=..
 OBJPREFIX=obj
@@ -15,7 +15,7 @@ BEOBJ=$(OBJ)/be
 
 OBJECTS=$(OBJ)/id_ca.o \
         $(OBJ)/id_in.o \
-        $(OBJ)/id_mm.o \
+        $(OBJ)/id_mm_amiga.o \
         $(OBJ)/id_rf_a.o \
         $(OBJ)/id_rf.o \
         $(OBJ)/id_sd.o \
@@ -36,7 +36,6 @@ OBJECTS=$(OBJ)/id_ca.o \
         $(OBJ)/loadscn2.o \
         $(OBJ)/lzhuf.o \
         $(OBJ)/soft.o \
-        $(OBJ)/altcontroller.o \
         $(OBJ)/statetype_ptr_conversion.o
 
 BEOBJECTS=$(BEOBJ)/actual_main.o \
@@ -61,11 +60,13 @@ else
 	CXXOPT=-O2 -fomit-frame-pointer
 endif
 
-INTCXXFLAGS+= $(CXXOPT) -Wall -Wno-missing-braces -Wno-switch -Wno-parentheses -m68020 -msoft-float -std=c99
+INTCXXFLAGS+= $(CXXOPT) -Wall -Wno-missing-braces -Wno-switch -Wno-parentheses -m68020 -msoft-float -std=c99 -noixemul
 INTLDFLAGS= -lm -noixemul
 ifeq ($(DEBUG),1)
 	INTLDFLAGS+= -ldebug
 endif
+# there must be a better way to do this
+INTLDFLAGS+= /usr/local/amiga/m68k-amigaos/lib/libnix/swapstack.o
 
 EXE_PATH=$(BESRC)/$(EXENAME)$(EXE_EXT)
 
