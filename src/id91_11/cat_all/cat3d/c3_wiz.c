@@ -147,6 +147,10 @@ void DrawChar (id0_unsigned_t x, id0_unsigned_t y, id0_unsigned_t tile)
 {
 	id0_word_t egaDestOff = x+ylookup[y];
 	id0_word_t egaSrcOff = latchpics[0]+8*tile;
+#ifdef __AMIGA__
+	void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height);
+	BE_ST_EGACopyBlockScrToScr(egaDestOff, SCREENWIDTH-1, egaSrcOff, 0, 1, 8);
+#else
 	BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff, egaSrcOff);
 	BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff += SCREENWIDTH, ++egaSrcOff);
 	BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff += SCREENWIDTH, ++egaSrcOff);
@@ -155,6 +159,7 @@ void DrawChar (id0_unsigned_t x, id0_unsigned_t y, id0_unsigned_t tile)
 	BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff += SCREENWIDTH, ++egaSrcOff);
 	BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff += SCREENWIDTH, ++egaSrcOff);
 	BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff += SCREENWIDTH, ++egaSrcOff);
+#endif
 #if 0
 	id0_unsigned_t junk = latchpics[0];
 
@@ -639,6 +644,12 @@ void DrawBars (void)
 		dest = (POWERLINE+topline)*SCREENWIDTH+34;
 
 		id0_int_t linesleft = gamestate.shotpower;
+#ifdef __AMIGA__
+		void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height);
+		BE_ST_EGACopyBlockScrToScr(dest+PAGE1START, SCREENWIDTH-5, source, 0, 5, linesleft);
+		BE_ST_EGACopyBlockScrToScr(dest+PAGE2START, SCREENWIDTH-5, source, 0, 5, linesleft);
+		BE_ST_EGACopyBlockScrToScr(dest+PAGE3START, SCREENWIDTH-5, source, 0, 5, linesleft);
+#else
 		do
 		{
 			BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(dest+PAGE1START, source, 5);
@@ -647,6 +658,7 @@ void DrawBars (void)
 			source += 5;
 			dest += SCREENWIDTH;
 		} while (--linesleft);
+#endif
 #if 0
 		asm	mov	si,[source]
 		asm	mov	di,[dest]
@@ -690,6 +702,12 @@ newline:
 		dest = BODYLINE*SCREENWIDTH+34;
 
 		id0_int_t linesleft = gamestate.body;
+#ifdef __AMIGA__
+		void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height);
+		BE_ST_EGACopyBlockScrToScr(dest+PAGE1START, SCREENWIDTH-5, source, 0, 5, linesleft);
+		BE_ST_EGACopyBlockScrToScr(dest+PAGE2START, SCREENWIDTH-5, source, 0, 5, linesleft);
+		BE_ST_EGACopyBlockScrToScr(dest+PAGE3START, SCREENWIDTH-5, source, 0, 5, linesleft);
+#else
 		do
 		{
 			BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(dest+PAGE1START, source, 5);
@@ -698,6 +716,7 @@ newline:
 			source += 5;
 			dest += SCREENWIDTH;
 		} while (--linesleft);
+#endif
 #if 0
 		asm	mov	si,[source]
 		asm	mov	di,[dest]
@@ -739,6 +758,12 @@ newline2:
 		topline = MAXBODY-gamestate.body;
 
 		id0_int_t linesleft = topline;
+#ifdef __AMIGA__
+		void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height);
+		BE_ST_EGACopyBlockScrToScr(dest+PAGE1START, SCREENWIDTH-5, source, 0, 5, linesleft);
+		BE_ST_EGACopyBlockScrToScr(dest+PAGE2START, SCREENWIDTH-5, source, 0, 5, linesleft);
+		BE_ST_EGACopyBlockScrToScr(dest+PAGE3START, SCREENWIDTH-5, source, 0, 5, linesleft);
+#else
 		do
 		{
 			BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(dest+PAGE1START, source, 5);
@@ -747,6 +772,7 @@ newline2:
 			source += 5;
 			dest += SCREENWIDTH;
 		} while (--linesleft);
+#endif
 #if 0
 		asm	mov	si,[source]
 		asm	mov	di,[dest]
@@ -1229,6 +1255,12 @@ void DrinkPotion (void)
 	EGAWRITEMODE(1);
 
 	id0_int_t linesleft = MAXBODY;
+#ifdef __AMIGA__
+	void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height);
+	BE_ST_EGACopyBlockScrToScr(dest+PAGE1START, SCREENWIDTH-5, source, 0, 5, linesleft);
+	BE_ST_EGACopyBlockScrToScr(dest+PAGE2START, SCREENWIDTH-5, source, 0, 5, linesleft);
+	BE_ST_EGACopyBlockScrToScr(dest+PAGE3START, SCREENWIDTH-5, source, 0, 5, linesleft);
+#else
 	do
 	{
 		BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(dest+PAGE1START, source, 5);
@@ -1237,6 +1269,7 @@ void DrinkPotion (void)
 		source += 5;
 		dest += SCREENWIDTH;
 	} while (--linesleft);
+#endif
 #if 0
 	asm	mov	cx,MAXBODY
 newline:

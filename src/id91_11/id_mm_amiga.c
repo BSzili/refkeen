@@ -19,7 +19,7 @@
 // Lightweight memory manager using the C library allocation functions
 
 #include "id_heads.h"
-#define Point AmigaPoint
+#define GRAPHICS_DISPLAYINFO_H
 #include <proto/exec.h>
 
 #define USE_NODE_SIZE

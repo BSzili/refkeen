@@ -554,12 +554,17 @@ void LatchDrawPic (id0_unsigned_t x, id0_unsigned_t y, id0_unsigned_t picnum)
 	dest = bufferofs + ylookup[y]+x;
 	source = latchpics[picnum-FIRSTLATCHPIC];
 
+#ifdef __AMIGA__
+	void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height);
+	BE_ST_EGACopyBlockScrToScr(dest, linewidth-wide, source, 0, wide, height);
+#else
 	for (id0_unsigned_t lineCount = height; lineCount; --lineCount)
 	{
 		BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(dest, source, wide);
 		source += wide;
 		dest += linewidth;
 	}
+#endif
 #if 0
 	EGAWRITEMODE(1);
 	EGAMAPMASK(15);
