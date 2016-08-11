@@ -448,7 +448,8 @@ void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 
 	portstate = ReadJoyPort(BEL_ST_PortIndex(joy));
 
-	if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
+	//if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
+	if (((portstate & JP_TYPE_MASK) != JP_TYPE_NOTAVAIL) && ((portstate & JP_TYPE_MASK) != JP_TYPE_MOUSE))
 	{
 		jx = jy = 1; // center for the joystick detection
 
@@ -479,6 +480,7 @@ uint16_t BE_ST_GetJoyButtons(uint16_t joy)
 	portstate = ReadJoyPort(BEL_ST_PortIndex(joy));
 
 	//if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
+	if (((portstate & JP_TYPE_MASK) != JP_TYPE_NOTAVAIL) && ((portstate & JP_TYPE_MASK) != JP_TYPE_MOUSE))
 	{
 		if (portstate & JPF_BUTTON_BLUE) result |= 1 << 0;
 		if (portstate & JPF_BUTTON_RED) result |= 1 << 1;

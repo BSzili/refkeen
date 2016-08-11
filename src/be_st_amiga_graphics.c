@@ -81,7 +81,9 @@ struct Window *g_amigaWindow = NULL;
 
 static union bufferType *g_sdlVidMem;
 static uint8_t g_textMemory[TXT_COLS_NUM*TXT_ROWS_NUM*2];
+#ifdef ENABLE_TEXT
 static uint8_t g_textMemoryOld[TXT_COLS_NUM*TXT_ROWS_NUM*2];
+#endif
 static uint16_t g_sdlScreenStartAddress = 0;
 static int g_sdlScreenMode = -1;
 static int g_sdlTexWidth, g_sdlTexHeight;
@@ -102,7 +104,6 @@ extern const uint8_t g_vga_8x16TextFont[256*8*16];
 #endif
 static UWORD *g_pointerMem = NULL;
 /*static*/unsigned char *g_chunkyBuffer = NULL;
-//uint8_t g_chunkyBuffer[VIEWWIDTH * VIEWHEIGHT];
 
 void BEL_ST_UpdateHostDisplay(void);
 void BE_ST_MarkGfxForUpdate(void)
@@ -290,7 +291,9 @@ void BE_ST_InitGfx(void)
 	}
 #endif
 	g_pointerMem = (UWORD *)AllocVec(16 * 16, MEMF_CLEAR | MEMF_CHIP);
-	g_chunkyBuffer = (UBYTE *)AllocVec(VIEWWIDTH * VIEWHEIGHT, MEMF_CLEAR | MEMF_FAST);
+#ifdef REFKEEN_VER_CATACOMB_ALL
+	g_chunkyBuffer = (UBYTE *)AllocVec(VIEWWIDTH * VIEWHEIGHT, MEMF_ANY | MEMF_CLEAR);
+#endif
 
 	BE_ST_SetScreenMode(3);
 }
@@ -303,7 +306,9 @@ void BE_ST_ShutdownGfx(void)
 	FreeVec(g_vgaFont);
 #endif
 	FreeVec(g_pointerMem);
+#ifdef REFKEEN_VER_CATACOMB_ALL
 	FreeVec(g_chunkyBuffer);
+#endif
 }
 
 void BE_ST_DebugText(int x, int y, const char *fmt, ...)
@@ -334,6 +339,7 @@ void BE_ST_DebugColor(uint16_t color)
 #endif
 }
 
+#ifdef REFKEEN_VER_CATACOMB_ALL
 // this doesn't really belong here
 void BE_ST_ClearCache(void *address, uint32_t length)
 {
@@ -374,6 +380,7 @@ void BE_ST_DrawChunkyBuffer(uint16_t bufferofs)
 	WriteChunkyPixels(&rp, VIEWX, VIEWY, VIEWXH, VIEWYH, g_chunkyBuffer, VIEWWIDTH);
 #endif
 }
+#endif
 
 void BE_ST_SetScreenStartAddress(uint16_t crtc)
 {
@@ -528,30 +535,6 @@ void BE_ST_EGAUpdateGFXByteInPlane(uint16_t destOff, uint8_t srcVal, uint16_t pl
 {
 	g_sdlVidMem->egaGfx[planeNum][destOff] = srcVal;
 }
-
-/*void BE_ST_EGAMaskBlock(uint16_t destOff, uint8_t *src, uint16_t linedelta, uint16_t width, uint16_t height, uint16_t planesize)
-{
-	uint8_t *srcPtr = src;
-	int egaDestOff = destOff; // start at same place in all planes
-	int linesLeft = height; // scan lines to draw
-	// draw
-	do
-	{
-		int colsLeft = width;
-		do
-		{
-			g_sdlVidMem->egaGfx[0][egaDestOff] = (g_sdlVidMem->egaGfx[0][egaDestOff] & (*srcPtr)) | srcPtr[planesize*1];
-			g_sdlVidMem->egaGfx[1][egaDestOff] = (g_sdlVidMem->egaGfx[1][egaDestOff] & (*srcPtr)) | srcPtr[planesize*2];
-			g_sdlVidMem->egaGfx[2][egaDestOff] = (g_sdlVidMem->egaGfx[2][egaDestOff] & (*srcPtr)) | srcPtr[planesize*3];
-			g_sdlVidMem->egaGfx[3][egaDestOff] = (g_sdlVidMem->egaGfx[3][egaDestOff] & (*srcPtr)) | srcPtr[planesize*4];
-			++srcPtr;
-			++egaDestOff;
-			--colsLeft;
-		} while (colsLeft);
-		egaDestOff += linedelta;
-		--linesLeft;
-	} while (linesLeft);
-}*/
 
 // Based on BE_Cross_LinearToWrapped_MemCopy
 static void BEL_ST_LinearToEGAPlane_MemCopy(uint8_t *planeDstPtr, uint16_t planeDstOff, const uint8_t *linearSrc, uint16_t num)
@@ -799,16 +782,21 @@ void BE_ST_SetScreenMode(int mode)
 
 void BE_ST_textcolor(int color)
 {
+#ifdef ENABLE_TEXT
 	g_sdlTxtColor = color;
+#endif
 }
 
 void BE_ST_textbackground(int color)
 {
+#ifdef ENABLE_TEXT
 	g_sdlTxtBackground = color;
+#endif
 }
 
 void BE_ST_clrscr(void)
 {
+#ifdef ENABLE_TEXT
 	uint8_t *currMemByte = g_textMemory;
 	for (int i = 0; i < 2*TXT_COLS_NUM*TXT_ROWS_NUM; ++i)
 	{
@@ -816,20 +804,26 @@ void BE_ST_clrscr(void)
 		*(currMemByte++) = g_sdlTxtColor | (g_sdlTxtBackground << 4);
 	}
 	BEL_ST_UpdateHostDisplay();
+#endif
 }
 
 void BE_ST_MoveTextCursorTo(int x, int y)
 {
+#ifdef ENABLE_TEXT
 	g_sdlTxtCursorPosX = x;
 	g_sdlTxtCursorPosY = y;
 	BEL_ST_UpdateHostDisplay();
+#endif
 }
 
 void BE_ST_ToggleTextCursor(bool isEnabled)
 {
+#ifdef ENABLE_TEXT
 	g_sdlTxtCursorEnabled = isEnabled;
+#endif
 }
 
+#ifdef ENABLE_TEXT
 static uint8_t *BEL_ST_printchar(uint8_t *currMemByte, char ch, bool iscolored, bool requirecrchar)
 {
 	if (ch == '\t')
@@ -893,6 +887,7 @@ static uint8_t *BEL_ST_printchar(uint8_t *currMemByte, char ch, bool iscolored, 
 
 	return currMemByte;
 }
+#endif
 
 void BE_ST_puts(const char *str)
 {
@@ -912,9 +907,8 @@ void BE_ST_puts(const char *str)
 
 static void BEL_ST_vprintf_impl(const char *format, va_list args, bool iscolored, bool requirecrchar)
 {
-#ifdef ENABLE_TEXT
 	vprintf(format, args);
-#else
+#ifdef ENABLE_TEXT
 	uint8_t *currMemByte = g_textMemory + 2*(g_sdlTxtCursorPosX+TXT_COLS_NUM*g_sdlTxtCursorPosY);
 	while (*format)
 	{
@@ -949,6 +943,8 @@ static void BEL_ST_vprintf_impl(const char *format, va_list args, bool iscolored
 		++format;
 	}
 	BEL_ST_UpdateHostDisplay();
+/*#else
+	vprintf(format, args);*/
 #endif
 }
 
@@ -990,7 +986,7 @@ static void BEL_ST_DrawChar(struct RastPort *rp, int x, int y, bool cursor)
 	sY = y * 16;
 
 	SetABPenDrMd(rp, TmpFGColor, TmpBGColor, JAM2);
-	BltTemplate(&g_vgaFont[TmpChar * 16], 0, 2, rp, sX, sY, 8, 16);
+	BltTemplate((PLANEPTR)&g_vgaFont[TmpChar * 16], 0, 2, rp, sX, sY, 8, 16);
 
 	if (cursor)
 	{
