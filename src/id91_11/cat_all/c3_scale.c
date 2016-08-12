@@ -392,6 +392,129 @@ void ExecuteCompScale(const id0_byte_t *codePtr, id0_unsigned_t egaDestOff, cons
 
 id0_unsigned_t BuildCompShape (t_compshape id0_seg **finalspot)
 {
+#ifdef __AMIGA__
+	t_compshape 	id0_seg *work;
+	id0_byte_t		id0_far *code;
+	id0_int_t			firstline,lastline,x,y;
+	id0_unsigned_t	firstpix,lastpix,width;
+	id0_unsigned_t	totalsize,pixelofs;
+
+
+	MM_GetPtr ((memptr *)&work,20000);
+
+//
+// find the width of the shape
+//
+	firstline = -1;
+	x=0;
+	do
+	{
+		for (y=0;y<64;y++)
+			if (spotvis[y][x] != BACKGROUNDPIX)
+			{
+				firstline = x;
+				break;
+			}
+		if (++x == 64)
+			Quit ("BuildCompShape: No shape data!");
+	} while (firstline == -1);
+
+	lastline = -1;
+	x=63;
+	do
+	{
+		for (y=0;y<64;y++)
+			if (spotvis[y][x] != BACKGROUNDPIX)
+			{
+				lastline = x;
+				break;
+			}
+		x--;
+	} while (lastline == -1);
+
+	width = lastline-firstline+1;
+
+	work->width = width;
+	code = (id0_byte_t id0_far *)&work->codeofs[width];
+
+//
+// copy all non background pixels to the work space
+//
+	pixelofs = (code-(id0_byte_t *)work);
+
+	for (x=firstline;x<=lastline;x++)
+		for (y=0;y<64;y++)
+			if (spotvis[y][x] != BACKGROUNDPIX)
+				*code++ = spotvis[y][x];
+
+//
+// start compiling the vertical lines
+//
+	for (x=firstline;x<=lastline;x++)
+	{
+		work->codeofs[x-firstline] = (code-(id0_byte_t *)work);
+
+		y=0;
+		do
+		{
+		//
+		// scan past black background pixels
+		//
+			while (spotvis[y][x] == BACKGROUNDPIX && y<64)
+				y++;
+
+			if (y>63)		// no more segments
+				break;
+
+			firstpix = y+1;		// +1 because width is before codeofs
+
+		//
+		// scan past scalable pixels
+		//
+			while (spotvis[y][x] != BACKGROUNDPIX && y<64)
+				y++;
+
+			if (y>63)
+				lastpix = 65;
+			else
+				lastpix = y+1;	// actually one pixel past the last displayed
+
+		//
+		// compile the scale call
+		//
+			*((id0_unsigned_t *)code) = lastpix;
+			code += 2;
+			*((id0_unsigned_t *)code) = firstpix;
+			code += 2;
+			*((id0_unsigned_t *)code) = pixelofs-firstpix;
+			code += 2;
+
+			pixelofs += (lastpix-firstpix);
+		} while (y<63);
+
+	//
+	// retf
+	//
+		*code++ = 0xcb;
+	}
+
+
+//
+// copy the final shape to a properly sized buffer
+//
+	totalsize = (code-(id0_byte_t *)work); 
+#ifdef REFKEEN_VER_CATADVENTURES
+
+	if (totalsize >= (PAGELEN*2))
+		Quit("BuildCompShape(): Shape is too complex!");
+
+#endif
+	MM_GetPtr ((memptr *)finalspot,totalsize);
+	memcpy ((id0_byte_t id0_seg *)(*finalspot),(id0_byte_t id0_seg *)work,totalsize); 
+	MM_FreePtr ((memptr *)&work);
+
+	return totalsize;
+#else
 	// (REFKEEN) Use offsets into (planar) EGA memory instead
 	id0_unsigned_t workEgaOff, codeEgaOff;
 	//t_compshape 	id0_seg *work;
@@ -607,6 +730,7 @@ id0_unsigned_t BuildCompShape (t_compshape id0_seg **finalspot)
 //	MM_FreePtr ((memptr *)&work);
 
 	return totalsize;
+#endif
 }
 
 
@@ -855,9 +979,15 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 
 		while (*codePtr != 0xcb)
 		{
-			int lastpix = (*(id0_int_t *)(codePtr+2))/2;
+			/*int lastpix = (*(id0_int_t *)(codePtr+2))/2;
 			int firstpix = (*(id0_int_t *)(codePtr+10))/2;
-			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_int_t *)(codePtr+19));
+			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_int_t *)(codePtr+19));*/
+			int lastpix = (*(id0_unsigned_t *)codePtr);
+			codePtr += 2;
+			int firstpix = (*(id0_unsigned_t *)codePtr);
+			codePtr += 2;
+			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_unsigned_t *)codePtr);
+			codePtr += 2;
 
 			for (src=firstpix;src<lastpix;src++)
 			{
@@ -881,7 +1011,7 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 					destPtr += VIEWWIDTH;
 				}
 			}
-			codePtr += 29;
+			//codePtr += 29;
 		}
 #else
 		id0_unsigned_t egaDestOff = ((id0_unsigned_t)pixel>>3) + bufferofs;

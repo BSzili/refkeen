@@ -170,6 +170,10 @@ void DrawChar (id0_unsigned_t x, id0_unsigned_t y, id0_unsigned_t tile)
 {
 	id0_word_t egaDestOff = x+ylookup[y];
 	id0_word_t egaSrcOff = latchpics[0]+8*tile;
+#ifdef __AMIGA__
+	void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height);
+	BE_ST_EGACopyBlockScrToScr(egaDestOff, SCREENWIDTH-1, egaSrcOff, 0, 1, 8);
+#else
 	// (REFKEEN) VANILLA BUG REPRODUCTION: In the original code, a call to
 	// VW_DrawPic on startup leaves the map mask value at 8 (intensity plane),
 	// so numbers aren't drawn in the following call to RedrawStatusWindow.
@@ -197,6 +201,7 @@ void DrawChar (id0_unsigned_t x, id0_unsigned_t y, id0_unsigned_t tile)
 		BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff += SCREENWIDTH, ++egaSrcOff);
 		BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff += SCREENWIDTH, ++egaSrcOff);
 	}
+#endif
 #if 0
 	id0_unsigned_t junk = latchpics[0];
 

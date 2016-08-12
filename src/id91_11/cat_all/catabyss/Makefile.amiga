@@ -7,7 +7,7 @@ KALMS_C2P=1
 CXX=$(BINPREFIX)gcc
 AS=vasm -Faout
 
-STRIPBIN=$(BINPREFIX)strip
+STRIPBIN=$(BINPREFIX)strip -K ___stack
 SRC=.
 C3DCOMMONSRC=..
 IDSRC=../..
@@ -33,12 +33,11 @@ OBJECTS=$(OBJ)/c4_act1.o \
 #Shared with Catacomb 3-D and The Adventures Series
 OBJECTS+= $(OBJ)/c3_asm.o \
           $(OBJ)/c3_scale.o \
-          $(OBJ)/c3_trace.o \
-          $(OBJ)/altcontroller.o
+          $(OBJ)/c3_trace.o
 
 IDOBJECTS=$(IDOBJ)/id_ca.o \
           $(IDOBJ)/id_in.o \
-          $(IDOBJ)/id_mm.o \
+          $(IDOBJ)/id_mm_amiga.o \
           $(IDOBJ)/id_sd.o \
           $(IDOBJ)/id_us_1.o \
           $(IDOBJ)/id_us_a.o \
@@ -82,11 +81,13 @@ INTCXXFLAGS+= -DKALMS_C2P
 BEOBJECTS+=$(BEOBJ)/c2p1x1_4_c5_bm.o
 endif
 
-INTCXXFLAGS+= $(CXXOPT) -Wall -Wno-missing-braces -Wno-switch -Wno-parentheses -m68020 -msoft-float -std=c99
+INTCXXFLAGS+= $(CXXOPT) -Wall -Wno-missing-braces -Wno-switch -Wno-parentheses -m68020 -msoft-float -std=c99 -noixemul
 INTLDFLAGS= -lm -noixemul
 ifeq ($(DEBUG),1)
 	INTLDFLAGS+= -ldebug
 endif
+# there must be a better way to do this
+INTLDFLAGS+= /usr/local/amiga/m68k-amigaos/lib/libnix/swapstack.o
 
 EXE_PATH=$(BESRC)/$(EXENAME)$(EXE_EXT)
 

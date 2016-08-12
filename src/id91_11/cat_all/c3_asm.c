@@ -221,6 +221,11 @@ void ScaleWalls(void)
 	id0_unsigned_t colNum = 0;
 	do
 	{
+		if (!wallwidth[colNum])
+		{
+			++colNum;
+			continue;
+		}
 #ifdef __AMIGA__
 		// on the amiga there's no problem with reading from the zero page
 		id0_byte_t *wallSrcPtr = wallseg[colNum]+wallofs[colNum];
@@ -250,11 +255,6 @@ void ScaleWalls(void)
 		scaleFunc(wallSrcPtr, colNum);
 		colNum++;
 #else
-		if (!wallwidth[colNum])
-		{
-			++colNum;
-			continue;
-		}
 		// (REFKEEN) VANILLA CAT3D BUG WORKAROUND: It may happen that an
 		// attempt to draw an "empty" wall is done, so better use this.
 		// Example: Due to a different bug depending on EXE layout,
