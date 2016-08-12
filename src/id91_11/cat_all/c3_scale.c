@@ -495,7 +495,9 @@ id0_unsigned_t BuildCompShape (t_compshape id0_seg **finalspot)
 	//
 	// retf
 	//
-		*code++ = 0xcb;
+		//*code++ = 0xcb;
+		*((id0_int_t *)code) = -1;
+		code += 2;
 	}
 
 
@@ -977,7 +979,7 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 		const id0_byte_t *srcGfxPtr = (id0_byte_t *)compshape;
 		const id0_byte_t *codePtr = (id0_byte_t *)compshape + (*codehandle);
 
-		while (*codePtr != 0xcb)
+		while (/**codePtr != 0xcb*/(*(id0_int_t *)codePtr) != (id0_int_t)-1)
 		{
 			/*int lastpix = (*(id0_int_t *)(codePtr+2))/2;
 			int firstpix = (*(id0_int_t *)(codePtr+10))/2;
