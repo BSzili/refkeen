@@ -4,6 +4,7 @@
 //#include "SDL.h"
 #include <libraries/lowlevel.h>
 #include <devices/input.h>
+#include <devices/gameport.h>
 #include <intuition/intuition.h>
 #include <intuition/intuitionbase.h>
 #include <exec/interrupts.h>
@@ -27,6 +28,8 @@
 #if defined(__AMIGA__)
 #define IPTR ULONG
 #endif
+
+#define MOUSE_KLUDGE
 
 // 16KB stack minimum
 unsigned long __attribute__((used)) __stack=0x4000;
@@ -66,6 +69,7 @@ int16_t g_my = 0;
 static struct Interrupt g_inputHandler;
 static struct MsgPort *g_inputPort = NULL;
 static struct IOStdReq *g_inputReq = NULL;
+static int g_mousePort = -1;
 
 void BE_ST_InitGfx(void);
 void BE_ST_InitAudio(void);
@@ -308,10 +312,38 @@ void BE_ST_InitCommon(void)
 	//BEL_ST_ParseConfig();
 }
 
+static void BEL_ST_CheckMouse(struct MsgPort *ioReplyPort, ULONG unit)
+{
+	struct IOStdReq *gameport_io;
+	BYTE gameport_ct;
+
+	if ((gameport_io = (struct IOStdReq *)CreateIORequest(ioReplyPort, sizeof(struct IOStdReq))))
+	{
+		if (!OpenDevice("gameport.device", unit, (struct IORequest *)gameport_io, 0))
+		{
+			gameport_io->io_Command = GPD_ASKCTYPE;
+			gameport_io->io_Length = 1;
+			gameport_io->io_Data = &gameport_ct;
+			DoIO((struct IORequest *)gameport_io);
+			if (gameport_ct == GPCT_MOUSE)
+			{
+				D(bug("mouse is in port %lu\n", unit));
+				g_mousePort = unit;
+			}
+			CloseDevice((struct IORequest *)gameport_io);
+		}
+		DeleteIORequest((struct IORequest *)gameport_io);
+	}
+}
+
 void BE_ST_PrepareForGameStartup(void)
 {
 	if ((g_inputPort = CreateMsgPort()))
 	{
+#ifdef MOUSE_KLUDGE
+		BEL_ST_CheckMouse(g_inputPort, 0);
+		BEL_ST_CheckMouse(g_inputPort, 1);
+#endif
 		if ((g_inputReq = (struct IOStdReq *)CreateIORequest(g_inputPort, sizeof(*g_inputReq))))
 		{
 			if (!OpenDevice((STRPTR)"input.device", 0, (struct IORequest *)g_inputReq, 0))
@@ -326,7 +358,6 @@ void BE_ST_PrepareForGameStartup(void)
 				{
 					BE_ST_InitGfx();
 					BE_ST_InitAudio();
-					//BE_ST_PollEvents(); // e.g., to "reset" some states, and detect joysticks
 					return;
 				}
 			}
@@ -425,7 +456,7 @@ uint16_t BE_ST_GetMouseButtons(void)
 }
 
 
-static ULONG BEL_ST_PortIndex(uint16_t joy)
+/*static ULONG BEL_ST_PortIndex(uint16_t joy)
 {
 	switch (joy)
 	{
@@ -436,7 +467,7 @@ static ULONG BEL_ST_PortIndex(uint16_t joy)
 	}
 
 	return joy;
-} 
+}*/
 
 void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 {
@@ -446,10 +477,20 @@ void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 
 	D(bug("%s(%u)\n", __FUNCTION__, joy));
 
-	portstate = ReadJoyPort(BEL_ST_PortIndex(joy));
+#ifdef MOUSE_KLUDGE
+	if (joy == g_mousePort)
+		return;
+#endif
 
-	//if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
-	if (((portstate & JP_TYPE_MASK) != JP_TYPE_NOTAVAIL) && ((portstate & JP_TYPE_MASK) != JP_TYPE_MOUSE))
+	//portstate = ReadJoyPort(BEL_ST_PortIndex(joy));
+	portstate = ReadJoyPort(joy);
+
+	if (((portstate & JP_TYPE_MASK) != JP_TYPE_NOTAVAIL) /*&& ((portstate & JP_TYPE_MASK) != JP_TYPE_MOUSE)*/)
+	{
+		jx = jy = 1; // center for the joystick detection
+	}
+
+	if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
 	{
 		jx = jy = 1; // center for the joystick detection
 
@@ -463,7 +504,7 @@ void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 		else if (portstate & JPF_JOY_RIGHT)
 			jx = 2;
 
-		D(bug("jx %d jy %d\n", jx, jy));
+		D(bug("joy %d portstate %08x jx %d jy %d\n", joy, portstate, jx, jy));
 	}
 
 	*xp = jx;
@@ -477,10 +518,15 @@ uint16_t BE_ST_GetJoyButtons(uint16_t joy)
 
 	D(bug("%s(%u)\n", __FUNCTION__, joy));
 
-	portstate = ReadJoyPort(BEL_ST_PortIndex(joy));
+#ifdef MOUSE_KLUDGE
+	if (joy == g_mousePort)
+		return 0;
+#endif
 
-	//if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
-	if (((portstate & JP_TYPE_MASK) != JP_TYPE_NOTAVAIL) && ((portstate & JP_TYPE_MASK) != JP_TYPE_MOUSE))
+	//portstate = ReadJoyPort(BEL_ST_PortIndex(joy));
+	portstate = ReadJoyPort(joy);
+
+	if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
 	{
 		if (portstate & JPF_BUTTON_BLUE) result |= 1 << 0;
 		if (portstate & JPF_BUTTON_RED) result |= 1 << 1;
@@ -489,7 +535,8 @@ uint16_t BE_ST_GetJoyButtons(uint16_t joy)
 		if (portstate & JPF_BUTTON_FORWARD) result |= 1 << 4;
 		if (portstate & JPF_BUTTON_REVERSE) result |= 1 << 5;
 		if (portstate & JPF_BUTTON_PLAY) result |= 1 << 6;*/
-		D(bug("buttons %u\n", result));
+
+		D(bug("joy %d portstate %08x buttons %u\n", joy, portstate, result));
 	}
 
 	return result;
@@ -522,32 +569,6 @@ void BE_ST_AltControlScheme_Push(void)
 }
 
 void BE_ST_AltControlScheme_Pop(void)
-{
-}
-
-
-void BE_ST_AltControlScheme_PrepareFaceButtonsDOSScancodes(const char *scanCodes)
-{
-}
-
-void BE_ST_AltControlScheme_PreparePageScrollingControls(int prevPageScan, int nextPageScan)
-{
-}
-
-void BE_ST_AltControlScheme_PrepareMenuControls(void)
-{
-}
-
-void BE_ST_AltControlScheme_PrepareInGameControls(int primaryScanCode, int secondaryScanCode, int upScanCode, int downScanCode, int leftScanCode, int rightScanCode)
-{
-
-}
-
-void BE_ST_AltControlScheme_PrepareInputWaitControls(void)
-{
-}
-
-void BE_ST_AltControlScheme_PrepareTextInput(void)
 {
 }
 

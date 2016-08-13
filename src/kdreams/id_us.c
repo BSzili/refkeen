@@ -2358,7 +2358,11 @@ USL_CtlCJoyButtonCustom(UserCall call,id0_word_t i,id0_word_t n)
 
 			if (LastScan != sc_Escape)
 			{
+#ifdef __AMIGA__
+				IN_GetJoyAbs(joy,&maxx,&maxy);
+#else
 				IN_GetJoyAbs(0,&maxx,&maxy);
+#endif
 
 				if ((maxx != minx) && (maxy != miny))
 				{
