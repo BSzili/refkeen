@@ -984,11 +984,11 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 			/*int lastpix = (*(id0_int_t *)(codePtr+2))/2;
 			int firstpix = (*(id0_int_t *)(codePtr+10))/2;
 			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_int_t *)(codePtr+19));*/
-			int lastpix = (*(id0_unsigned_t *)codePtr);
+			int lastpix = (*(id0_int_t *)codePtr);
 			codePtr += 2;
-			int firstpix = (*(id0_unsigned_t *)codePtr);
+			int firstpix = (*(id0_int_t *)codePtr);
 			codePtr += 2;
-			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_unsigned_t *)codePtr);
+			const id0_byte_t *srcPtr = srcGfxPtr+(*(id0_int_t *)codePtr);
 			codePtr += 2;
 
 			for (src=firstpix;src<lastpix;src++)
