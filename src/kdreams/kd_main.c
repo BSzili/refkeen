@@ -75,7 +75,7 @@ void    InitGame (void);
 
 //===========================================================================
 
-#if FRILLS
+#if FRILLS || defined(__AMIGA__)
 
 /*
 ==================
@@ -117,6 +117,7 @@ void DebugMemory (void)
 #define TEXTWIDTH   40
 void TestSprites(void)
 {
+#ifndef __AMIGA__
 	id0_int_t hx,hy,sprite,oldsprite,bottomy,topx,shift;
 	spritetabletype id0_far *spr;
 	spritetype id0_seg *block;
@@ -220,6 +221,7 @@ void TestSprites(void)
 		} while (sprite == oldsprite);
 
   } while (1);
+#endif
 
 
 }
@@ -286,7 +288,7 @@ id0_int_t DebugKeys (void)
 		IN_Ack ();
 		return 1;
 	}
-#if FRILLS
+#if FRILLS || defined(__AMIGA__)
 	else if (Keyboard[0x32])                        // M = memory info
 	{
 		DebugMemory();

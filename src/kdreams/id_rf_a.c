@@ -437,7 +437,6 @@ void RFL_UpdateTiles (void)
 				egaSrcOff += 2;
 				egaDestOff += 2;
 			}
-			iterationsToDo = 0;
 #else
 			id0_word_t bytesToSkip = SCREENWIDTH_EGA-bytesPerRow;
 			for (int loopVar = 15; loopVar; --loopVar)
@@ -450,8 +449,8 @@ void RFL_UpdateTiles (void)
 			}
 			iterationsToDo = bytesPerRow;
 			BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(egaDestOff, egaSrcOff, iterationsToDo);
-			iterationsToDo = 0;
 #endif
+			iterationsToDo = 0;
 		}
 
 		// was 0, now 0xFFFF for above loop

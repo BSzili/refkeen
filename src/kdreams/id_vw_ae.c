@@ -1015,6 +1015,10 @@ void VWL_UpdateScreenBlocks (void)
 			id0_word_t tileLoc = blockstarts[scanPtr-updateptr-2]; // start of tile location on screen
 			id0_word_t egaSrcOff = tileLoc+bufferofs;
 			id0_word_t egaDestOff = tileLoc+displayofs;
+#ifdef __AMIGA__
+			extern void BE_ST_EGADrawTile16ScrToScr(int destOff, int srcOff);
+			BE_ST_EGADrawTile16ScrToScr(egaDestOff, egaSrcOff);
+#else
 			for (int loopVar = 15; loopVar; --loopVar)
 			{
 				BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff++, egaSrcOff++);
@@ -1024,6 +1028,7 @@ void VWL_UpdateScreenBlocks (void)
 			}
 			BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff++, egaSrcOff++);
 			BE_ST_EGAUpdateGFXByteInAllPlanesScrToScr(egaDestOff, egaSrcOff);
+#endif
 			continue;
 		}
 		//============
@@ -1046,6 +1051,15 @@ void VWL_UpdateScreenBlocks (void)
 		id0_word_t tileLoc = blockstarts[rowScanStartPtr-updateptr-1]; // start of tile location
 		id0_word_t egaSrcOff = tileLoc+bufferofs;
 		id0_word_t egaDestOff = tileLoc+displayofs;
+#ifdef __AMIGA__
+		extern void BE_ST_EGADrawTile16ScrToScr(int destOff, int srcOff);
+		for (int i = (scanPtr - rowScanStartPtr); i-- > 0; )
+		{
+			BE_ST_EGADrawTile16ScrToScr(egaDestOff, egaSrcOff);
+			egaSrcOff += 2;
+			egaDestOff += 2;
+		}
+#else
 		for (int loopVar = 15; loopVar; --loopVar)
 		{
 			BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(egaDestOff, egaSrcOff, bytesPerRow);
@@ -1053,6 +1067,7 @@ void VWL_UpdateScreenBlocks (void)
 			egaDestOff += linewidth;
 		}
 		BE_ST_EGAUpdateGFXBufferInAllPlanesScrToScr(egaDestOff, egaSrcOff, bytesPerRow);
+#endif
 		// was originally 0 at this point, then "decremented" by 1 to 0xFFFF for the loop above
 		// WARNING: iterationsToDo should be UNSIGNED in order to work properly
 		iterationsToDo = 0xFFFF;

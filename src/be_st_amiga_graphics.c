@@ -151,7 +151,7 @@ static void BEL_ST_SetPalette(int colors, int firstcolor, const uint8_t *palette
 
 static void BEL_ST_PrepareBitmap(struct BitMap *BM, uint16_t firstByte)
 {
-	InitBitMap(BM, 4, /*g_sdlTexWidth*/8*g_sdlLineWidth, g_sdlTexHeight);
+	//InitBitMap(BM, 4, /*g_sdlTexWidth*/8*g_sdlLineWidth, g_sdlTexHeight);
 
 	BM->Planes[0] = &g_sdlVidMem->egaGfx[0][firstByte];
 	BM->Planes[1] = &g_sdlVidMem->egaGfx[1][firstByte];
@@ -233,6 +233,8 @@ static BOOL BEL_ST_ReopenScreen(void)
 
 	BEL_ST_CloseScreen();
 
+	InitBitMap(&g_screenBitMaps[0], 4, 8*g_sdlLineWidth, g_sdlTexHeight);
+	InitBitMap(&g_screenBitMaps[1], 4, 8*g_sdlLineWidth, g_sdlTexHeight);
 	BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], 0);
 
 	if (g_sdlTexWidth > GFX_TEX_WIDTH)
@@ -407,7 +409,8 @@ void BE_ST_SetScreenStartAddressAndPelPanning(uint16_t crtc, uint8_t panning)
 
 	if (g_sdlScreenStartAddress != newScreenStartAddress || g_sdlPelPanning != newPelPanning)
 	{
-		WaitTOF();
+		//WaitTOF();
+		WaitBOVP(&g_amigaScreen->ViewPort);
 		if (g_sdlScreenStartAddress != newScreenStartAddress)
 		{
 			g_sdlScreenStartAddress = newScreenStartAddress;
@@ -418,10 +421,8 @@ void BE_ST_SetScreenStartAddressAndPelPanning(uint16_t crtc, uint8_t panning)
 		if (g_sdlPelPanning != newPelPanning)
 		{
 			g_sdlPelPanning = newPelPanning;
-			/*g_amigaScreen->ViewPort.RasInfo->RxOffset = newPelPanning;
-			ScrollVPort(&g_amigaScreen->ViewPort);*/
-			//custom.bplcon1 = (newPelPanning & 0xf) << 4 | (newPelPanning & 0xf);
-			custom.bplcon1 = (newPelPanning & 0xf) << 12 | (newPelPanning & 0xf) << 8;
+			g_amigaScreen->ViewPort.RasInfo->RxOffset = newPelPanning;
+			ScrollVPort(&g_amigaScreen->ViewPort);
 		}
 	}
 #else
@@ -647,6 +648,7 @@ static void BEL_ST_EGAPlane_MemSet(uint8_t *planeDstPtr, uint16_t planeDstOff, u
 	}
 }
 
+// VW_MemToScreen_EGA
 void BE_ST_EGAUpdateGFXBufferInPlane(uint16_t destOff, const uint8_t *srcPtr, uint16_t num, uint16_t planeNum)
 {
 	BEL_ST_LinearToEGAPlane_MemCopy(g_sdlVidMem->egaGfx[planeNum], destOff, srcPtr, num);
@@ -688,6 +690,7 @@ uint8_t BE_ST_EGAFetchGFXByteFromPlane(uint16_t destOff, uint16_t planenum)
 	return g_sdlVidMem->egaGfx[planenum][destOff];
 }
 
+// VW_ScreenToMem_EGA
 void BE_ST_EGAFetchGFXBufferFromPlane(uint8_t *destPtr, uint16_t srcOff, uint16_t num, uint16_t planenum)
 {
 	BEL_ST_EGAPlaneToLinear_MemCopy(destPtr, g_sdlVidMem->egaGfx[planenum], srcOff, num);
