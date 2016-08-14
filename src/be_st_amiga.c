@@ -456,7 +456,7 @@ uint16_t BE_ST_GetMouseButtons(void)
 }
 
 
-/*static ULONG BEL_ST_PortIndex(uint16_t joy)
+static ULONG BEL_ST_PortIndex(uint16_t joy)
 {
 	switch (joy)
 	{
@@ -467,16 +467,22 @@ uint16_t BE_ST_GetMouseButtons(void)
 	}
 
 	return joy;
-}*/
+}
 
+#define JOYSTICK_MIN 0
+#define JOYSTICK_MAX 2
+//#define JOYSTICK_MAX BE_ST_EMU_JOYSTICK_RANGEMAX
+#define JOYSTICK_CENTER ((JOYSTICK_MAX-JOYSTICK_MIN)/2)
+void BE_ST_DebugText(int x, int y, const char *fmt, ...);
 void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 {
-	uint16_t jx = 0;
-	uint16_t jy = 0;
+	uint16_t jx = JOYSTICK_MIN;
+	uint16_t jy = JOYSTICK_MIN;
 	ULONG portstate;
 
 	D(bug("%s(%u)\n", __FUNCTION__, joy));
 
+	joy = BEL_ST_PortIndex(joy);
 #ifdef MOUSE_KLUDGE
 	if (joy == g_mousePort)
 		return;
@@ -487,29 +493,43 @@ void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 
 	if (((portstate & JP_TYPE_MASK) != JP_TYPE_NOTAVAIL) /*&& ((portstate & JP_TYPE_MASK) != JP_TYPE_MOUSE)*/)
 	{
-		jx = jy = 1; // center for the joystick detection
+		jx = jy = JOYSTICK_CENTER; // center for the joystick detection
 	}
 
 	if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
 	{
-		jx = jy = 1; // center for the joystick detection
+		jx = jy = JOYSTICK_CENTER; // center for the joystick detection
 
 		if (portstate & JPF_JOY_UP)
-			jy = 0;
+			jy = JOYSTICK_MIN;
 		else if (portstate & JPF_JOY_DOWN)
-			jy = 2;
+			jy = JOYSTICK_MAX;
 
 		if (portstate & JPF_JOY_LEFT)
-			jx = 0;
+			jx = JOYSTICK_MIN;
 		else if (portstate & JPF_JOY_RIGHT)
-			jx = 2;
+			jx = JOYSTICK_MAX;
 
+#ifdef REFKEEN_VER_CATACOMB_ALL
+		// strafing part 1, set direction
+		if (portstate & JPF_BUTTON_FORWARD && jx != JOYSTICK_MIN) jx = JOYSTICK_MAX;
+		if (portstate & JPF_BUTTON_REVERSE && jx != JOYSTICK_MAX) jx = JOYSTICK_MIN;
+#endif
+
+		//BE_ST_DebugText(0, 0, "joy %d portstate %08x jx %d jy %d", joy, portstate, jx, jy);
 		D(bug("joy %d portstate %08x jx %d jy %d\n", joy, portstate, jx, jy));
 	}
 
 	*xp = jx;
 	*yp = jy;
 }
+
+ULONG g_oldportstate;
+#define BEL_ST_CheckJoyEvent(scanCode, mask) \
+	do { \
+		if ((portstate & mask) != (g_oldportstate & mask)) \
+			BEL_ST_HandleEmuKeyboardEvent((portstate & mask) ? true : false, sdlKeyMappings[scanCode]); \
+	} while(0)
 
 uint16_t BE_ST_GetJoyButtons(uint16_t joy)
 {
@@ -518,6 +538,7 @@ uint16_t BE_ST_GetJoyButtons(uint16_t joy)
 
 	D(bug("%s(%u)\n", __FUNCTION__, joy));
 
+	joy = BEL_ST_PortIndex(joy);
 #ifdef MOUSE_KLUDGE
 	if (joy == g_mousePort)
 		return 0;
@@ -529,13 +550,40 @@ uint16_t BE_ST_GetJoyButtons(uint16_t joy)
 	if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
 	{
 		if (portstate & JPF_BUTTON_BLUE) result |= 1 << 0;
+#ifdef REFKEEN_VER_CATACOMB_ALL
+		// we have separate strafe buttons on CD32 controllers, use red for running
+		if ((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR)
+#ifdef REFKEEN_VER_CAT3D
+			BEL_ST_CheckJoyEvent(0x61, JPF_BUTTON_RED); // Right Shift - Run
+#else
+			BEL_ST_CheckJoyEvent(0x42, JPF_BUTTON_RED); // Tab - Quick Turn
+#endif
+		else
+#endif
 		if (portstate & JPF_BUTTON_RED) result |= 1 << 1;
 		/*if (portstate & JPF_BUTTON_YELLOW) result |= 1 << 2;
 		if (portstate & JPF_BUTTON_GREEN) result |= 1 << 3;
 		if (portstate & JPF_BUTTON_FORWARD) result |= 1 << 4;
 		if (portstate & JPF_BUTTON_REVERSE) result |= 1 << 5;
 		if (portstate & JPF_BUTTON_PLAY) result |= 1 << 6;*/
+#ifdef REFKEEN_VER_CATACOMB_ALL
+		// strafing part 2, set button1
+		if ((portstate & JPF_BUTTON_FORWARD) || (portstate & JPF_BUTTON_REVERSE)) result |= 1 << 1;
 
+		// emulate key presses for the rest of the CD32 buttons
+#ifdef REFKEEN_VER_CAT3D
+		BEL_ST_CheckJoyEvent(0x35, JPF_BUTTON_YELLOW); // B - Bolt
+		BEL_ST_CheckJoyEvent(0x36, JPF_BUTTON_GREEN); // N - Nuke
+#else
+		BEL_ST_CheckJoyEvent(0x31, JPF_BUTTON_YELLOW); // Z - Zapper
+		BEL_ST_CheckJoyEvent(0x32, JPF_BUTTON_GREEN); // X - Xterminator
+#endif
+		BEL_ST_CheckJoyEvent(0x40, JPF_BUTTON_PLAY); // Space - Heal/Cure
+
+		g_oldportstate = portstate;
+#endif
+
+		//BE_ST_DebugText(0, 8, "joy %d portstate %08x buttons %u", joy, portstate, result);
 		D(bug("joy %d portstate %08x buttons %u\n", joy, portstate, result));
 	}
 

@@ -373,6 +373,7 @@ void PollControls (void)
 
 	}
 
+#ifndef __AMIGA__
 	if (Controls[0]==ctrl_Joystick)
 	{
 		if (c.x>120 || c.x <-120 || c.y>120 || c.y<-120)
@@ -385,6 +386,7 @@ void PollControls (void)
 			slowturn = false;
 	}
 	else
+#endif
 	{
 		if (Keyboard[sc_RShift])
 			running = true;

@@ -946,13 +946,21 @@ USL_ConfigJoystick(id0_word_t joy)
 	if (!USL_CJGet(joy,0,x + 8,y + 8,&minx,&miny))
 		return(false);
 
+#ifdef __AMIGA__
+	USL_CJDraw("Move Joystick to lower right","and press button #1");
+#else
 	USL_CJDraw("Move Joystick to lower right","and press button #2");
+#endif
 	VWB_DrawTile8(x + 24,y + 8,TileBase - 25);
 	VWB_DrawTile8(x + 40,y + 24,TileBase + 7);
 	VWB_DrawTile8(x + 8,y + 8,TileBase + 0);
 	VWB_DrawTile8(x + 8,y + 24,TileBase + 1);
 	VW_UpdateScreen();
+#ifdef __AMIGA__
+	if (!USL_CJGet(joy,0,x + 8,y + 24,&maxx,&maxy))
+#else
 	if (!USL_CJGet(joy,1,x + 8,y + 24,&maxx,&maxy))
+#endif
 		return(false);
 
 	while (IN_GetJoyButtonsDB(joy))
