@@ -332,7 +332,7 @@ void BE_ST_DebugText(int x, int y, const char *fmt, ...)
 
 void BE_ST_DebugColor(uint16_t color)
 {
-#if 1
+#if 0
 	UWORD colors[16] = {0x0000,0x000A,0x00A0,0x00AA,0x0A00,0x0A0A,0x0A50,0x0AAA,
 						0x0555,0x055F,0x05F5,0x05FF,0x0F55,0x0F5F,0x0FF5,0x0FFF};
 	custom.color[0] = colors[color%16];
@@ -401,6 +401,30 @@ void BE_ST_SetScreenStartAddressAndPelPanning(uint16_t crtc, uint8_t panning)
 {
 	D(bug("%s(%u,%u)\n", __FUNCTION__, crtc, panning));
 
+#if 1
+	uint16_t newScreenStartAddress = (crtc & (uint16_t)~1);
+	uint16_t newPelPanning = panning + (crtc % 2)*8;
+
+	if (g_sdlScreenStartAddress != newScreenStartAddress || g_sdlPelPanning != newPelPanning)
+	{
+		WaitTOF();
+		if (g_sdlScreenStartAddress != newScreenStartAddress)
+		{
+			g_sdlScreenStartAddress = newScreenStartAddress;
+			g_currentBitMap ^= 1;
+			BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], newScreenStartAddress);
+			ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
+		}
+		if (g_sdlPelPanning != newPelPanning)
+		{
+			g_sdlPelPanning = newPelPanning;
+			/*g_amigaScreen->ViewPort.RasInfo->RxOffset = newPelPanning;
+			ScrollVPort(&g_amigaScreen->ViewPort);*/
+			//custom.bplcon1 = (newPelPanning & 0xf) << 4 | (newPelPanning & 0xf);
+			custom.bplcon1 = (newPelPanning & 0xf) << 12 | (newPelPanning & 0xf) << 8;
+		}
+	}
+#else
 	if (g_sdlScreenStartAddress != crtc || g_sdlPelPanning != panning)
 	{
 		g_sdlScreenStartAddress = crtc;
@@ -412,6 +436,7 @@ void BE_ST_SetScreenStartAddressAndPelPanning(uint16_t crtc, uint8_t panning)
 		ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
 		ScrollVPort(&g_amigaScreen->ViewPort);
 	}
+#endif
 }
 
 uint8_t *BE_ST_GetTextModeMemoryPtr(void)

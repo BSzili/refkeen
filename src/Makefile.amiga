@@ -1,0 +1,13 @@
+.PHONY: clean
+all:
+	$(MAKE) -f Makefile.amiga all -C kdreams
+	$(MAKE) -f Makefile.amiga all -C id91_11/cat_all/cat3d
+	$(MAKE) -f Makefile.amiga all -C id91_11/cat_all/catabyss
+	$(MAKE) -f Makefile.amiga all -C id91_11/cat_all/catarm
+	$(MAKE) -f Makefile.amiga all -C id91_11/cat_all/catapoc
+clean:
+	$(MAKE) -f Makefile.amiga clean -C kdreams
+	$(MAKE) -f Makefile.amiga clean -C id91_11/cat_all/cat3d
+	$(MAKE) -f Makefile.amiga clean -C id91_11/cat_all/catabyss
+	$(MAKE) -f Makefile.amiga clean -C id91_11/cat_all/catarm
+	$(MAKE) -f Makefile.amiga clean -C id91_11/cat_all/catapoc

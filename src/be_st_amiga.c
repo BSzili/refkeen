@@ -485,7 +485,11 @@ void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 	joy = BEL_ST_PortIndex(joy);
 #ifdef MOUSE_KLUDGE
 	if (joy == g_mousePort)
+	{
+		*xp = JOYSTICK_MIN;
+		*yp = JOYSTICK_MIN;
 		return;
+	}
 #endif
 
 	//portstate = ReadJoyPort(BEL_ST_PortIndex(joy));
