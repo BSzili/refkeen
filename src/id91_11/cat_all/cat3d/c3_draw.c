@@ -1537,6 +1537,10 @@ void	DrawHand (void)
 
 	source = grsegs[picnum];
 	dest = ylookup[VIEWHEIGHT-handheight]+12+bufferofs;
+#ifdef KALMS_C2P
+	// we don't use the whole view area, offset the hand
+	dest -= ((33*8)-VIEWWIDTH)/8;
+#endif
 	width = picmtable[picnum-STARTPICM].width;
 	height = picmtable[picnum-STARTPICM].height;
 
