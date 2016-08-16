@@ -151,7 +151,7 @@ static void BEL_ST_SetPalette(int colors, int firstcolor, const uint8_t *palette
 
 static void BEL_ST_PrepareBitmap(struct BitMap *BM, uint16_t firstByte)
 {
-	//InitBitMap(BM, 4, /*g_sdlTexWidth*/8*g_sdlLineWidth, g_sdlTexHeight);
+	InitBitMap(BM, 4, /*g_sdlTexWidth*/8*g_sdlLineWidth, g_sdlTexHeight);
 
 	BM->Planes[0] = &g_sdlVidMem->egaGfx[0][firstByte];
 	BM->Planes[1] = &g_sdlVidMem->egaGfx[1][firstByte];
@@ -233,8 +233,8 @@ static BOOL BEL_ST_ReopenScreen(void)
 
 	BEL_ST_CloseScreen();
 
-	InitBitMap(&g_screenBitMaps[0], 4, 8*g_sdlLineWidth, g_sdlTexHeight);
-	InitBitMap(&g_screenBitMaps[1], 4, 8*g_sdlLineWidth, g_sdlTexHeight);
+	/*InitBitMap(&g_screenBitMaps[0], 4, 8*g_sdlLineWidth, g_sdlTexHeight);
+	InitBitMap(&g_screenBitMaps[1], 4, 8*g_sdlLineWidth, g_sdlTexHeight);*/
 	BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], 0);
 
 	if (g_sdlTexWidth > GFX_TEX_WIDTH)
