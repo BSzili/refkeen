@@ -925,7 +925,7 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 	step = ((id0_long_t)scale<<17)/64;
 	toppix = (VIEWHEIGHT-2*scale)/2;
 
-	for (src=0;src<64;src++)
+	for (src=0;src<=64;src++)
 	{
 		screenpixels[src][0] = screenpixels[src][1] = 0;
 
@@ -946,11 +946,7 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 		startpix += toppix;
 
 		if (startpix >= VIEWYH+1)
-		{
-			// starting pixel is off screen, terminate
-			screenpixels[src+1][0] = -1;
-			continue;
-		}
+			break;
 
 		if (startpix < 0)
 			startpix = 0;
@@ -958,6 +954,11 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 		screenpixels[src][0] = startpix;
 		screenpixels[src][1] = endpix;
 		screenpixels[src][2] = (id0_long_t)&g_chunkyBuffer[startpix*VIEWWIDTH];
+	}
+	for (/*src=0*/;src<=64;src++)
+	{
+		// terminate the end
+		screenpixels[src][0] = -1;
 	}
 #endif
 
