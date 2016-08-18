@@ -1223,9 +1223,11 @@ restart:
 
 		CacheScaleds ();
 
+#ifndef __AMIGA__
 		// (REFKEEN) Simulate a short wait while loading
 		VW_WaitVBL(25);
 		//
+#endif
 
 #ifdef PROFILE
 start = clock();

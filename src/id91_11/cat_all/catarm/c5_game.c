@@ -1621,9 +1621,11 @@ restart:
 		LoadLatchMem();
 		CacheScaleds ();
 
+#ifndef __AMIGA__
 		// (REFKEEN) Simulate a short wait while loading (includes vanilla bug: numbers not shown in the HUD on startup immediately)
 		VW_WaitVBL(25);
 		//
+#endif
 
 		if (EASYMODEON)
 			DisplaySMsg("*** NOVICE ***", NULL);

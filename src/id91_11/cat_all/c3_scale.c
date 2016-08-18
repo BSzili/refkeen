@@ -914,7 +914,7 @@ void ScaleShape (id0_int_t xcenter, t_compshape id0_seg *compshape, id0_unsigned
 
 #ifdef __AMIGA__
 	// TODO: precalculate these for 1-MAXSCALE
-	static id0_long_t screenpixels[64][3];
+	static id0_long_t screenpixels[65][3];
 
 	extern uint8_t *g_chunkyBuffer;
 	id0_long_t		step;
