@@ -1402,8 +1402,32 @@ void ClearScreen (void)
 
 #ifdef __AMIGA__
 	extern uint8_t *g_chunkyBuffer;
+#if 1
+	// try to reduce overdraw
+	int minheight = MAXSCALE;
+	for (int i=0; i<VIEWWIDTH; i++)
+	{
+		if (wallheight[i] > 0 && wallheight[i] < minheight)
+			minheight = wallheight[i];
+	}
+	int toppix = (VIEWHEIGHT-2*minheight)/2;
+	if (toppix > 0)
+	{
+		uint16_t *dst = (uint16_t *)g_chunkyBuffer;
+		for (int i=0; i<VIEWWIDTH*toppix/2; i++)
+		{
+			*dst++ = topcolor;
+		}
+		dst = (uint16_t *)&g_chunkyBuffer[VIEWWIDTH*((CENTERY+1)*2-toppix)];
+		for (int i=0; i<VIEWWIDTH*toppix/2; i++)
+		{
+			*dst++ = bottomcolor;
+		}
+	}
+#else
 	memset(g_chunkyBuffer, (id0_byte_t)topcolor, VIEWWIDTH*(CENTERY+1));
 	memset(&g_chunkyBuffer[VIEWWIDTH*(CENTERY+1)], (id0_byte_t)bottomcolor, VIEWWIDTH*(CENTERY+1));
+#endif
 #else
 	id0_unsigned_t egaDestOff = bufferofs + ((SCREENWIDTH*VIEWY)+(VIEWX/8));
 	// top loop
@@ -1497,7 +1521,9 @@ asm	mov	cx,VIEWWIDTH/2
 asm	rep	stosw
 #endif
 
+#ifndef __AMIGA__
 	ClearScreen ();
+#endif
 
 	rightwall->x1 = VIEWXH+1;
 	rightwall->height1 = 32000;
@@ -1535,6 +1561,10 @@ asm	rep	stosw
 		leftx = rightclip;
 	  }
 	}
+
+#ifdef __AMIGA__
+	ClearScreen ();
+#endif
 
 #ifndef DRAWEACH
 	ScaleWalls ();					// draw all the walls
