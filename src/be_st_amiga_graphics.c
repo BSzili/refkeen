@@ -45,6 +45,7 @@
 #endif
 
 #define ENABLE_TEXT
+//#define USE_SPLITSCREEN
 
 extern struct Custom custom;
 
@@ -78,6 +79,9 @@ static const uint32_t g_amigaEGAPalette[] = {
 
 struct Screen *g_amigaScreen = NULL;
 struct Window *g_amigaWindow = NULL;
+#ifdef USE_SPLITSCREEN
+static struct Screen *g_splitScreen = NULL;
+#endif
 
 static union bufferType *g_sdlVidMem;
 static uint8_t g_textMemory[TXT_COLS_NUM*TXT_ROWS_NUM*2];
@@ -147,11 +151,15 @@ static void BEL_ST_SetPalette(int colors, int firstcolor, const uint8_t *palette
 	}
 	palette32[entry * 3 + 1] = 0;
 	LoadRGB32(&g_amigaScreen->ViewPort, palette32);
+#ifdef USE_SPLITSCREEN
+	if (g_splitScreen)
+		LoadRGB32(&g_splitScreen->ViewPort, palette32);
+#endif
 }
 
 static void BEL_ST_PrepareBitmap(struct BitMap *BM, uint16_t firstByte)
 {
-	InitBitMap(BM, 4, /*g_sdlTexWidth*/8*g_sdlLineWidth, g_sdlTexHeight);
+	InitBitMap(BM, 4, 8*g_sdlLineWidth, g_sdlTexHeight);
 
 	BM->Planes[0] = &g_sdlVidMem->egaGfx[0][firstByte];
 	BM->Planes[1] = &g_sdlVidMem->egaGfx[1][firstByte];
@@ -186,15 +194,14 @@ static void BEL_ST_CloseScreen(void)
 	}
 }
 
-static BOOL BEL_ST_ReopenScreen(void)
+static void BEL_ST_ReopenScreen(void)
 {
-	/*ULONG modeid = BestModeID(
+	ULONG modeid = BestModeID(
 		BIDTAG_NominalWidth, g_sdlTexWidth,
 		BIDTAG_NominalHeight, g_sdlTexHeight,
 		BIDTAG_Depth, 4,
-		BIDTAG_DIPFMustHave, (g_sdlTexHeight > GFX_TEX_HEIGHT) ? DIPF_IS_LACE : 0,
 		BIDTAG_MonitorID, DEFAULT_MONITOR_ID,
-		TAG_DONE);*/
+		TAG_DONE);
 
 	static struct Rectangle rect;
 	rect.MinX = 0;
@@ -202,47 +209,26 @@ static BOOL BEL_ST_ReopenScreen(void)
 	rect.MinY = 0;
 	rect.MaxY = g_sdlTexHeight - 1;
 
-	g_currentBitMap = 0;
-	struct TagItem screenTags[] =
-	{
-		//{SA_DisplayID, modeid},
-		{SA_DClip, (ULONG)&rect},
-		{SA_Width, /*g_sdlTexWidth+8*/8*g_sdlLineWidth},
-		{SA_Height, g_sdlTexHeight},
-		{SA_Depth, 4},
-		{SA_ShowTitle, FALSE},
-		{SA_Quiet, TRUE},
-		//{SA_Draggable, FALSE},
-		{SA_BitMap, (IPTR)&g_screenBitMaps[g_currentBitMap]},
-		{SA_Type, CUSTOMSCREEN},
-		{TAG_DONE, 0}
-	};
-	struct NewScreen ns =
-	{
-		0, 0, -1, -1, 1, // LeftEdge, TopEdge, Width, Height, Depth
-		0, 1, // DetailPen, BlockPen
-		0, // ViewModes
-		CUSTOMSCREEN, // Type
-		NULL, // Font
-		NULL, // DefaultTitle
-		NULL, // Gadgets
-		NULL // CustomBitMap
-	};
-
 	D(bug("%s()\n", __FUNCTION__));
 
 	BEL_ST_CloseScreen();
 
-	/*InitBitMap(&g_screenBitMaps[0], 4, 8*g_sdlLineWidth, g_sdlTexHeight);
-	InitBitMap(&g_screenBitMaps[1], 4, 8*g_sdlLineWidth, g_sdlTexHeight);*/
+	g_currentBitMap = 0;
 	BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], 0);
 
-	if (g_sdlTexWidth > GFX_TEX_WIDTH)
-		ns.ViewModes |= HIRES;
-	if (g_sdlTexHeight > GFX_TEX_HEIGHT)
-		ns.ViewModes |= LACE;
-
-	if ((g_amigaScreen = OpenScreenTagList(&ns, screenTags)))
+	if ((g_amigaScreen = OpenScreenTags(NULL, 
+		SA_DisplayID, modeid,
+		SA_AutoScroll, FALSE,
+		(8*g_sdlLineWidth == g_sdlTexWidth) ? TAG_IGNORE : SA_DClip, (ULONG)&rect,
+		SA_Width, 8*g_sdlLineWidth,
+		SA_Height, g_sdlTexHeight,
+		SA_Depth, 4,
+		SA_ShowTitle, FALSE,
+		SA_Quiet, TRUE,
+		SA_Draggable, FALSE,
+		SA_BitMap, (IPTR)&g_screenBitMaps[g_currentBitMap],
+		SA_Type, CUSTOMSCREEN,
+		TAG_DONE)))
 	{
 		if ((dbuf = AllocDBufInfo(&g_amigaScreen->ViewPort)))
 		{
@@ -250,6 +236,8 @@ static BOOL BEL_ST_ReopenScreen(void)
 			dbuf->dbi_SafeMessage.mn_ReplyPort = CreateMsgPort();
 			dbuf->dbi_DispMessage.mn_ReplyPort = CreateMsgPort();
 #endif
+
+			D(bug("Screen ModeID: %08lx\n", GetVPModeID(&g_amigaScreen->ViewPort)));
 
 			BEL_ST_SetPalette(16, 0, NULL);
 
@@ -261,12 +249,12 @@ static BOOL BEL_ST_ReopenScreen(void)
 				TAG_DONE)))
 			{
 				SetPointer(g_amigaWindow, g_pointerMem, 16, 16, 0, 0);
-				return TRUE;
+				return;
 			}
 		}
 	}
 
-	return FALSE;
+	BE_ST_QuickExit();
 }
 
 void BE_ST_InitGfx(void)
@@ -328,7 +316,13 @@ void BE_ST_DebugText(int x, int y, const char *fmt, ...)
 
 	//PrintIText(&g_amigaScreen->RastPort, &WinText, x, y);
 	InitRastPort(&rp);
+#ifdef REFKEEN_VER_CATACOMB_ALL
+	struct BitMap bm;
+	BEL_ST_PrepareBitmap(&bm, 0);
+	rp.BitMap = &bm;
+#else
 	rp.BitMap = g_amigaScreen->ViewPort.RasInfo->BitMap;
+#endif
 	PrintIText(&rp, &WinText, x, y);
 }
 
@@ -391,7 +385,8 @@ void BE_ST_SetScreenStartAddress(uint16_t crtc)
 	if (g_sdlScreenStartAddress != crtc)
 	{
 		g_sdlScreenStartAddress = crtc;
-		WaitTOF();
+		//WaitTOF();
+		WaitBOVP(&g_amigaScreen->ViewPort);
 		g_currentBitMap ^= 1;
 		BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], g_sdlScreenStartAddress);
 		ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
@@ -486,13 +481,18 @@ void BE_ST_EGASetLineWidth(uint8_t widthInBytes)
 	}
 }
 
-void BEL_ST_FreeCopList(void)
+static void BEL_ST_FreeCopList(void)
 {
+#ifdef USE_SPLITSCREEN
+	CloseScreen(g_splitScreen);
+	g_splitScreen = NULL;
+#else
 	if (g_amigaScreen->ViewPort.UCopIns != NULL)
 	{
 		FreeVPortCopLists(&g_amigaScreen->ViewPort);
 		RemakeDisplay();
 	}
+#endif
 }
 
 #define BPLPTH(p) (*((UWORD *)&custom.bplpt[0] + (2 * (p))))
@@ -500,20 +500,39 @@ void BEL_ST_FreeCopList(void)
 #define HIWORD(x) ((ULONG)(x)>>16 & 0xffff)
 #define LOWORD(x) ((ULONG)(x) & 0xffff)
 
-void BEL_ST_AddSplitlineCopList(uint16_t splitline)
+static void BEL_ST_AddSplitlineCopList(uint16_t splitline)
 {
-	struct TagItem uCopTags[] =
-	{
-		{VTAG_USERCLIP_SET, NULL},
-		{VTAG_END_CM, NULL}
-	};
+#ifdef USE_SPLITSCREEN
+	static struct BitMap bm;
+	BEL_ST_PrepareBitmap(&bm, 0);
+
+	g_splitScreen = OpenScreenTags(NULL, 
+		//SA_DisplayID, modeid,
+		//SA_DClip, (ULONG)&rect,
+		SA_Width, 8*g_sdlLineWidth,
+		//SA_Height, g_sdlTexHeight,
+		SA_Height, g_sdlTexHeight - splitline,
+		SA_Depth, 4,
+		SA_ShowTitle, FALSE,
+		SA_Quiet, TRUE,
+		SA_Draggable, FALSE,
+		SA_BitMap, (IPTR)&bm,
+		SA_Type, CUSTOMSCREEN,
+		SA_Parent, (IPTR)g_amigaScreen,
+		SA_Top, splitline,
+		TAG_DONE);
+
+	//ScreenToFront(g_amigaScreen);
+	BEL_ST_SetPalette(16, 0, NULL);
+#else
 	int i;
 
 	if ((ucl = AllocMem(sizeof(struct UCopList), MEMF_PUBLIC|MEMF_CLEAR)))
 	{
 		CINIT(ucl, 16);
 		CWAIT(ucl, splitline, 0);
-		for (i = 0; i < 4; i++)
+		//for (i = 0; i < 4; i++)
+		for(i = 4; i--; ) // fixes DblPAL and DblNTSC modes
 		{
 			CMOVE(ucl, BPLPTH(i), HIWORD(&g_sdlVidMem->egaGfx[i][0]));
 			CMOVE(ucl, BPLPTL(i), LOWORD(&g_sdlVidMem->egaGfx[i][0]));
@@ -525,9 +544,10 @@ void BEL_ST_AddSplitlineCopList(uint16_t splitline)
 		g_amigaScreen->ViewPort.UCopIns = ucl;
 		Permit();
 
-		VideoControl(g_amigaScreen->ViewPort.ColorMap, uCopTags);
+		VideoControlTags(g_amigaScreen->ViewPort.ColorMap, VTAG_USERCLIP_SET, NULL, VTAG_END_CM);
 		RethinkDisplay();
 	}
+#endif
 }
 
 void BE_ST_EGASetSplitScreen(int16_t linenum)

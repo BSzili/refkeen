@@ -251,7 +251,7 @@ void ScaleWalls(void)
 		}
 		*/
 		typedef void (*CompScaleFunc)(register id0_byte_t *wallSrc __asm("a0"), register id0_unsigned_t/*id0_longword_t*/ colNum __asm("d1"));
-		CompScaleFunc scaleFunc = &scaledirectory[wallheight[colNum]]->code[0];
+		CompScaleFunc scaleFunc = (CompScaleFunc)&scaledirectory[wallheight[colNum]]->code[0];
 		scaleFunc(wallSrcPtr, colNum);
 		colNum++;
 #else
