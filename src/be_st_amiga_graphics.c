@@ -385,11 +385,11 @@ void BE_ST_SetScreenStartAddress(uint16_t crtc)
 	if (g_sdlScreenStartAddress != crtc)
 	{
 		g_sdlScreenStartAddress = crtc;
-		//WaitTOF();
-		WaitBOVP(&g_amigaScreen->ViewPort);
 		g_currentBitMap ^= 1;
 		BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], g_sdlScreenStartAddress);
 		ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
+		WaitTOF();
+		//WaitBOVP(&g_amigaScreen->ViewPort);
 	}
 }
 
@@ -404,21 +404,16 @@ void BE_ST_SetScreenStartAddressAndPelPanning(uint16_t crtc, uint8_t panning)
 
 	if (g_sdlScreenStartAddress != newScreenStartAddress || g_sdlPelPanning != newPelPanning)
 	{
-		//WaitTOF();
-		WaitBOVP(&g_amigaScreen->ViewPort);
-		if (g_sdlScreenStartAddress != newScreenStartAddress)
-		{
-			g_sdlScreenStartAddress = newScreenStartAddress;
-			g_currentBitMap ^= 1;
-			BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], newScreenStartAddress);
-			ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
-		}
-		if (g_sdlPelPanning != newPelPanning)
-		{
-			g_sdlPelPanning = newPelPanning;
-			g_amigaScreen->ViewPort.RasInfo->RxOffset = newPelPanning;
-			ScrollVPort(&g_amigaScreen->ViewPort);
-		}
+		g_sdlScreenStartAddress = newScreenStartAddress;
+		g_currentBitMap ^= 1;
+		BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], newScreenStartAddress);
+		//ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
+		g_amigaScreen->ViewPort.RasInfo->BitMap = &g_screenBitMaps[g_currentBitMap];
+		g_sdlPelPanning = newPelPanning;
+		g_amigaScreen->ViewPort.RasInfo->RxOffset = newPelPanning;
+		ScrollVPort(&g_amigaScreen->ViewPort);
+		WaitTOF();
+		//WaitBOVP(&g_amigaScreen->ViewPort);
 	}
 #else
 	if (g_sdlScreenStartAddress != crtc || g_sdlPelPanning != panning)
