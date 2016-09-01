@@ -26,6 +26,7 @@
 #define SQUARE_SAMPLES 2
 
 #define TIMER_SIGNAL
+//#define NO_FILTER
 
 static bool g_sdlEmulatedOPLChipReady;
 static void (*g_sdlCallbackSDFuncPtr)(void) = 0;
@@ -43,8 +44,10 @@ static struct IOAudio *g_audioReq;
 static BYTE *g_squareWave;
 static LONG g_audioClock;
 static APTR g_timerIntHandle = NULL;
+#ifdef NO_FILTER
 static struct CIA *ciaa = (struct CIA *)0xbfe001;
 static bool g_restoreFilter;
+#endif
 
 // hack to add my own timer
 extern void SD_SetUserHook(void (*hook)(void));
@@ -123,8 +126,10 @@ void BE_ST_InitAudio(void)
 					g_squareWave[0] = 127;
 					g_squareWave[1] = -127;
 					// turn off the 3.2 kHz low-pass filter
+#ifdef NO_FILTER
 					g_restoreFilter = !(ciaa->ciapra & CIAF_LED) ? true : false;
 					ciaa->ciapra |= CIAF_LED;
+#endif
 					return;
 				}
 			}
@@ -158,12 +163,14 @@ void BE_ST_ShutdownAudio(void)
 		FreeVec(g_squareWave);
 		g_squareWave = NULL;
 	}
-	
+
+#ifdef NO_FILTER
 	if (g_restoreFilter)
 	{
 		// restore filter
 		ciaa->ciapra &= ~CIAF_LED;
 	}
+#endif
 }
 
 void BE_ST_StartAudioSDService(void (*funcPtr)(void))
