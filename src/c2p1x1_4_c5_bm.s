@@ -1,13 +1,12 @@
 
 ;
-; Date: 1999-03-07			Mikael Kalms (Scout/C-Lous & more)
+; Date: 2016-09-01			Mikael Kalms
 ;					Email: mikael@kalms.org
 ;
 ; 1x1 4bpl cpu5 C2P for arbitrary BitMaps
 ;
 ; Features:
-; Performs CPU-only C2P conversion using rather state-of-the-art (as of
-; the creation date, anyway) techniques
+; Performs CPU-only C2P conversion
 ; Different routines for non-modulo and modulo C2P conversions
 ; Handles bitmaps of virtually any size (>4096x4096)
 ; Position-independent (PC-relative) code
@@ -93,12 +92,7 @@ c2p1x1_4_c5_bm
 	move.l	(a0)+,d1
 	move.l	(a0)+,d3
 
-	move.l	#$0f0f0f0f,d6		; Merge 4x1, part 1
-	and.l	d6,d0
-	and.l	d6,d1
-	and.l	d6,d2
-	and.l	d6,d3
-	lsl.l	#4,d0
+	lsl.l	#4,d0			; Merge 4x1, part 1
 	lsl.l	#4,d1
 	or.l	d2,d0
 	or.l	d3,d1
@@ -108,12 +102,7 @@ c2p1x1_4_c5_bm
 	move.l	(a0)+,d3
 	move.l	(a0)+,d7
 
-	move.l	#$0f0f0f0f,d4		; Merge 4x1, part 2
-	and.l	d4,d2
-	and.l	d4,d6
-	and.l	d4,d3
-	and.l	d4,d7
-	lsl.l	#4,d2
+	lsl.l	#4,d2			; Merge 4x1, part 2
 	lsl.l	#4,d3
 	or.l	d6,d2
 	or.l	d7,d3
@@ -161,12 +150,7 @@ c2p1x1_4_c5_bm
 	move.l	(a0)+,d3
 	move.l	d7,(a3)+
 
-	move.l	#$0f0f0f0f,d6		; Merge 4x1, part 1
-	and.l	d6,d0
-	and.l	d6,d1
-	and.l	d6,d2
-	and.l	d6,d3
-	lsl.l	#4,d0
+	lsl.l	#4,d0			; Merge 4x1, part 1
 	lsl.l	#4,d1
 	or.l	d2,d0
 	or.l	d3,d1
@@ -177,12 +161,7 @@ c2p1x1_4_c5_bm
 	move.l	(a0)+,d7
 	move.l	d4,(a4)+
 
-	move.l	#$0f0f0f0f,d4		; Merge 4x1, part 2
-	and.l	d4,d2
-	and.l	d4,d6
-	and.l	d4,d3
-	and.l	d4,d7
-	lsl.l	#4,d2
+	lsl.l	#4,d2			; Merge 4x1, part 2
 	lsl.l	#4,d3
 	or.l	d6,d2
 	or.l	d7,d3
@@ -289,12 +268,7 @@ c2p1x1_4_c5_bm
 	move.l	(a0)+,d1
 	move.l	(a0)+,d3
 
-	move.l	#$0f0f0f0f,d6		; Merge 4x1, part 1
-	and.l	d6,d0
-	and.l	d6,d1
-	and.l	d6,d2
-	and.l	d6,d3
-	lsl.l	#4,d0
+	lsl.l	#4,d0			; Merge 4x1, part 1
 	lsl.l	#4,d1
 	or.l	d2,d0
 	or.l	d3,d1
@@ -304,12 +278,7 @@ c2p1x1_4_c5_bm
 	move.l	(a0)+,d3
 	move.l	(a0)+,d7
 
-	move.l	#$0f0f0f0f,d4		; Merge 4x1, part 2
-	and.l	d4,d2
-	and.l	d4,d6
-	and.l	d4,d3
-	and.l	d4,d7
-	lsl.l	#4,d2
+	lsl.l	#4,d2			; Merge 4x1, part 2
 	lsl.l	#4,d3
 	or.l	d6,d2
 	or.l	d7,d3
@@ -364,12 +333,7 @@ c2p1x1_4_c5_bm
 	move.l	(a0)+,d3
 	move.l	d7,(a3)+
 
-	move.l	#$0f0f0f0f,d6		; Merge 4x1, part 1
-	and.l	d6,d0
-	and.l	d6,d1
-	and.l	d6,d2
-	and.l	d6,d3
-	lsl.l	#4,d0
+	lsl.l	#4,d0			; Merge 4x1, part 1
 	lsl.l	#4,d1
 	or.l	d2,d0
 	or.l	d3,d1
@@ -380,12 +344,7 @@ c2p1x1_4_c5_bm
 	move.l	(a0)+,d7
 	move.l	d4,(a4)+
 
-	move.l	#$0f0f0f0f,d4		; Merge 4x1, part 2
-	and.l	d4,d2
-	and.l	d4,d6
-	and.l	d4,d3
-	and.l	d4,d7
-	lsl.l	#4,d2
+	lsl.l	#4,d2			; Merge 4x1, part 2
 	lsl.l	#4,d3
 	or.l	d6,d2
 	or.l	d7,d3
