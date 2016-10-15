@@ -365,7 +365,7 @@ void BE_ST_PrepareForGameStartup(void)
 	}
 
 	//BE_ST_ShutdownAll();
-	BE_ST_HandleExit(0);
+	BE_ST_QuickExit();
 }
 
 /*void __chkabort(void)
@@ -502,7 +502,7 @@ void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 
 	if (((portstate & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) || ((portstate & JP_TYPE_MASK) == JP_TYPE_JOYSTK))
 	{
-		jx = jy = JOYSTICK_CENTER; // center for the joystick detection
+		//jx = jy = JOYSTICK_CENTER; // center for the joystick detection
 
 		if (portstate & JPF_JOY_UP)
 			jy = JOYSTICK_MIN;
