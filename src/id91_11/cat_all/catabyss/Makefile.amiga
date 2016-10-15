@@ -33,7 +33,8 @@ OBJECTS=$(OBJ)/c4_act1.o \
 #Shared with Catacomb 3-D and The Adventures Series
 OBJECTS+= $(OBJ)/c3_asm.o \
           $(OBJ)/c3_scale.o \
-          $(OBJ)/c3_trace.o
+          $(OBJ)/c3_trace.o \
+          $(OBJ)/altcontroller.o
 
 IDOBJECTS=$(IDOBJ)/id_ca.o \
           $(IDOBJ)/id_in.o \
@@ -57,11 +58,10 @@ EXTOBJECTS=$(EXTOBJ)/ext_ca.o \
 BEOBJECTS=$(BEOBJ)/actual_main.o \
           $(BEOBJ)/be_cross.o \
           $(BEOBJ)/be_cross_fs.o \
-          $(BEOBJ)/be_cross_doszeroseg.o \
           $(BEOBJ)/be_st_amiga.o \
           $(BEOBJ)/be_st_amiga_audio_timer.o \
+          $(BEOBJ)/be_st_amiga_cd32.o \
           $(BEOBJ)/be_st_amiga_graphics.o \
-          $(BEOBJ)/be_textmode_fonts.o \
           $(BEOBJ)/crc32.o \
           $(BEOBJ)/unlzexe.o
 

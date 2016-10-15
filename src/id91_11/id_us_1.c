@@ -421,6 +421,26 @@ USL_CheckSavedGames(void)
 	{
 		filename = USL_GiveSaveName(i);
 		ok = false;
+#ifdef __AMIGA__
+		// CD32 mode
+		if (g_refKeenCfg.isBilinear)
+		{
+			int BE_ST_SaveExists(char *filename);
+			int num = 0;
+
+			if ((num = BE_ST_SaveExists(filename)))
+			{
+				ok = true;
+#ifdef REFKEEN_VER_CAT3D
+				extern const id0_char_t *levelnames[];
+				snprintf(game->name, sizeof(game->name), "%d. %s", num, levelnames[num-1]);
+#else
+				snprintf(game->name, sizeof(game->name), "Level %d", num);
+#endif
+			}
+		}
+		else
+#endif
 		if (BE_Cross_IsFileValid(file = BE_Cross_open_rewritable_for_reading(filename)))
 		//if ((file = open(filename,O_BINARY | O_RDONLY)) != -1)
 		{

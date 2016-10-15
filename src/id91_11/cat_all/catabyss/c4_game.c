@@ -1264,6 +1264,10 @@ restart:
 		// (REFKEEN) Simulate a short wait while loading (includes vanilla bug: numbers not shown in the HUD on startup immediately)
 		VW_WaitVBL(25);
 		//
+#else
+		// CD32 mode
+		void BE_ST_CompressState(void);
+		BE_ST_CompressState();
 #endif
 
 		if (EASYMODEON)

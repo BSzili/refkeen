@@ -30,8 +30,6 @@
 
 #ifdef REFKEEN_VER_KDREAMS
 #define	SCREENWIDTH_EGA		64
-#else
-#define	SCREENWIDTH_EGA		g_sdlLineWidth
 #endif
 
 #define GFX_TEX_WIDTH 320
@@ -45,6 +43,7 @@
 #endif
 
 #define ENABLE_TEXT
+#define TEXT_CGA_FONT
 //#define USE_SPLITSCREEN
 
 extern struct Custom custom;
@@ -104,7 +103,15 @@ static UWORD *g_vgaFont = NULL;
 static int g_sdlTxtCursorPosX, g_sdlTxtCursorPosY;
 static bool g_sdlTxtCursorEnabled = true;
 static int g_sdlTxtColor = 7, g_sdlTxtBackground = 0;
-extern const uint8_t g_vga_8x16TextFont[256*8*16];
+//extern const uint8_t g_vga_8x16TextFont[256*8*16];
+#include "be_textmode_amiga.h"
+#ifdef TEXT_CGA_FONT
+#define FONT_HEIGHT 8
+#define FONT_FACE g_cgaPackedFont
+#else
+#define FONT_HEIGHT 16
+#define FONT_FACE g_vgaPackedFont
+#endif
 #endif
 static UWORD *g_pointerMem = NULL;
 /*static*/unsigned char *g_chunkyBuffer = NULL;
@@ -213,6 +220,9 @@ static void BEL_ST_ReopenScreen(void)
 
 	BEL_ST_CloseScreen();
 
+	// shut down the CD32 startup animation
+	CloseLibrary(OpenLibrary("freeanim.library", 0)); 
+
 	g_currentBitMap = 0;
 	BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], 0);
 
@@ -239,6 +249,11 @@ static void BEL_ST_ReopenScreen(void)
 
 			D(bug("Screen ModeID: %08lx\n", GetVPModeID(&g_amigaScreen->ViewPort)));
 
+			// faster ChangeVPBitMap / ScrollVPort
+			VideoControlTags(g_amigaScreen->ViewPort.ColorMap,
+				VC_IntermediateCLUpdate, FALSE,
+				TAG_DONE); 
+
 			BEL_ST_SetPalette(16, 0, NULL);
 
 			if ((g_amigaWindow = OpenWindowTags(NULL,
@@ -261,23 +276,11 @@ void BE_ST_InitGfx(void)
 {
 	g_sdlVidMem = AllocVec(sizeof(*g_sdlVidMem), MEMF_CHIP | MEMF_CLEAR);
 #ifdef ENABLE_TEXT
-	g_vgaFont = AllocVec(2*16*256, MEMF_CHIP | MEMF_CLEAR);
-	UWORD *ptr = g_vgaFont;
+	g_vgaFont = AllocVec(sizeof(UWORD)*FONT_HEIGHT*256, MEMF_CHIP | MEMF_CLEAR);
 
-	const uint8_t *currCharFontPtr;
-	int currCharPixX, currCharPixY;
-
-	for (int currChar = 0; currChar < 256; currChar++)
+	for (int currChar = 0; currChar < 256*FONT_HEIGHT; currChar++)
 	{
-		currCharFontPtr = g_vga_8x16TextFont + currChar*16*8;
-		for (currCharPixY = 0; currCharPixY < 16; ++currCharPixY)
-		{
-			for (currCharPixX = 0; currCharPixX < 8; ++currCharPixX, ++currCharFontPtr)
-			{
-				*ptr |= *currCharFontPtr << (15 - currCharPixX);
-			}
-			ptr++;
-		}
+		g_vgaFont[currChar] = FONT_FACE[currChar] << 8;
 	}
 #endif
 	g_pointerMem = (UWORD *)AllocVec(16 * 16, MEMF_CLEAR | MEMF_CHIP);
@@ -366,6 +369,48 @@ void BE_ST_DrawChunkyBuffer(uint16_t bufferofs)
 
 	D(bug("%s(%u)\n", __FUNCTION__, bufferofs));
 
+	// Akiko C2P for CD32
+	if (GfxBase->LibNode.lib_Version >= 40 && GfxBase->ChunkyToPlanarPtr)
+	{
+		ULONG *c2p = GfxBase->ChunkyToPlanarPtr;
+		ULONG *src = (ULONG *)g_chunkyBuffer;
+		ULONG *dst0 = (ULONG *)&g_sdlVidMem->egaGfx[0][bufferofs];
+		ULONG *dst1 = (ULONG *)&g_sdlVidMem->egaGfx[1][bufferofs];
+		ULONG *dst2 = (ULONG *)&g_sdlVidMem->egaGfx[2][bufferofs];
+		ULONG *dst3 = (ULONG *)&g_sdlVidMem->egaGfx[3][bufferofs];
+
+		OwnBlitter();
+		for (int i = 0; i < VIEWHEIGHT; i++)
+		{
+			for (int j = 0; j < VIEWWIDTH/(8*sizeof(ULONG)); j++)
+			{
+				*(GfxBase->ChunkyToPlanarPtr) = *src++;
+				*(GfxBase->ChunkyToPlanarPtr) = *src++;
+				*(GfxBase->ChunkyToPlanarPtr) = *src++;
+				*(GfxBase->ChunkyToPlanarPtr) = *src++;
+				*(GfxBase->ChunkyToPlanarPtr) = *src++;
+				*(GfxBase->ChunkyToPlanarPtr) = *src++;
+				*(GfxBase->ChunkyToPlanarPtr) = *src++;
+				*(GfxBase->ChunkyToPlanarPtr) = *src++;
+				*dst0++ = *c2p;
+				*dst1++ = *c2p;
+				*dst2++ = *c2p;
+				*dst3++ = *c2p;
+			}
+#ifdef REFKEEN_VER_CAT3D
+			for (int j = 0; j < (GFX_TEX_WIDTH-VIEWWIDTH)/(8*sizeof(ULONG)); j++)
+			{
+				dst0++;
+				dst1++;
+				dst2++;
+				dst3++;
+			}
+#endif
+		}
+		DisownBlitter();
+		return;
+	}
+
 	BEL_ST_PrepareBitmap(&bm, bufferofs);
 #ifdef KALMS_C2P
 	c2p1x1_4_c5_bm(VIEWWIDTH, VIEWHEIGHT, VIEWX, VIEWY, g_chunkyBuffer, &bm);
@@ -400,7 +445,7 @@ void BE_ST_SetScreenStartAddressAndPelPanning(uint16_t crtc, uint8_t panning)
 
 #if 1
 	uint16_t newScreenStartAddress = (crtc & (uint16_t)~1);
-	uint16_t newPelPanning = panning + (crtc % 2)*8;
+	uint8_t newPelPanning = panning + (crtc % 2)*8;
 
 	if (g_sdlScreenStartAddress != newScreenStartAddress || g_sdlPelPanning != newPelPanning)
 	{
@@ -780,7 +825,11 @@ void BE_ST_SetScreenMode(int mode)
 		g_sdlTxtCursorPosX = g_sdlTxtCursorPosY = 0;
 		BE_ST_clrscr();
 		g_sdlTexWidth = 2*GFX_TEX_WIDTH;
+#ifdef TEXT_CGA_FONT
+		g_sdlTexHeight = GFX_TEX_HEIGHT;
+#else
 		g_sdlTexHeight = 2*GFX_TEX_HEIGHT;
+#endif
 		g_sdlLineWidth = 80;
 		g_sdlSplitScreenLine = -1;
 		// TODO should the contents of A0000 be backed up?
@@ -1026,18 +1075,18 @@ static void BEL_ST_DrawChar(struct RastPort *rp, int x, int y, bool cursor)
 	TmpFGColor = *ptr & 0x0f;
 	TmpBGColor = (*ptr >> 4) & 0x07;
 	sX = x * 8;
-	sY = y * 16;
+	sY = y * FONT_HEIGHT;
 
 	SetABPenDrMd(rp, TmpFGColor, TmpBGColor, JAM2);
-	BltTemplate((PLANEPTR)&g_vgaFont[TmpChar * 16], 0, 2, rp, sX, sY, 8, 16);
+	BltTemplate((PLANEPTR)&g_vgaFont[TmpChar * FONT_HEIGHT], 0, 2, rp, sX, sY, 8, FONT_HEIGHT);
 
-	if (cursor)
+	/*if (cursor)
 	{
 		Move(rp, sX, sY + 14);
 		Draw(rp, sX + 7, sY + 14);
 		Move(rp, sX, sY + 15);
 		Draw(rp, sX + 7, sY + 15);
-	}
+	}*/
 }
 #endif
 
@@ -1064,7 +1113,7 @@ void BEL_ST_UpdateHostDisplay(void)
 }
 
 // unrolled functions for Keen Dreams
-
+#ifdef REFKEEN_VER_KDREAMS
 #define IS_WORD_ALIGNED(x) (((intptr_t)(x) & 1) == 0)
 
 #define SCR_COPY_WORD \
@@ -1380,6 +1429,7 @@ void BE_ST_EGADrawTile16MaskedSrcToScr(int destOff, const uint8_t *srcPtr)
 	SRC_MASKED_COPY_PLANE_UNALIGNED(2)
 	SRC_MASKED_COPY_PLANE_UNALIGNED(3)
 }
+#endif
 
 // common with Catacomb 3D
 // TODO: add word/dword aligned copies, unroll loops, etc.

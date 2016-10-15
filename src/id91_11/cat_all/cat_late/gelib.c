@@ -1253,6 +1253,14 @@ id0_char_t GetKeyChoice(const id0_char_t *choices,id0_boolean_t clear)
 		BE_ST_ShortSleep();
 	}
 
+#ifdef __AMIGA__
+	// ALTCONTROLLER wait until the escape key is released, so we don't open the menu again
+	while (Keyboard[sc_Escape])
+	{
+		BE_ST_ShortSleep();
+	}
+#endif
+
 	BE_ST_AltControlScheme_Pop(); // REFKEEN - Alternative controllers support
 
 	IN_ClearKeysDown();

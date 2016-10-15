@@ -133,21 +133,12 @@ void BE_ST_DecompressState(void)
 	gamestate.body = savedstate.body;
 }
 
-static ULONG BEL_ST_NVSize(size_t size)
-{
-	ULONG length;
-
-	// size in the units of tens of bytes
-	length = (size + 9) / 10;
-
-	return length;
-}
-
 static bool BEL_ST_StoreNV(STRPTR name, APTR data, ULONG length)
 {
 	UWORD error;
+	ULONG nvsize = (length + 9) / 10; // size in the units of tens of bytes
 
-	error = StoreNV(APPNAME, name, data, BEL_ST_NVSize(length), TRUE);
+	error = StoreNV(APPNAME, name, data, nvsize, TRUE);
 
 	return error == 0;
 }
@@ -167,16 +158,38 @@ static bool BEL_ST_GetNV(STRPTR name, APTR data, ULONG length)
 	return false;
 }
 
-bool BE_ST_SaveState(void)
+int BE_ST_SaveState(char *filename)
 {
-	return BEL_ST_StoreNV(SAVEITEMNAME, &savedstate, sizeof(savedstate));
+	//return BEL_ST_StoreNV(SAVEITEMNAME, &savedstate, sizeof(savedstate));
+	if (BEL_ST_StoreNV(filename, &savedstate, sizeof(savedstate)))
+	{
+		return savedstate.mapon+1;
+	}
+	return 0;
 }
 
-bool BE_ST_RestoreState(void)
+bool BE_ST_RestoreState(char *filename)
 {
-	return BEL_ST_GetNV(SAVEITEMNAME, &savedstate, sizeof(savedstate));
+	//return BEL_ST_GetNV(SAVEITEMNAME, &savedstate, sizeof(savedstate));
+	// backward compatibility hack
+	if (BEL_ST_GetNV(filename, &savedstate, sizeof(savedstate)))
+		return true;
+	if (!strcmp(filename, "SAVEGAM0.C3D"))
+		filename = SAVEITEMNAME;
+
+	return BEL_ST_GetNV(filename, &savedstate, sizeof(savedstate));
 }
 
+int BE_ST_SaveExists(char *filename)
+{
+	if (BE_ST_RestoreState(filename))
+	{
+		return savedstate.mapon+1;
+	}
+	return 0;
+}
+
+#if 0
 bool BE_ST_SaveScores(void)
 {
 	return BEL_ST_StoreNV(SCOREITEMNAME, Scores, sizeof(HighScore) * MaxScores);
@@ -185,4 +198,124 @@ bool BE_ST_SaveScores(void)
 bool BE_ST_ReadScores(void)
 {
 	return BEL_ST_GetNV(SCOREITEMNAME, Scores, sizeof(HighScore) * MaxScores);
+}
+#endif
+
+#include <proto/exec.h>
+#include <devices/cd.h>
+
+static struct IOStdReq *g_cdReq = NULL;
+static struct MsgPort *g_cdPort = NULL;
+static bool g_cdOpen = false;
+static int g_lastCDTrack = 0;
+
+void BE_ST_CloseCD(void)
+{
+	if (g_cdOpen)
+	{
+		CloseDevice((struct IORequest *)g_cdReq);
+		g_cdOpen = false;
+	}
+
+	if (g_cdReq)
+	{
+		DeleteIORequest((struct IORequest *)g_cdReq);
+		g_cdReq = NULL;
+	}
+
+	if (g_cdPort)
+	{
+		DeleteMsgPort(g_cdPort);
+		g_cdPort = NULL;
+	}
+}
+
+bool BE_ST_OpenCD(void)
+{
+	if (!(g_cdPort = CreateMsgPort()))
+	{
+		BE_ST_CloseCD();
+		return false;
+	}
+
+	if (!(g_cdReq = CreateIORequest(g_cdPort, sizeof(*g_cdReq))))
+	{
+		BE_ST_CloseCD();
+		return false;
+	}
+
+	if (OpenDevice("cd.device", 0, (struct IORequest *)g_cdReq, 0))
+	{
+		BE_ST_CloseCD();
+		return false;
+	}
+
+	g_cdOpen = true;
+	return true;
+}
+
+void BE_ST_PauseCD(bool pause)
+{
+	if (!g_cdReq)
+		return;
+
+	g_cdReq->io_Command = CD_PAUSE;
+	g_cdReq->io_Length = pause ? 1 : 0;
+	DoIO((struct IORequest *)g_cdReq);
+}
+
+void BE_ST_PlayCD(int track)
+{
+	if (!g_cdReq)
+		return;
+
+	g_cdReq->io_Command = CD_PLAYTRACK;
+	g_cdReq->io_Length = 1;
+	g_cdReq->io_Offset = track;
+	SendIO((struct IORequest *)g_cdReq);
+	g_lastCDTrack = track;
+}
+
+void BE_ST_StopCD(void)
+{
+	if (!g_cdReq)
+		return;
+
+	if (!CheckIO((struct IORequest *)g_cdReq))
+	{
+		AbortIO((struct IORequest *)g_cdReq);
+		WaitIO((struct IORequest *)g_cdReq);
+	}
+	g_lastCDTrack = 0;
+}
+
+void BE_ST_SetCDVolume(int vol)
+{
+	g_cdReq->io_Command = CD_ATTENUATE;
+	g_cdReq->io_Length = 1;
+	g_cdReq->io_Offset = vol;
+	DoIO((struct IORequest *)g_cdReq);
+}
+
+void BE_ST_StartMusic(void)
+{
+	if (BE_ST_OpenCD())
+	{
+		// first track is the data
+		BE_ST_PlayCD(2);
+	}
+}
+
+void BE_ST_StopMusic(void)
+{
+	BE_ST_StopCD();
+	BE_ST_CloseCD();
+}
+
+void BE_ST_UpdateMusic(void)
+{
+	if (g_lastCDTrack > 0 && CheckIO((struct IORequest *)g_cdReq))
+	{
+		BE_ST_PlayCD(g_lastCDTrack);
+	}
 }

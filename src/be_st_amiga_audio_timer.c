@@ -24,9 +24,12 @@
 
 #define PC_PIT_RATE 1193182
 #define SQUARE_SAMPLES 2
+#define LASTSOUND 37 // Catacomb Apocalypse
+#define OPL_SAMPLE_RATE 11025 // converted sound sample rate
 
 #define TIMER_SIGNAL
 //#define NO_FILTER
+#define USE_DIGI_SOUND
 
 static bool g_sdlEmulatedOPLChipReady;
 static void (*g_sdlCallbackSDFuncPtr)(void) = 0;
@@ -47,6 +50,11 @@ static APTR g_timerIntHandle = NULL;
 #ifdef NO_FILTER
 static struct CIA *ciaa = (struct CIA *)0xbfe001;
 static bool g_restoreFilter;
+#endif
+#ifdef USE_DIGI_SOUND
+static int8_t *g_digiSounds[LASTSOUND];
+static int g_digiSoundSamples[LASTSOUND];
+static int g_lastSound = -1;
 #endif
 
 // hack to add my own timer
@@ -95,6 +103,41 @@ static void BEL_ST_RemTimerInt(void)
 	g_timerIntHandle = NULL;
 }
 
+#ifdef USE_DIGI_SOUND
+static void BEL_ST_LoadDigiSounds(void)
+{
+	char filename[256];
+	BE_FILE_T fp;
+
+	for (int i = 0; i < LASTSOUND; i++)
+	{
+		snprintf(filename, sizeof(filename), "asound%02d.raw", i);
+		//if ((fp = BE_Cross_open_readonly_for_reading(filename)))
+		if ((fp = fopen(filename, "rb")))
+		{
+			int32_t nbyte = BE_Cross_FileLengthFromHandle(fp);
+			if ((g_digiSounds[i] = AllocVec(nbyte, MEMF_CHIP|MEMF_PUBLIC)))
+			{
+				BE_Cross_readInt8LEBuffer(fp, g_digiSounds[i], nbyte);
+				g_digiSoundSamples[i] = nbyte;
+				g_sdlEmulatedOPLChipReady = true;
+			}
+			BE_Cross_close(fp);
+		}
+	}
+}
+
+static void BEL_ST_FreeDigiSounds(void)
+{
+	for (int i = 0; i < LASTSOUND; i++)
+	{
+		FreeVec(g_digiSounds[i]);
+		g_digiSounds[i] = NULL;
+		g_digiSoundSamples[i] = 0;
+	}
+}
+#endif
+
 void BE_ST_ShutdownAudio(void);
 
 void BE_ST_InitAudio(void)
@@ -125,8 +168,11 @@ void BE_ST_InitAudio(void)
 				{
 					g_squareWave[0] = 127;
 					g_squareWave[1] = -127;
-					// turn off the 3.2 kHz low-pass filter
+#ifdef USE_DIGI_SOUND
+					BEL_ST_LoadDigiSounds();
+#endif
 #ifdef NO_FILTER
+					// turn off the 3.2 kHz low-pass filter
 					g_restoreFilter = !(ciaa->ciapra & CIAF_LED) ? true : false;
 					ciaa->ciapra |= CIAF_LED;
 #endif
@@ -140,6 +186,10 @@ void BE_ST_InitAudio(void)
 
 void BE_ST_ShutdownAudio(void)
 {
+#ifdef USE_DIGI_SOUND
+	BEL_ST_FreeDigiSounds();
+#endif
+
 	if (g_audioReq)
 	{
 		// Should I free the channel here?
@@ -203,12 +253,67 @@ bool BE_ST_IsEmulatedOPLChipReady(void)
 	return g_sdlEmulatedOPLChipReady;
 }
 
+static void BEL_ST_PlaySample(int8_t *sample, int length, int cycles, int rate)
+{
+	g_audioReq->ioa_Request.io_Command = CMD_FLUSH;
+	DoIO((struct IORequest *)g_audioReq);
+
+	g_audioReq->ioa_Request.io_Command = CMD_WRITE;
+	g_audioReq->ioa_Request.io_Flags = ADIOF_PERVOL;
+	g_audioReq->ioa_Data = (UBYTE *)sample;
+	g_audioReq->ioa_Length = length;
+	g_audioReq->ioa_Period = g_audioClock / rate;
+	g_audioReq->ioa_Volume = 64;
+	g_audioReq->ioa_Cycles = cycles;
+	BeginIO((struct IORequest *)g_audioReq);
+}
+
+static bool BEL_ST_SamplePlaying(void)
+{
+	return !CheckIO((struct IORequest *)g_audioReq);
+}
+
+static void BEL_ST_StopSample(void)
+{
+	g_audioReq->ioa_Request.io_Command = CMD_STOP;
+	BeginIO((struct IORequest *)g_audioReq);
+	g_audioReq->ioa_Request.io_Command = CMD_RESET;
+	BeginIO((struct IORequest *)g_audioReq);
+}
+
+bool BE_ST_SoundPlaying(void)
+{
+	return BEL_ST_SamplePlaying() && g_lastSound >= 0;
+}
+
+void BE_ST_PlaySound(int sound)
+{
+	if (!g_digiSounds[sound])
+		return;
+
+#ifdef REFKEEN_VER_CATACOMB_ALL
+	// HACK don't let the walk sounds trample over the rest
+	if (BE_ST_SoundPlaying() && (sound == 14 || sound == 15))
+		return;
+#endif
+
+	g_lastSound = sound;
+	BEL_ST_PlaySample(g_digiSounds[sound], g_digiSoundSamples[sound], 1, OPL_SAMPLE_RATE);
+}
+
+void BE_ST_StopSound(void)
+{
+	//g_lastSound = -1;
+	BEL_ST_StopSample();
+}
+
 // Frequency is about 1193182Hz/spkVal
 void BE_ST_PCSpeakerOn(uint16_t spkVal)
 {
 	if (!g_squareWave)
 		return;
 
+	/*
 	g_audioReq->ioa_Request.io_Command = CMD_FLUSH;
 	DoIO((struct IORequest *)g_audioReq);
 	//AbortIO((struct IORequest *)g_audioReq);
@@ -221,6 +326,8 @@ void BE_ST_PCSpeakerOn(uint16_t spkVal)
 	g_audioReq->ioa_Volume = 64;
 	g_audioReq->ioa_Cycles = 0;
 	BeginIO((struct IORequest *)g_audioReq);
+	*/
+	BEL_ST_PlaySample(g_squareWave, SQUARE_SAMPLES, 0, SQUARE_SAMPLES * (PC_PIT_RATE / spkVal));
 }
 
 void BE_ST_PCSpeakerOff(void)
@@ -228,10 +335,13 @@ void BE_ST_PCSpeakerOff(void)
 	if (!g_squareWave)
 		return;
 
+	/*
 	g_audioReq->ioa_Request.io_Command = CMD_STOP;
 	BeginIO((struct IORequest *)g_audioReq);
 	g_audioReq->ioa_Request.io_Command = CMD_RESET;
 	BeginIO((struct IORequest *)g_audioReq);
+	*/
+	BEL_ST_StopSample();
 }
 
 // only used in FindFile()
@@ -325,6 +435,7 @@ void BE_ST_ShortSleep(void)
 	oldpri = SetTaskPri(task, -10);
 	SetTaskPri(task, oldpri);*/
 	//TimeDelay(UNIT_MICROHZ, 0, 500);
+	BE_ST_PollEvents();
 }
 
 void BE_ST_Delay(uint16_t msec) // Replacement for delay from dos.h

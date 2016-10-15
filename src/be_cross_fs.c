@@ -1014,6 +1014,11 @@ static void BEL_Cross_mkdir(const TCHAR *path)
 #ifdef REFKEEN_PLATFORM_WINDOWS
 	_tmkdir(path);
 #else
+#ifdef __AMIGA__
+	// check if the directory already exists, so we don't get requesters on write-only filesystems
+	if (BEL_Cross_IsDir(path))
+		return;
+#endif
 	_tmkdir(path, 0755);
 #endif
 }

@@ -142,9 +142,18 @@ void CheckKeys (void)
 		CenterWindow (8,3);
 		US_PrintCentered ("PAUSED");
 		VW_UpdateScreen ();
+#ifdef __AMIGA__
+		void BE_ST_PauseCD(bool pause);
+		//BE_ST_PauseCD(true);
+#else
 		SD_MusicOff();
+#endif
 		IN_Ack();
+#ifdef __AMIGA__
+		//BE_ST_PauseCD(false);
+#else
 		SD_MusicOn();
+#endif
 		Paused = false;
 		if (MousePresent) BE_ST_GetMouseDelta(NULL, NULL); // Clear accumulated mouse movement
 		//if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
@@ -171,7 +180,9 @@ void CheckKeys (void)
 			playstate = ex_abort;
 			return;
 		}
+#ifndef __AMIGA__
 		StartMusic ();
+#endif
 		IN_ClearKeysDown();
 		if (restartgame)
 			playstate = ex_resetgame;
@@ -179,6 +190,9 @@ void CheckKeys (void)
 			playstate = ex_loadedgame;
 		DrawPlayScreen ();
 		CacheScaleds ();
+#ifdef __AMIGA__
+		StartMusic ();
+#endif
 		lasttimecount = SD_GetTimeCount();
 		if (MousePresent) BE_ST_GetMouseDelta(NULL, NULL); // Clear accumulated mouse movement
 		//if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
@@ -373,7 +387,6 @@ void PollControls (void)
 
 	}
 
-#ifndef __AMIGA__
 	if (Controls[0]==ctrl_Joystick)
 	{
 		if (c.x>120 || c.x <-120 || c.y>120 || c.y<-120)
@@ -386,7 +399,6 @@ void PollControls (void)
 			slowturn = false;
 	}
 	else
-#endif
 	{
 		if (Keyboard[sc_RShift])
 			running = true;
@@ -411,6 +423,10 @@ void PollControls (void)
 
 void StopMusic(void)
 {
+#ifdef __AMIGA__
+	void BE_ST_StopMusic(void);
+	BE_ST_StopMusic();
+#else
 	id0_int_t	i;
 
 	SD_MusicOff();
@@ -420,6 +436,7 @@ void StopMusic(void)
 			MM_SetPurge((memptr *)&audiosegs[STARTMUSIC + i],3);
 			MM_SetLock((memptr *)&audiosegs[STARTMUSIC + i],false);
 		}
+#endif
 }
 
 //==========================================================================
@@ -436,6 +453,11 @@ void StopMusic(void)
 // JAB - Cache & start the appropriate music for this level
 void StartMusic(void)
 {
+#ifdef __AMIGA__
+	void BE_ST_StartMusic(void);
+	if (MusicMode == smm_AdLib)
+		BE_ST_StartMusic();
+#else
 	musicnames	chunk;
 
 	SD_MusicOff();
@@ -453,6 +475,7 @@ void StartMusic(void)
 		MM_SetLock((memptr *)&audiosegs[STARTMUSIC + chunk],true);
 		SD_StartMusic((MusicGroup id0_far *)audiosegs[STARTMUSIC + chunk]);
 	}
+#endif
 }
 
 //==========================================================================
@@ -596,6 +619,10 @@ nextactor:;
 		// the debug key modifier is held.
 		BE_ST_TimeCountWaitFromSrc(SD_GetTimeCount(), 1);
 		//
+#else
+		void BE_ST_UpdateMusic(void);
+		if (MusicMode == smm_AdLib)
+			BE_ST_UpdateMusic();
 #endif
 		if (singlestep)
 		{

@@ -712,6 +712,11 @@ register	KeyboardDef	*def;
 	mx = my = motion_None;
 	buttons = 0;
 
+#ifdef __AMIGA__
+	// ALTCONTROLLER
+	BE_ST_PollEvents();
+#endif
+
 	if (DemoMode == demo_Playback)
 	{
 		dbyte = DemoBuffer[DemoOffset + 1];

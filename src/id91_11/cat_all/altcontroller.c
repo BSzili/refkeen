@@ -24,6 +24,35 @@
 
 /*** Touch input UI resource definitions ***/
 
+#ifdef __AMIGA__
+static const char *dummy_xpm[] = {NULL, NULL, NULL, NULL, NULL};
+#define button_shoot_xpm dummy_xpm
+#define button_strafe_xpm dummy_xpm
+#define analog_circle_xpm dummy_xpm
+#define button_heal_xpm dummy_xpm
+#define button_nuke_xpm dummy_xpm
+#define button_bolt_xpm dummy_xpm
+#define button_back_xpm dummy_xpm
+#define button_quickturn_xpm dummy_xpm
+#define button_function_keys_xpm dummy_xpm
+#define button_debug_keys_xpm dummy_xpm
+#define analog_circle_left_input_xpm dummy_xpm
+#define analog_circle_right_input_xpm dummy_xpm
+#define analog_circle_top_input_xpm dummy_xpm
+#define analog_circle_bottom_input_xpm dummy_xpm
+#define analog_circle_topleft_input_xpm dummy_xpm
+#define analog_circle_topright_input_xpm dummy_xpm
+#define analog_circle_bottomleft_input_xpm dummy_xpm
+#define analog_circle_bottomright_input_xpm dummy_xpm
+#define button_run_xpm dummy_xpm
+#define button_pause_xpm dummy_xpm
+#define button_scrolls_xpm dummy_xpm
+#define pad_dpad_xpm dummy_xpm
+#define pad_dpad_left_input_xpm dummy_xpm
+#define pad_dpad_right_input_xpm dummy_xpm
+#define pad_dpad_up_input_xpm dummy_xpm
+#define pad_dpad_down_input_xpm dummy_xpm
+#else
 #include "../rsrc/button_back.xpm"
 #include "../rsrc/button_debug_keys.xpm"
 #if (defined REFKEEN_VER_CAT3D) || (defined REFKEEN_VER_CATABYSS)
@@ -61,6 +90,7 @@
 #include "../rsrc/analog_circle_topright_input.xpm"
 #include "../rsrc/analog_circle_bottomleft_input.xpm"
 #include "../rsrc/analog_circle_bottomright_input.xpm"
+#endif
 
 BE_ST_ControllerSingleMap *g_ingame_altcontrol_button0mappings[2], *g_ingame_altcontrol_button1mappings[2],
 	*g_ingame_altcontrol_upmappings[4], *g_ingame_altcontrol_downmappings[4], *g_ingame_altcontrol_leftmappings[4], *g_ingame_altcontrol_rightmappings[4];

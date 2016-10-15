@@ -717,6 +717,11 @@ register	KeyboardDef	*def;
 	mx = my = motion_None;
 	buttons = 0;
 
+#ifdef __AMIGA__
+	// ALTCONTROLLER
+	BE_ST_PollEvents();
+#endif
+
 #ifndef REFKEEN_VER_CATADVENTURES
 	if (DemoMode == demo_Playback)
 	{

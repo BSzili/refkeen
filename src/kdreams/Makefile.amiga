@@ -36,20 +36,19 @@ OBJECTS=$(OBJ)/id_ca.o \
         $(OBJ)/loadscn2.o \
         $(OBJ)/lzhuf.o \
         $(OBJ)/soft.o \
+        $(OBJ)/altcontroller.o \
         $(OBJ)/statetype_ptr_conversion.o
 
 BEOBJECTS=$(BEOBJ)/actual_main.o \
           $(BEOBJ)/be_cross.o \
           $(BEOBJ)/be_cross_fs.o \
-          $(BEOBJ)/be_cross_doszeroseg.o \
           $(BEOBJ)/be_st_amiga.o \
           $(BEOBJ)/be_st_amiga_audio_timer.o \
           $(BEOBJ)/be_st_amiga_graphics.o \
-          $(BEOBJ)/be_textmode_fonts.o \
           $(BEOBJ)/crc32.o \
           $(BEOBJ)/unlzexe.o
 
-INTCXXFLAGS+= -I$(SRC) -I$(BESRC)  -DREFKEEN_VER_KDREAMS=1
+INTCXXFLAGS+= -I$(SRC) -I$(BESRC)  -DREFKEEN_VER_KDREAMS=1 -DALTCONTROLLER
 
 EXENAME=reflection-kdreams
 

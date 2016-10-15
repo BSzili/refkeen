@@ -18,7 +18,9 @@
 
 #ifdef REFKEEN_VER_CATADVENTURES
 #include "def.h"
+#ifndef __AMIGA__
 #define VIEWWIDTH (40*8)
+#endif
 #else
 #include "c3_def.h"
 #ifndef __AMIGA__

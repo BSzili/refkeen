@@ -153,6 +153,15 @@ int main(int argc, char **argv)
 			--argc;
 		}
 #endif
+#ifdef __AMIGA__
+		else if (!BE_Cross_strcasecmp(1+argv[1], "cd32"))
+		{
+			// reuse this for CD32 mode
+			g_refKeenCfg.isBilinear = true;
+			++argv;
+			--argc;
+		}
+#endif
 		else
 			showHelp = true;
 	}

@@ -946,21 +946,13 @@ USL_ConfigJoystick(id0_word_t joy)
 	if (!USL_CJGet(joy,0,x + 8,y + 8,&minx,&miny))
 		return(false);
 
-#ifdef __AMIGA__
-	USL_CJDraw("Move Joystick to lower right","and press button #1");
-#else
 	USL_CJDraw("Move Joystick to lower right","and press button #2");
-#endif
 	VWB_DrawTile8(x + 24,y + 8,TileBase - 25);
 	VWB_DrawTile8(x + 40,y + 24,TileBase + 7);
 	VWB_DrawTile8(x + 8,y + 8,TileBase + 0);
 	VWB_DrawTile8(x + 8,y + 24,TileBase + 1);
 	VW_UpdateScreen();
-#ifdef __AMIGA__
-	if (!USL_CJGet(joy,0,x + 8,y + 24,&maxx,&maxy))
-#else
 	if (!USL_CJGet(joy,1,x + 8,y + 24,&maxx,&maxy))
-#endif
 		return(false);
 
 	while (IN_GetJoyButtonsDB(joy))
@@ -1041,6 +1033,33 @@ USL_DoLoadGame(UserItem id0_far *item)
 
 	err = 0;
 	filename = USL_GiveSaveName(n);
+#ifdef __AMIGA__
+	// CD32 mode
+	if (g_refKeenCfg.isBilinear)
+	{
+		bool BE_ST_RestoreState(char *filename);
+		void BE_ST_DecompressState(void);
+		void SetupGameLevel (void);
+
+		if (BE_ST_RestoreState(filename))
+		{
+			BE_ST_DecompressState();
+			SetupGameLevel();
+			loadedgame = true;
+			Paused = true;
+		}
+		else
+		{
+			//err = -1;
+			abortgame = true;
+			Communication = uc_None;
+			CtlPanelDone = false;
+			USL_HandleError(-1);
+		}
+		USL_DrawCtlPanel();
+		return;
+	}
+#endif
 	if (BE_Cross_IsFileValid(file = BE_Cross_open_rewritable_for_reading(filename)))
 	//if ((file = open(filename,O_BINARY | O_RDONLY)) != -1)
 	{
@@ -1139,6 +1158,36 @@ USL_DoSaveGame(UserItem id0_far *item)
 	n = item - loadsavegamei;
 	game = &Games[n];
 	fontcolor = HiliteColor;
+#ifdef __AMIGA__
+	// CD32 mode
+	if (g_refKeenCfg.isBilinear)
+	{
+		int BE_ST_SaveState(char *filename);
+		int num;
+
+		filename = USL_GiveSaveName(n);
+		strcpy(game->name,filename);
+		USL_ShowLoadSave("Saving",game->name);
+
+		if ((num = BE_ST_SaveState(filename)))
+		{
+#ifdef REFKEEN_VER_CAT3D
+			extern const id0_char_t *levelnames[];
+			snprintf(game->name, sizeof(game->name), "%d. %s", num, levelnames[num-1]);
+#else
+			snprintf(game->name, sizeof(game->name), "Level %d", num);
+#endif
+			game->present = true;
+			//GameIsDirty = false;
+		}
+		else
+		{
+			USL_HandleError(ENOMEM);
+		}
+		USL_SetupCard();
+		return;
+	}
+#endif
 	VWB_Bar(item->x + 1,item->y + 2,CtlPanelW - 12 - 2,7,BackColor);
 	game->oldtestoffset = refkeen_compat_id_us_printx_offset;
 	//game->oldtest = &PrintX;
@@ -1401,6 +1450,10 @@ USL_PlayPong(void)
 			by = (BallMinY + ((BallMaxY - BallMinY) / 2)) << 2;
 		}
 		VW_UpdateScreen();
+#ifdef __AMIGA__
+		// ALTCONTROLLER
+		BE_ST_PollEvents();
+#endif
 		BE_ST_TimeCountWaitFromSrc(waittime, 1);
 #if 0
 		while (waittime == TimeCount)
@@ -1669,6 +1722,14 @@ USL_HandleComm(UComm comm)
 		abortgame = true;
 		break;
 	case uc_Quit:
+#ifdef __AMIGA__
+		// CD32 mode
+		if (g_refKeenCfg.isBilinear)
+		{
+			abortgame = true;
+			break;
+		}
+#endif
 		QuitToDos = true;
 		break;
 	case uc_SEasy:

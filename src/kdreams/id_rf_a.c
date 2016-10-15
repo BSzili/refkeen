@@ -88,7 +88,9 @@ void RFL_NewTile_CGA (id0_unsigned_t updateoffset)
 		//
 		//=============
 		const id0_byte_t *backSrcPtr = (const id0_byte_t *)grsegs[STARTTILE16+backtilenum];
+#ifndef __AMIGA__
 		backSrcPtr = backSrcPtr ? backSrcPtr : g_be_cross_dosZeroSeg; // VANILLA KEEN BUG WORKAROUND ("Empty" tile found in map)
+#endif
 		for (int loopVar = 15; loopVar; --loopVar, backSrcPtr += TILEWIDTH_CGA, BE_Cross_Wrapped_Add(screenseg, &destPtr, SCREENWIDTH_CGA))
 		{
 			BE_Cross_LinearToWrapped_MemCopy(screenseg, destPtr, backSrcPtr, TILEWIDTH_CGA);
@@ -104,7 +106,9 @@ void RFL_NewTile_CGA (id0_unsigned_t updateoffset)
 	//=========
 	const id0_byte_t *foreSrcPtr = (const id0_byte_t *)grsegs[STARTTILE16M+foretilenum];
 	const id0_byte_t *backSrcPtr = (const id0_byte_t *)grsegs[STARTTILE16+backtilenum];
+#ifndef __AMIGA__
 	backSrcPtr = backSrcPtr ? backSrcPtr : g_be_cross_dosZeroSeg; // VANILLA KEEN BUG WORKAROUND ("Empty" tile found in map)
+#endif
 
 	for (int loopVar = 16; loopVar; --loopVar, backSrcPtr += TILEWIDTH_CGA-3, foreSrcPtr += TILEWIDTH_CGA-3, BE_Cross_Wrapped_Add(screenseg, &destPtr, SCREENWIDTH_CGA-3))
 	{

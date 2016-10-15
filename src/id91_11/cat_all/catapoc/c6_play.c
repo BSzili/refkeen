@@ -314,6 +314,13 @@ deadloop:;
 		status_flag = S_NONE;
 
 
+#ifdef __AMIGA__
+		// ALTCONTROLLER wait until the escape key is released, so we don't close the menu immediately
+		while (Keyboard[sc_Escape])
+		{
+			BE_ST_ShortSleep();
+		}
+#endif
 		if (Flags & FL_DEAD)
 		{
 			id0_char_t choices[] = {sc_Escape,sc_R,sc_N,sc_Q,0};

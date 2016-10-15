@@ -339,7 +339,11 @@ void ScanText (void)
 ==================
 */
 
+#ifdef __AMIGA__
+const id0_char_t    *levelnames[] =
+#else
 static  const id0_char_t    *levelnames[] =
+#endif
 				{
 					"The Approach",
 					"Nemesis's Keep",
@@ -1143,6 +1147,12 @@ void    CheckHighScore (id0_long_t score,id0_word_t other)
 	id0_int_t                     n;
 	HighScore       myscore;
 
+#ifdef __AMIGA__
+	// CD32 mode
+	if (g_refKeenCfg.isBilinear)
+		return;
+#endif
+
 	strcpy(myscore.name,"");
 	myscore.score = score;
 	myscore.completed = other;
@@ -1227,6 +1237,10 @@ restart:
 		// (REFKEEN) Simulate a short wait while loading
 		VW_WaitVBL(25);
 		//
+#else
+		// CD32 mode
+		void BE_ST_CompressState(void);
+		BE_ST_CompressState();
 #endif
 
 #ifdef PROFILE

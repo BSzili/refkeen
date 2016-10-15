@@ -1327,6 +1327,9 @@ void ReadScroll (id0_int_t scroll)
 		if (walldirectory[i])
 			MM_SetPurge ((memptr *)&walldirectory[i],3);
 
+#ifdef __AMIGA__
+	StopMusic();
+#endif
 	CA_CacheGrChunk (SCROLLTOPPIC);
 	CA_CacheGrChunk (SCROLL1PIC + scroll);
 	VW_DrawPic (0,0,SCROLLTOPPIC);
@@ -1347,6 +1350,9 @@ void ReadScroll (id0_int_t scroll)
 			SetupScaleWall (walldark1[i]);
 			SetupScaleWall (walldark2[i]);
 		}
+#ifdef __AMIGA__
+	StartMusic();
+#endif
 
 	// REFKEEN - Alternative controllers support
 	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback;
