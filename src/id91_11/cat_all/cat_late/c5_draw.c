@@ -1785,7 +1785,8 @@ void ClearScreen (void)
 		uint16_t *dst = (uint16_t *)g_chunkyBuffer;
 		for (int i=0; i<VIEWWIDTH*toppix/2; i++)
 		{
-			*dst++ = topcolor;
+			//*dst++ = topcolor;
+			*dst++ = topcolor & 0x0f0f;
 		}
 		dst = (uint16_t *)&g_chunkyBuffer[VIEWWIDTH*((CENTERY+1)*2-toppix)];
 		for (int i=0; i<VIEWWIDTH*toppix/2; i++)
