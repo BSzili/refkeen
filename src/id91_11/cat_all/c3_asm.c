@@ -255,7 +255,30 @@ void ScaleWalls(void)
 		typedef void (*CompScaleFunc)(register id0_byte_t *wallSrc __asm("a0"), register id0_unsigned_t/*id0_longword_t*/ colNum __asm("d1"));
 		CompScaleFunc scaleFunc = (CompScaleFunc)&scaledirectory[wallheight[colNum]]->code[0];
 		scaleFunc(wallSrcPtr, colNum);
-		colNum++;
+		//colNum++;
+
+		// copy adjacent pixels instead of calling the scaler again
+		int width = wallwidth[colNum];
+		if (width > 1)
+		{
+			int height = wallheight[colNum];
+			if (height > VIEWHEIGHT/2)
+				height = VIEWHEIGHT/2;
+			int toppix = VIEWHEIGHT/2-height;
+			height *= 2;
+
+			extern uint8_t *g_chunkyBuffer;
+			uint8_t *destPtr = &g_chunkyBuffer[(toppix*VIEWWIDTH)+colNum];
+			for (int j = 0; j<height; j++)
+			{
+				for (int i = 1; i<width; i++)
+				{
+					destPtr[i] = destPtr[0];
+				}
+				destPtr += VIEWWIDTH;
+			}
+		}
+		colNum += width;
 #else
 		// (REFKEEN) VANILLA CAT3D BUG WORKAROUND: It may happen that an
 		// attempt to draw an "empty" wall is done, so better use this.

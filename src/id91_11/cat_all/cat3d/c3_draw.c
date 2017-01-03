@@ -695,10 +695,8 @@ storeheight:
 		asm	mov	[source],dx
 #endif
 
-#ifndef __AMIGA__
 		if (source != lastsource)
 		{
-#endif
 			if (lastpix != (id0_unsigned_t)-1)
 			{
 				wallofs[lastpix] = lastsource;
@@ -708,11 +706,9 @@ storeheight:
 			lastpix = x;
 			lastsource = source;
 			lastwidth = 1;
-#ifndef __AMIGA__
 		}
 		else
 			lastwidth++;			// optimized draw, same map as last one
-#endif
 	}
 	wallofs[lastpix] = lastsource;
 	wallseg[lastpix] = (id0_byte_t *)wallpicseg;

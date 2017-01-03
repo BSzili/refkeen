@@ -397,14 +397,11 @@ void BE_ST_DrawChunkyBuffer(uint16_t bufferofs)
 				*dst2++ = *c2p;
 				*dst3++ = *c2p;
 			}
-#ifdef REFKEEN_VER_CAT3D
-			for (int j = 0; j < (GFX_TEX_WIDTH-VIEWWIDTH)/(8*sizeof(ULONG)); j++)
-			{
-				dst0++;
-				dst1++;
-				dst2++;
-				dst3++;
-			}
+#if GFX_TEX_WIDTH > VIEWWIDTH
+			dst0 += (GFX_TEX_WIDTH-VIEWWIDTH)/(8*sizeof(ULONG));
+			dst1 += (GFX_TEX_WIDTH-VIEWWIDTH)/(8*sizeof(ULONG));
+			dst2 += (GFX_TEX_WIDTH-VIEWWIDTH)/(8*sizeof(ULONG));
+			dst3 += (GFX_TEX_WIDTH-VIEWWIDTH)/(8*sizeof(ULONG));
 #endif
 		}
 		DisownBlitter();
