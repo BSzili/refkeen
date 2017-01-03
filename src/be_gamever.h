@@ -7,10 +7,13 @@
 
 typedef enum {
 #ifdef REFKEEN_VER_KDREAMS
+	BE_GAMEVER_KDREAMSE100,
+	BE_GAMEVER_KDREAMSC100,
 	BE_GAMEVER_KDREAMSE113,
 	BE_GAMEVER_KDREAMSC105,
 	BE_GAMEVER_KDREAMSE193,
 	BE_GAMEVER_KDREAMSE120,
+	BE_GAMEVER_KDREAMS2015,
 #endif
 #ifdef REFKEEN_VER_CAT3D
 	BE_GAMEVER_CAT3D100,
@@ -32,5 +35,6 @@ typedef enum {
 extern BE_GameVer_T refkeen_current_gamever;
 // These MUST have the same order as in the BE_GameVer_T enum
 extern const char *refkeen_gamever_strs[BE_GAMEVER_LAST];
+extern const char *refkeen_gamever_descriptions[BE_GAMEVER_LAST];
 
 #endif // _BE_GAMEVER_H_

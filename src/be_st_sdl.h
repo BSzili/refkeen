@@ -24,8 +24,14 @@
 
 // WARNING: This struct is used by BE_ST_SDL ONLY (except for controller stuff)
 
+#ifdef REFKEEN_VER_KDREAMS
+#define BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
+#endif
+
 typedef enum { VSYNC_AUTO, VSYNC_OFF, VSYNC_ON } VSyncSettingType;
 typedef enum { SCALE_ASPECT, SCALE_FILL } ScaleTypeSettingType;
+typedef enum { TOUCHINPUT_AUTO, TOUCHINPUT_OFF, TOUCHINPUT_FORCED } TouchInputSettingType;
+typedef enum { MOUSEGRAB_AUTO, MOUSEGRAB_OFF, MOUSEGRAB_COMMONLY } MouseGrabSettingType;
 
 #ifdef REFKEEN_ENABLE_LAUNCHER
 #define LAUNCHER_EXE_ARGS_BUFFERLEN 80
@@ -38,7 +44,8 @@ typedef struct
 	int fullWidth, fullHeight;
 	int winWidth, winHeight;
 #ifdef REFKEEN_ENABLE_LAUNCHER
-	int launcherWinWidth, launcherWinHeight;
+	// Now using just winWidth and winHeight due to seamless launcher->game transitions
+	//int launcherWinWidth, launcherWinHeight;
 	LauncherWindowSettingType launcherWinType;
 	char launcherExeArgs[LAUNCHER_EXE_ARGS_BUFFERLEN];
 #endif
@@ -50,14 +57,17 @@ typedef struct
 	ScaleTypeSettingType scaleType;
 	int scaleFactor;
 	bool forceFullSoftScaling;
-	bool autolockCursor;
+	MouseGrabSettingType mouseGrab;
+#ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
+	bool absMouseMotion;
+#endif
 	int sndSampleRate;
 	bool sndSubSystem;
 	bool oplEmulation;
 #ifndef REFKEEN_RESAMPLER_NONE
 	bool useResampler;
 #endif
-	bool enableTouchInput; // FIXME Make it Auto/Always/Never
+	TouchInputSettingType touchInputToggle;
 	bool touchInputDebugging;
 	struct
 	{

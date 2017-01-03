@@ -109,12 +109,9 @@ extern id0_unsigned_t	blockstarts[UPDATEWIDE*UPDATEHIGH];
 extern id0_unsigned_t	updatemapofs[UPDATEWIDE*UPDATEHIGH];
 extern id0_unsigned_t	uwidthtable[UPDATEHIGH];		// lookup instead of multiple
 
-// REFKEEN - Big Endian support
-#ifdef REFKEEN_ARCH_BIG_ENDIAN
-#define	UPDATETERMINATE	0x0103
-#else
-#define	UPDATETERMINATE	0x0301
-#endif
+// REFKEEN - Not in use due to safe unaligned accesses fixes
+// (and no separate handling for Big-Endian is required)
+//#define	UPDATETERMINATE	0x0301
 
 
 /*
@@ -150,5 +147,8 @@ void RF_RemoveSprite_CGA (void **user);
 extern void (*RF_Refresh) (void);
 void RF_ForceRefresh (void);
 void RF_SetRefreshHook (void (*func) (void) );
+
+// REFKEEN - New function, used after swapping CGA/EGA graphics from the 2015 port
+void RF_RefreshSpriteList (void);
 
 

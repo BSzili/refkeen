@@ -83,8 +83,8 @@ id0_unsigned_t	SX_T_SHIFT;		// screen x >> ?? = tile EGA = 1, CGA = 2;
 // value as in DOS (originally a pointer to a cell of allanims)
 
 id0_word_t refkeen_compat_id_rf_allanims_table_offset;
-#define COMPAT_ALLANIMS_CONVERT_INDEX_TO_DOS_PTR(i) (4*(i)+refkeen_compat_id_rf_allanims_table_offset)
-#define COMPAT_ALLANIMS_CONVERT_DOS_PTR_TO_INDEX(dosptr) (((dosptr)-refkeen_compat_id_rf_allanims_table_offset)/4)
+#define COMPAT_ALLANIMS_CONVERT_INDEX_TO_DOS_PTR(i) ((refkeen_current_gamever == BE_GAMEVER_KDREAMS2015) ? ((i) | 0xFE00) : (4*(i)+refkeen_compat_id_rf_allanims_table_offset))
+#define COMPAT_ALLANIMS_CONVERT_DOS_PTR_TO_INDEX(dosptr) ((refkeen_current_gamever == BE_GAMEVER_KDREAMS2015) ? ((dosptr) & 0xFF) : (((dosptr)-refkeen_compat_id_rf_allanims_table_offset)/4))
 
 /*
 =============================================================================
@@ -98,26 +98,27 @@ typedef	struct spriteliststruct
 {
 	id0_int_t			screenx,screeny;
 	id0_int_t			width,height;
+	id0_unsigned_t	shift; // REFKEEN - New member, used after swapping CGA/EGA graphics from the 2015 port
 
 	id0_unsigned_t	grseg,sourceofs,planesize;
 	drawtype	draw;
 	id0_unsigned_t	tilex,tiley,tilewide,tilehigh;
 	id0_int_t			priority,updatecount;
 	struct spriteliststruct **prevptr,*nextsprite;
-} __attribute__((__packed__)) spritelisttype;
+} spritelisttype;
 
 
 typedef struct
 {
 	id0_int_t			screenx,screeny;
 	id0_int_t			width,height;
-} __attribute__((__packed__)) eraseblocktype;
+} eraseblocktype;
 
 typedef struct
 {
 	id0_unsigned_t	current;		// foreground tiles have high bit set
 	id0_int_t			count;
-} __attribute__((__packed__)) tiletype;
+} tiletype;
 
 typedef struct animtilestruct
 {
@@ -125,7 +126,7 @@ typedef struct animtilestruct
 	tiletype	*chain;
 	id0_unsigned_t	id0_far *mapplane;
 	struct animtilestruct **prevptr,*nexttile;
-} __attribute__((__packed__)) animtiletype;
+} animtiletype;
 
 /*
 =============================================================================
@@ -821,6 +822,35 @@ void RFL_InitSpriteList (void)
 	memset (prioritystart,0,sizeof(prioritystart));
 }
 
+// REFKEEN - New function, used after swapping CGA/EGA graphics from the 2015 port
+
+/*
+=================
+=
+= RF_RefreshSpriteList
+=
+=================
+*/
+
+void RF_RefreshSpriteList (void)
+{
+	spritelisttype	*sprite;
+	id0_int_t	priority;
+	spritetype_ega	*block;
+	id0_unsigned_t	shift;
+
+	for (priority=0;priority<PRIORITIES;priority++)
+		for (sprite = prioritystart[priority]; sprite ;
+			sprite = (spritelisttype *)sprite->nextsprite)
+		{
+			block = (spritetype_ega id0_seg *)grsegs[sprite->grseg];
+			shift = sprite->shift;
+			sprite->width = block->width[shift];
+			sprite->sourceofs = block->sourceoffset[shift];
+			sprite->planesize = block->planesize[shift];
+		}
+}
+
 //===========================================================================
 
 /*
@@ -1044,8 +1074,13 @@ void RF_NewPosition_EGA (id0_unsigned_t x, id0_unsigned_t y)
 		page0ptr+=(PORTTILESWIDE+1);
 		page1ptr+=(PORTTILESWIDE+1);
 	}
-	*(id0_word_t *)(page0ptr-PORTTILESWIDE)
-		= *(id0_word_t *)(page1ptr-PORTTILESWIDE) = UPDATETERMINATE;
+	// REFKEEN - Safe unaligned accesses
+	*(page0ptr++-PORTTILESWIDE)
+		= *(page1ptr++-PORTTILESWIDE) = 1;
+	*(page0ptr-PORTTILESWIDE)
+		= *(page1ptr-PORTTILESWIDE) = 3;
+	//*(id0_word_t *)(page0ptr-PORTTILESWIDE)
+	//	= *(id0_word_t *)(page1ptr-PORTTILESWIDE) = UPDATETERMINATE;
 }
 
 //===========================================================================
@@ -1233,7 +1268,10 @@ void RF_Scroll_EGA (id0_int_t x, id0_int_t y)
 	update0 = updatestart[0]+UPDATEWIDE*PORTTILESHIGH-1;
 	update1 = updatestart[1]+UPDATEWIDE*PORTTILESHIGH-1;
 	*update0++ = *update1++ = 0;
-	*(id0_unsigned_t *)update0 = *(id0_unsigned_t *)update1 = UPDATETERMINATE;
+	// REFKEEN - Safe unaligned accesses
+	*update0++ = *update1++ = 1;
+	*update0 = *update1 = 3;
+	//*(id0_unsigned_t *)update0 = *(id0_unsigned_t *)update1 = UPDATETERMINATE;
 }
 
 //===========================================================================
@@ -1337,6 +1375,8 @@ linknewspot:
 		- sprite->tiley + 1;
 
 	sprite->updatecount = 2;		// draw on next two refreshes
+
+	sprite->shift = shift; // REFKEEN - New member, used after swapping CGA/EGA graphics from the 2015 port
 
 // save the sprite pointer off in the user's pointer so it can be moved
 // again later
@@ -1716,7 +1756,10 @@ asm	mov	[WORD PTR es:di],UPDATETERMINATE
 #endif
 	// Ported from ASM
 	memset(newupdate, 0, 2*((UPDATESCREENSIZE-2)/2));
-	*(id0_unsigned_t *)(newupdate + 2*((UPDATESCREENSIZE-2)/2)) = UPDATETERMINATE;
+	// REFKEEN - Safe unaligned accesses
+	*(newupdate + 2*((UPDATESCREENSIZE-2)/2)) = 1;
+	*(newupdate + 2*((UPDATESCREENSIZE-2)/2) + 1) = 3;
+	//*(id0_unsigned_t *)(newupdate + 2*((UPDATESCREENSIZE-2)/2)) = UPDATETERMINATE;
 	//
 
 	screenpage ^= 1;
@@ -1816,7 +1859,10 @@ void RF_NewPosition_CGA (id0_unsigned_t x, id0_unsigned_t y)
 		*spotptr = 0; // set a 0 at end of a line of tiles
 		spotptr +=(PORTTILESWIDE+1);
 	}
-	*(id0_word_t *)(spotptr-PORTTILESWIDE) = UPDATETERMINATE;
+	// REFKEEN - Safe unaligned accesses
+	*(spotptr-PORTTILESWIDE) = 1;
+	*(spotptr+1-PORTTILESWIDE) = 3;
+	//*(id0_word_t *)(spotptr-PORTTILESWIDE) = UPDATETERMINATE;
 }
 
 
@@ -1937,7 +1983,10 @@ void RF_Scroll_CGA (id0_int_t x, id0_int_t y)
 	//
 	spotptr = updateptr+UPDATEWIDE*PORTTILESHIGH-1;
 	*spotptr++ = 0;
-	*(id0_unsigned_t *)spotptr = UPDATETERMINATE;
+	// REFKEEN - Safe unaligned accesses
+	*spotptr++ = 1;
+	*spotptr = 3;
+	//*(id0_unsigned_t *)spotptr = UPDATETERMINATE;
 }
 
 /*
@@ -2416,7 +2465,14 @@ void RefKeen_Patch_id_rf(void)
 {
 	switch (refkeen_current_gamever)
 	{
+	case BE_GAMEVER_KDREAMSE100:
+		refkeen_compat_id_rf_allanims_table_offset = 0xC128;
+		break;
+	case BE_GAMEVER_KDREAMSC100:
+		refkeen_compat_id_rf_allanims_table_offset = 0xC604;
+		break;
 	case BE_GAMEVER_KDREAMSE113:
+	//case BE_GAMEVER_KDREAMS2015: Field is unused in this version
 		refkeen_compat_id_rf_allanims_table_offset = 0xC11E;
 		break;
 	case BE_GAMEVER_KDREAMSC105:
@@ -2430,7 +2486,7 @@ void RefKeen_Patch_id_rf(void)
 		break;
 	}
 
-	if (refkeen_current_gamever == BE_GAMEVER_KDREAMSC105)
+	if (GRMODE == CGAGR) // GRMODE *must* be patched first
 	{
 		RF_NewPosition = &RF_NewPosition_CGA;
 		RF_Scroll = &RF_Scroll_CGA;

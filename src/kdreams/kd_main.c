@@ -379,9 +379,11 @@ void Quit (const id0_char_t *error)
   ShutdownId ();
   if (error && *error)
   {
-	BE_ST_clrscr();
+	if (current_gamever_int != 100)
+		BE_ST_clrscr();
 	BE_ST_puts(error);
-	BE_ST_puts("\n");
+	if (current_gamever_int != 100)
+		BE_ST_puts("\n");
 	// REFKEEN - Little code piece originally commented out in v1.05...
 //      BE_ST_puts("For techinical assistance with running this software, type HELP at");
 //      BE_ST_puts("    the DOS prompt or call Softdisk Publishing at 1-318-221-8311");
@@ -390,7 +392,7 @@ void Quit (const id0_char_t *error)
 		BE_ST_puts("For techinical assistance with running this software, type HELP at");
 		BE_ST_puts("    the DOS prompt or call Gamer's Edge at 1-318-221-8311");
 	}
-	// No additional lines for later versions (registered v1.93, shareware v1.20)
+	// No additional lines for other versions (e.g., registered v1.93, shareware v1.20)
 	BE_ST_HandleExit(1);
   }
 
@@ -399,6 +401,11 @@ void Quit (const id0_char_t *error)
 	// Since CATALOG is present only in 1.05, we simply ignore this macro.
 	if (refkeen_current_gamever == BE_GAMEVER_KDREAMSE113)
 	{
+		// REFKEEN - Alternative controllers support
+		extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback;
+		BE_ST_AltControlScheme_Push();
+		BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_inackback);
+
 		id0_argc = 2;
 		id0_argv[1] = "LAST.SHL";
 		id0_argv[2] = "ENDSCN.SCN";
@@ -411,6 +418,10 @@ void Quit (const id0_char_t *error)
 	}
 	else
 	{
+		// REFKEEN - No need to show text screen in this case
+		if (refkeen_current_gamever == BE_GAMEVER_KDREAMS2015)
+			BE_ST_QuickExit();
+
 		// REFKEEN - In all versions other than 1.13 we just exit.
 		// In addition, in v1.05, if CATALOG is defined (it is),
 		// VW_SetScreenMode is called. Again, though, we ignore CATALOG.
@@ -433,7 +444,8 @@ void Quit (const id0_char_t *error)
 ==========================
 */
 
-extern id0_byte_t *PIRACY;
+// REFKEEN - Include this for v1.00
+#include "piracy.h"
 
 void InitGame (void)
 {
@@ -441,13 +453,17 @@ void InitGame (void)
 
 	MM_Startup ();
 
-#if 0
-	// Handle piracy screen...
-	//
-	movedata(FP_SEG(PIRACY),(id0_unsigned_t)PIRACY,0xb800,displayofs,4000);
-	while (BE_ST_BiosScanCode(0) != sc_Return);
-	//while ((bioskey(0)>>8) != sc_Return);
-#endif
+	if (current_gamever_int == 100)
+	{
+		// Handle piracy screen...
+		//
+		memcpy(BE_ST_GetTextModeMemoryPtr()+displayofs,PIRACY,4000);
+		BE_ST_MarkGfxForUpdate();
+		while (BE_ST_BiosScanCode(0) != sc_Return)
+			BE_ST_ShortSleep();
+		//movedata(FP_SEG(PIRACY),(id0_unsigned_t)PIRACY,0xb800,displayofs,4000);
+		//while ((bioskey(0)>>8) != sc_Return);
+	}
 
 	if (GRMODE == EGAGR)
 		if (mminfo.mainmem < 335l*1024)
@@ -482,7 +498,8 @@ void InitGame (void)
 		BE_ST_AltControlScheme_Pop();
 	}
 
-	US_TextScreen();
+	if (refkeen_current_gamever != BE_GAMEVER_KDREAMS2015)
+		US_TextScreen();
 
 	VW_Startup ();
 	RF_Startup ();
@@ -490,13 +507,26 @@ void InitGame (void)
 	SD_Startup ();
 	US_Startup ();
 
-	// REFKEEN - Called in v1.05, but is a no-op, so ignore here
-#if 0
-	US_UpdateTextScreen();
-#endif
+	// REFKEEN - Called in vanilla v1.05, but is a no-op,
+	// so don't call if we use the data from v1.05
+	if (current_gamever_int == 100)
+		US_UpdateTextScreen();
 
 	CA_Startup ();
 	US_Setup ();
+
+	// ShutdownId (actually Quit) is called in the 2015 port when
+	// the user asks to close the window, so do this; As a
+	// side-effect, USL_WriteConfig is called.
+	//
+	// This is NOT done for the DOS versions, since it's not clear
+	// what would be the "correct behaviors". A closest match is
+	// running one of these versions under a window on an early
+	// Windows release (say Win95), where settings are NOT saved
+	// (it's roughly similar to power going down in the middle).
+	if (refkeen_current_gamever == BE_GAMEVER_KDREAMS2015)
+		BE_ST_SetAppQuitCallback(&ShutdownId);
+
 
 //
 // load in and lock down some basic chunks
@@ -526,9 +556,12 @@ void InitGame (void)
 
 	fontcolor = WHITE;
 
-	US_FinishTextScreen();
+	if (refkeen_current_gamever != BE_GAMEVER_KDREAMS2015)
+		US_FinishTextScreen();
 
 	VW_SetScreenMode (GRMODE);
+	if (refkeen_current_gamever == BE_GAMEVER_KDREAMS2015)
+		VW_SetDefaultColors ();
 	VW_ClearVideo (BLACK);
 }
 

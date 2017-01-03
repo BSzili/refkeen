@@ -250,6 +250,20 @@ void CheckKeys (void)
 		PrepareGamePlayControllerMapping();
 		//
 		IN_ClearKeysDown();
+		// REFKEEN - Patch for 2015 port: Reduce possible graphical glitches after swapping CGA/EGA graphics
+		if (refkeen_current_gamever == BE_GAMEVER_KDREAMS2015)
+		{
+			FixScoreBox ();					// draw bomb/flower
+			scoreobj->temp1 = scoreobj->temp2 = -1;		// force score to be updated
+			scoreobj->temp3 = -1;			// and flower power
+			scoreobj->temp4 = -1;			// and lives
+
+			RF_RefreshSpriteList();
+			void ScoreThink (objtype *ob);
+			ScoreThink(scoreobj);
+			void ScoreReact (objtype *ob);
+			ScoreReact(scoreobj);
+		}
 		if (restartgame)
 			playstate = resetgame;
 		else if (!loadedgame)
@@ -659,7 +673,7 @@ void FadeAndUnhook (void)
 {
 	if (++fadecount==2)
 	{
-		if (refkeen_current_gamever != BE_GAMEVER_KDREAMSC105)
+		if (current_gamever_int >= 110)
 			RF_ForceRefresh();
 
 		VW_FadeIn ();
@@ -1054,7 +1068,14 @@ void ClipToWalls (objtype *ob)
 //
 // make sure it stays in contact with a 45 degree slope
 //
-	if (ob->state->pushtofloor)
+	// REFKEEN - It's possible that state == NULL, e.g., after loading
+	// a saved game, after which ChangeFromFlower is going to be called,
+	// while the flower is in one of the s_pooffrom* states.
+	//
+	// If state == NULL then, under DOS (with Borland C++ 2.0),
+	// then ob->state->pushtofloor is a part of a small Borland C++ string
+	if (!(ob->state) || ob->state->pushtofloor)
+	//if (ob->state->pushtofloor)
 	{
 		if (ob->xmove > 0)
 			ob->ymove = ob->xmove + 16;
@@ -1653,6 +1674,7 @@ void PlayLoop (void)
 
 void GameFinale (void)
 {
+	int year, month, day;
 //struct date d;
 
 	VW_FixRefreshBuffer ();
@@ -1688,6 +1710,21 @@ void GameFinale (void)
 	US_CenterWindow (30,21);
 	PrintY += 9;
 	US_CPrint (
+(current_gamever_int == 100)
+?
+"Billy woke up, squinting at the\n"
+"early morning sun shining in his\n"
+"face through the bedroom window.\n"
+"Nothing. No vegetables to be seen.\n"
+"Was it all just a dream?\n\n"
+"Billy's mom entered the room.\n\n"
+"\"Good morning, dear. I heard some\n"
+"news on TV that you'd be\n"
+"interested in,\" she said, sitting\n"
+"by him on the bed.\n\n"
+"\"What news?\" Billy asked,\n"
+"still groggy.\n\n"
+:
 "Billy woke up, looking around the\n"
 "room, the early morning sun\n"
 "shining in his face.  Nothing.\n"
@@ -1710,6 +1747,19 @@ void GameFinale (void)
 	US_CenterWindow (30,21);
 	PrintY += 23;
 	US_CPrint (
+(current_gamever_int == 100)
+?
+"\"The President declared today\n"
+"National 'I Hate Broccoli' Day.\n"
+"He said kids are allowed to pick\n"
+"one vegetable today, and they\n"
+"don't have to eat it.\"\n\n"
+"\"Aw, mom, I'm not afraid of any\n"
+"stupid vegetables,\" Billy said.\n"
+"\"But if it's okay with you, I'd\n"
+"rather not have any french fries\n"
+"for awhile.\"\n\n"
+:
 "\"The President declared today\n"
 "National 'I Hate Broccoli' Day.\n"
 "He said kids are allowed to pick\n"
@@ -1726,6 +1776,49 @@ void GameFinale (void)
 	VW_WaitVBL(60);
 	IN_ClearKeysDown ();
 	IN_Ack();
+
+	if (current_gamever_int != 100)
+		return;
+
+/* screen 4 of finale (13 lines)*/
+	US_CenterWindow (30,21);
+	PrintY += 18;
+	US_CPrint (
+"\"Okay, honey,\" Billy's mom said.\n\n"
+"\"Uh, Mom, what are we having for\n"
+"supper tonight?\" Billy asked.\n\n"
+"\"Oh, we're having liver, dear.\"\n"
+"\"I HATE liver!  I don't have to\n"
+"eat liver.  I saved the earth!\"\n\n"
+"THE END\n\n"
+"(Possibly continued in...\n"
+"\"Commander Keen Meets the Meats\")\n"
+	);
+	VW_UpdateScreen();
+	VW_WaitVBL(60);
+	IN_ClearKeysDown ();
+	IN_Ack();
+
+	BE_Cross_GetLocalDate_UNSAFE(&year, &month, &day);
+	if ((year > 1991) || (month > 7) || (day > 29))
+	//getdate(&d);
+	//if (d.da_year > 1991 || d.da_mon > 7 || d.da_day > 29)
+	{
+/* screen 5 of finale (6 lines)*/
+	US_CenterWindow (30,21);
+	PrintY += 53;
+	US_CPrint (
+"Commander Keen will definitely\n"
+"return in...\n\n"
+"\"Goodbye, Galaxy!\"\n\n"
+"Watch for it!\n"
+	);
+	VW_UpdateScreen();
+	VW_WaitVBL(60);
+	IN_ClearKeysDown ();
+	IN_Ack();
+
+	}
 }
 
 //==========================================================================
@@ -1956,7 +2049,14 @@ void RefKeen_Patch_kd_play(void)
 {
 	switch (refkeen_current_gamever)
 	{
+	case BE_GAMEVER_KDREAMSE100:
+		refkeen_compat_kd_play_objoffset = 0x7144;
+		break;
+	case BE_GAMEVER_KDREAMSC100:
+		refkeen_compat_kd_play_objoffset = 0x7624;
+		break;
 	case BE_GAMEVER_KDREAMSE113:
+	//case BE_GAMEVER_KDREAMS2015: Field is unused in this version
 		refkeen_compat_kd_play_objoffset = 0x712A;
 		break;
 	case BE_GAMEVER_KDREAMSC105:
@@ -1970,7 +2070,11 @@ void RefKeen_Patch_kd_play(void)
 		break;
 	}
 
-	if (refkeen_current_gamever == BE_GAMEVER_KDREAMSC105)
+	if (current_gamever_int == 100) // current_gamever_int *must* be patched first
+	{
+		levelnames[6] = levelnames[8] = levelnames[11] = levelnames[13] = "";
+	}
+	else if (refkeen_current_gamever == BE_GAMEVER_KDREAMSC105)
 	{
 		levelnames[6] = "Cheat Level 1";
 		levelnames[8] = "Cheat Level 2";

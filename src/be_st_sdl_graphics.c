@@ -17,6 +17,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <stdlib.h>
 #include <string.h>
 #include "SDL.h"
 
@@ -33,7 +34,7 @@ SDL_Renderer *g_sdlRenderer;
 SDL_Texture *g_sdlTexture, *g_sdlTargetTexture;
 SDL_Rect g_sdlAspectCorrectionRect, g_sdlAspectCorrectionBorderedRect;
 
-static int g_sdlLastReportedWindowWidth, g_sdlLastReportedWindowHeight;
+int g_sdlLastReportedWindowWidth, g_sdlLastReportedWindowHeight;
 
 static bool g_sdlIsSoftwareRendered;
 static bool g_sdlDoRefreshGfxOutput;
@@ -74,7 +75,7 @@ void BE_ST_MarkGfxForUpdate(void)
 #define VGA_TXT_CURSOR_BLINK_VERT_FRAME_RATE 8
 #define VGA_TXT_BLINK_VERT_FRAME_RATE 16
 
-static int g_sdlDebugFingerRectSideLen;
+int g_sdlDebugFingerRectSideLen;
 
 extern const uint8_t g_vga_8x16TextFont[256*8*16];
 // We can use a union because the memory contents are refreshed on screen mode change
@@ -108,12 +109,21 @@ static int g_sdlTxtColor = 7, g_sdlTxtBackground = 0;
 typedef struct {
 	SDL_TouchID touchId;
 	SDL_FingerID fingerId;
-	int touchMappingIndex;
 	int lastX, lastY;
+	// Used in multiple mappings, but not necessarily all of them
+	bool isDefaultBinaryStateToggle;
+	// This one depends on current mapping in use
+	union {
+		struct {
+			int x, y;
+		} key;
+		int padButtonScanCode;
+		int touchMappingIndex;
+	} miscData;
 } BESDLTrackedFinger;
 
 static BESDLTrackedFinger g_sdlTrackedFingers[MAX_NUM_OF_TRACKED_FINGERS];
-static int nOfTrackedFingers = 0;
+static int g_nOfTrackedFingers = 0;
 
 /*** Game controller UI resource definitions ***/
 
@@ -163,29 +173,39 @@ static const int g_sdlControllerDpadTextLocs[] = {15, 34, 28, 21, 2, 21, 15, 8};
 
 static SDL_Rect g_sdlControllerFaceButtonsRect, g_sdlControllerDpadRect, g_sdlControllerTextInputRect, g_sdlControllerDebugKeysRect;
 static SDL_Texture *g_sdlFaceButtonsTexture, *g_sdlDpadTexture, *g_sdlTextInputTexture, *g_sdlDebugKeysTexture;
-static bool g_sdlFaceButtonsAreShown, g_sdlDpadIsShown, g_sdlTextInputUIIsShown, g_sdlDebugKeysUIIsShown;
+static bool g_sdlFaceButtonsAreShown, g_sdlDpadIsShown, g_sdlTextInputUIIsShown, g_sdlDebugKeysUIIsShown, g_sdlTouchControlsAreShown;
 
 static int g_sdlFaceButtonsScanCodes[4], g_sdlDpadScanCodes[4];
-static int g_sdlPointerSelectedPadButtonScanCode;
-static bool g_sdlControllerUIPointerPressed;
 
 static SDL_Rect g_sdlOnScreenTouchControlsRects[ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS];
 static SDL_Texture *g_sdlOnScreenTouchControlsTextures[ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS];
 static int g_sdlNumOfOnScreenTouchControls = 0;
 static SDL_Rect g_sdlInputTouchControlsRects[ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS];
 
-// With alternative game controllers scheme, all UI is hidden if no controller is connected
+typedef struct {
+	const char **xpmImage;
+	int xpmWidth, xpmHeight;
+	SDL_Texture *texture;
+} BESDLCachedOnScreenTouchControl;
+
+static BESDLCachedOnScreenTouchControl g_sdlCachedOnScreenTouchControls[ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS];
+static int g_nOfCachedTouchControlsTextures = 0;
+
+// With alternative game controllers scheme, all UI is hidden if no controller is connected.
+// Similar handling is done for touch input. Furthermore, some UI is shared.
 bool g_sdlShowControllerUI;
+bool g_sdlShowTouchUI;
 
 // Shared among all kinds of keyboard UI
 static int g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY;
-static bool g_sdlKeyboardUIPointerUsed;
+static bool g_sdlKeyboardUISelectedKeyIsMarked;
 // Text input specific
 static bool g_sdlTextInputIsKeyPressed, g_sdlTextInputIsShifted;
 // Debug keys specific
 static bool g_sdlDebugKeysPressed[ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT][ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH];
 
-void BEL_ST_RecreateSDLWindowAndRenderer(int x, int y, int w, int h, uint32_t windowFlags, int driverIndex, Uint32 rendererFlags);
+void BEL_ST_RecreateSDLWindowAndRenderer(int x, int y, int windowWidth, int windowHeight, int fullWidth, int fullHeight, Uint32 windowFlags, int driverIndex, Uint32 rendererFlags);
+static void BEL_ST_CalcWindowDimsFromCfg(int *outWidth, int *outHeight);
 
 void BE_ST_InitGfx(void)
 {
@@ -200,56 +220,14 @@ void BE_ST_InitGfx(void)
 		g_sdlIsSoftwareRendered = false;
 	}
 
-	uint32_t windowFlagsToSet;
+	uint32_t windowFlagsToSet = 0;
 	int windowWidthToSet, windowHeightToSet;
+	BEL_ST_CalcWindowDimsFromCfg(&windowWidthToSet, &windowHeightToSet);
 	if (g_refKeenCfg.isFullscreen)
-	{
-		if (g_refKeenCfg.fullWidth && g_refKeenCfg.fullHeight)
-		{
-			windowWidthToSet = g_refKeenCfg.fullWidth;
-			windowHeightToSet = g_refKeenCfg.fullHeight;
-			windowFlagsToSet = SDL_WINDOW_FULLSCREEN;
-		}
-		else
-		{
-			windowWidthToSet = 0;
-			windowHeightToSet = 0;
-			windowFlagsToSet = SDL_WINDOW_FULLSCREEN_DESKTOP;
-		}
-	}
-	else
-	{
-		windowWidthToSet = g_refKeenCfg.winWidth;
-		windowHeightToSet = g_refKeenCfg.winHeight;
-		if (!windowWidthToSet || !windowHeightToSet)
-		{
-			if (g_sdlIsSoftwareRendered)
-			{
-				windowWidthToSet = 640;
-				windowHeightToSet = 480;
-			}
-			else
-			{
-				SDL_DisplayMode mode;
-				SDL_GetDesktopDisplayMode(g_refKeenCfg.displayNum, &mode);
-				// In the 200-lines modes on the VGA, where line doubling is in effect,
-				// and after adding the overscan borders, the aspect ratio for the whole output
-				// (after aspect correction i.e., multiplying height by 1.2) is 280:207.
-				if (207*mode.w < 280*mode.h) // Thinner than 280:207
-				{
-					mode.h = mode.w*207/280;
-				}
-				else  // As wide as 280:207 at the least
-				{
-					mode.w = mode.h*280/207;
-				}
-				// Just for the sake of it, using the golden ratio...
-				windowWidthToSet = mode.w*500/809;
-				windowHeightToSet = mode.h*500/809;
-			}
-		}
-		windowFlagsToSet = (!g_sdlIsSoftwareRendered || g_refKeenCfg.forceFullSoftScaling) ? SDL_WINDOW_RESIZABLE : 0;
-	}
+		windowFlagsToSet = (g_refKeenCfg.fullWidth && g_refKeenCfg.fullHeight) ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_FULLSCREEN_DESKTOP;
+
+	if (!g_sdlIsSoftwareRendered || g_refKeenCfg.forceFullSoftScaling)
+		windowFlagsToSet |= SDL_WINDOW_RESIZABLE;
 	// Vanilla Keen Dreams and Keen 4-6 have no VSync in the CGA builds
 #ifdef REFKEEN_VER_KDREAMS
 	uint32_t rendererFlagsToSet = SDL_RENDERER_ACCELERATED | (((g_refKeenCfg.vSync == VSYNC_ON) || ((g_refKeenCfg.vSync == VSYNC_AUTO) && (refkeen_current_gamever != BE_GAMEVER_KDREAMSC105))) ? SDL_RENDERER_PRESENTVSYNC : 0);
@@ -258,25 +236,29 @@ void BE_ST_InitGfx(void)
 #endif
 	BEL_ST_RecreateSDLWindowAndRenderer(
 		SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum),
-		windowWidthToSet, windowHeightToSet, windowFlagsToSet, g_refKeenCfg.sdlRendererDriver, rendererFlagsToSet
+		windowWidthToSet, windowHeightToSet, g_refKeenCfg.fullWidth, g_refKeenCfg.fullHeight, windowFlagsToSet, g_refKeenCfg.sdlRendererDriver, rendererFlagsToSet
 	);
 
 	BE_ST_SetScreenMode(3); // Includes SDL_Texture handling and output rects preparation
+
+#ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
+	g_sdlDoAbsMouseMotion = g_refKeenCfg.absMouseMotion;
+#endif
 }
 
 void BE_ST_ShutdownGfx(void)
 {
-	SDL_DestroyTexture(g_sdlFaceButtonsTexture);
+	BEL_ST_SDLDestroyTextureWrapper(&g_sdlFaceButtonsTexture);
 	g_sdlFaceButtonsTexture = NULL;
-	SDL_DestroyTexture(g_sdlDpadTexture);
+	BEL_ST_SDLDestroyTextureWrapper(&g_sdlDpadTexture);
 	g_sdlDpadTexture = NULL;
-	SDL_DestroyTexture(g_sdlTextInputTexture);
+	BEL_ST_SDLDestroyTextureWrapper(&g_sdlTextInputTexture);
 	g_sdlTextInputTexture = NULL;
-	SDL_DestroyTexture(g_sdlDebugKeysTexture);
+	BEL_ST_SDLDestroyTextureWrapper(&g_sdlDebugKeysTexture);
 	g_sdlDebugKeysTexture = NULL;
-	SDL_DestroyTexture(g_sdlTexture);
+	BEL_ST_SDLDestroyTextureWrapper(&g_sdlTexture);
 	g_sdlTexture = NULL;
-	SDL_DestroyTexture(g_sdlTargetTexture);
+	BEL_ST_SDLDestroyTextureWrapper(&g_sdlTargetTexture);
 	g_sdlTargetTexture = NULL;
 	SDL_DestroyRenderer(g_sdlRenderer);
 	g_sdlRenderer = NULL;
@@ -284,7 +266,7 @@ void BE_ST_ShutdownGfx(void)
 	g_sdlWindow = NULL;
 }
 
-void BEL_ST_RecreateSDLWindowAndRenderer(int x, int y, int w, int h, uint32_t windowFlags, int driverIndex, uint32_t rendererFlags)
+void BEL_ST_RecreateSDLWindowAndRenderer(int x, int y, int windowWidth, int windowHeight, int fullWidth, int fullHeight, Uint32 windowFlags, int driverIndex, Uint32 rendererFlags)
 {
 	static int prev_x, prev_y, prev_driverIndex;
 	static uint32_t prev_rendererFlags;
@@ -294,15 +276,16 @@ void BEL_ST_RecreateSDLWindowAndRenderer(int x, int y, int w, int h, uint32_t wi
 		// This is a little bit of a hack:
 		// - x and y are compared to previous values, currently used to pick a display to use (in a multi-display setup).
 		// - Since the actual flags of a window may differ from what we requested (due to toggling fullscreen or any other reason),
-		// we support skipping window recreation only for SDL_WINDOW_FULLSCREEN_DESKTOP windows.
+		// we support skipping window recreation only if fullscreen state did not change.
 		// - Renderer flags are compared to the previously requested flags.
 		// - Same is done with with renderer driver index. If -1 is used anywhere, this makes reuse of the same window more probable.
+		//
+		// However, if only the full screen resolution has changed, we update the window's display mode accordingly.
 		if ((x == prev_x) && (y == prev_y) &&
-		    ((windowFlags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP) &&
-		    ((SDL_GetWindowFlags(g_sdlWindow) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP) &&
+		    ((windowFlags & SDL_WINDOW_FULLSCREEN_DESKTOP) == (SDL_GetWindowFlags(g_sdlWindow) & SDL_WINDOW_FULLSCREEN_DESKTOP)) &&
 		    (driverIndex == prev_driverIndex) && (rendererFlags == prev_rendererFlags)
 		)
-			return;
+			goto setupforfullscreen;
 
 		SDL_DestroyRenderer(g_sdlRenderer);
 		g_sdlRenderer = NULL;
@@ -310,17 +293,28 @@ void BEL_ST_RecreateSDLWindowAndRenderer(int x, int y, int w, int h, uint32_t wi
 		g_sdlWindow = NULL;
 	}
 
-	g_sdlWindow = SDL_CreateWindow(REFKEEN_TITLE_AND_VER_STRING, x, y, w, h, windowFlags);
+	// HACK - Create non-fullscreen window and then set as fullscreen, if required.
+	// Reason is this lets us set non-fullscreen window size (for fullscreen toggling).
+	g_sdlWindow = SDL_CreateWindow(REFKEEN_TITLE_AND_VER_STRING, x, y, windowWidth, windowHeight, windowFlags & ~SDL_WINDOW_FULLSCREEN_DESKTOP);
+	// A hack for Android x86 on VirtualBox - Try creating an OpenGL ES 1.1 context instead of 2.0
 	if (!g_sdlWindow)
 	{
-		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to create SDL2 window,\n%s\n", SDL_GetError());
+		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "BEL_ST_RecreateSDLWindowAndRenderer: Failed to create SDL2 window, forcing OpenGL (ES) version to 1.1 and retrying,\n%s\n", SDL_GetError());
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+		g_sdlWindow = SDL_CreateWindow(REFKEEN_TITLE_AND_VER_STRING, x, y, windowWidth, windowHeight, windowFlags & ~SDL_WINDOW_FULLSCREEN_DESKTOP);
+	}
+	if (!g_sdlWindow)
+	{
+		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "BEL_ST_RecreateSDLWindowAndRenderer: Failed to create SDL2 window,\n%s\n", SDL_GetError());
 		exit(0);
 	}
+
 	SDL_SetWindowIcon(g_sdlWindow, g_be_sdl_windowIconSurface);
 	g_sdlRenderer = SDL_CreateRenderer(g_sdlWindow, driverIndex, rendererFlags);
 	if (!g_sdlRenderer)
 	{
-		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to create SDL2 renderer,\n%s\n", SDL_GetError());
+		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "BEL_ST_RecreateSDLWindowAndRenderer: Failed to create SDL2 renderer,\n%s\n", SDL_GetError());
 		exit(0);
 	}
 
@@ -328,23 +322,36 @@ void BEL_ST_RecreateSDLWindowAndRenderer(int x, int y, int w, int h, uint32_t wi
 	prev_y = y;
 	prev_driverIndex = driverIndex;
 	prev_rendererFlags = rendererFlags;
+
+setupforfullscreen:
+
+	// In case non-desktop fullscreen resolution is desired (even if window is currently *not* fullscreen);
+	// But do so AFTER creating renderer! (Looks like SDL_CreateRenderer may re-create the window.)
+	if (fullWidth && fullHeight)
+	{
+		SDL_DisplayMode mode;
+		SDL_GetWindowDisplayMode(g_sdlWindow, &mode);
+		mode.w = fullWidth;
+		mode.h = fullHeight;
+		SDL_SetWindowDisplayMode(g_sdlWindow, &mode);
+	}
+	SDL_SetWindowFullscreen(g_sdlWindow, windowFlags & SDL_WINDOW_FULLSCREEN_DESKTOP);
 }
 
 static void BEL_ST_RecreateTexture(void)
 {
 	if (g_sdlTexture)
 	{
-		SDL_DestroyTexture(g_sdlTexture);
+		BEL_ST_SDLDestroyTextureWrapper(&g_sdlTexture);
 	}
 	if (g_sdlTargetTexture)
 	{
-		SDL_DestroyTexture(g_sdlTargetTexture);
+		BEL_ST_SDLDestroyTextureWrapper(&g_sdlTargetTexture);
 	}
 	// Try using render target
 	if ((g_refKeenCfg.scaleFactor > 1) && g_refKeenCfg.isBilinear)
 	{
-		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-		g_sdlTexture = SDL_CreateTexture(g_sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, g_sdlTexWidth, g_sdlTexHeight);
+		BEL_ST_SDLCreateTextureWrapper(&g_sdlTexture, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, g_sdlTexWidth, g_sdlTexHeight, "nearest");
 		if (!g_sdlTexture)
 		{
 			BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to (re)create SDL2 texture,\n%s\n", SDL_GetError());
@@ -352,14 +359,16 @@ static void BEL_ST_RecreateTexture(void)
 			exit(0);
 		}
 		// Try, if we fail then simply don't use this
-		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-		g_sdlTargetTexture = SDL_CreateTexture(g_sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, g_sdlTexWidth*g_refKeenCfg.scaleFactor, g_sdlTexHeight*g_refKeenCfg.scaleFactor);
+		BEL_ST_SDLCreateTextureWrapper(&g_sdlTargetTexture, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, g_sdlTexWidth*g_refKeenCfg.scaleFactor, g_sdlTexHeight*g_refKeenCfg.scaleFactor, "linear");
+		if (g_sdlTargetTexture)
+			BE_Cross_LogMessage(BE_LOG_MSG_NORMAL, "BEL_ST_RecreateTexture: SDL2 target texture created successfully\n");
+		else
+			BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "BEL_ST_RecreateTexture:  Failed to (re)create SDL2 target texture, continuing anyway\n%s\n", SDL_GetError());
 	}
 	else
 	{
 		// Use just a single texture
-		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, g_refKeenCfg.isBilinear ? "linear" : "nearest");
-		g_sdlTexture = SDL_CreateTexture(g_sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, g_sdlTexWidth, g_sdlTexHeight);
+		BEL_ST_SDLCreateTextureWrapper(&g_sdlTexture, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, g_sdlTexWidth, g_sdlTexHeight, g_refKeenCfg.isBilinear ? "linear" : "nearest");
 		if (!g_sdlTexture)
 		{
 			BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to (re)create SDL2 texture,\n%s\n", SDL_GetError());
@@ -367,6 +376,94 @@ static void BEL_ST_RecreateTexture(void)
 			exit(0);
 		}
 	}
+}
+
+// This code piece exists in order to handle SDL_RENDER* events
+
+#define MAX_TEXTURES_POOL_SIZE 32
+
+typedef struct {
+	SDL_Texture **texturePtr;
+	const char *scaleQuality;
+} BESDLManagedTexture;
+
+static BESDLManagedTexture g_sdlManagedTexturesPool[MAX_TEXTURES_POOL_SIZE];
+static int g_sdlNumOfManagedTexturesInPool = 0;
+
+void BEL_ST_SDLCreateTextureWrapper(SDL_Texture **pTexture, Uint32 format, int access, int w, int h, const char *scaleQuality)
+{
+	int i;
+	for (i = 0; i < g_sdlNumOfManagedTexturesInPool; ++i)
+		if (g_sdlManagedTexturesPool[i].texturePtr == pTexture)
+		{
+			g_sdlManagedTexturesPool[i].scaleQuality = scaleQuality;
+			break;
+		}
+
+	if (i >= MAX_TEXTURES_POOL_SIZE)
+	{
+		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "BEL_ST_SDLCreateTextureWrapper: Managed textures pool overflow error!\n");
+		//Destroy window and renderer?
+		exit(0);
+	}
+
+	if (i == g_sdlNumOfManagedTexturesInPool)
+	{
+		BESDLManagedTexture *managedTexture = &g_sdlManagedTexturesPool[g_sdlNumOfManagedTexturesInPool++];
+		managedTexture->texturePtr = pTexture;
+		managedTexture->scaleQuality = scaleQuality;
+	}
+
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, scaleQuality);
+	*pTexture = SDL_CreateTexture(g_sdlRenderer, format, access, w, h);
+}
+
+void BEL_ST_SDLDestroyTextureWrapper(SDL_Texture **pTexture)
+{
+	for (int i = 0; i < g_sdlNumOfManagedTexturesInPool; ++i)
+		if (g_sdlManagedTexturesPool[i].texturePtr == pTexture)
+		{
+			// Remove managed texture without moving the rest, except for maybe the last
+			g_sdlManagedTexturesPool[i] = g_sdlManagedTexturesPool[--g_sdlNumOfManagedTexturesInPool];
+			break;
+		}
+
+	SDL_DestroyTexture(*pTexture);
+}
+
+void BEL_ST_RecreateAllTextures(void)
+{
+	Uint32 format;
+	int access, w, h;
+	BE_Cross_LogMessage(BE_LOG_MSG_NORMAL, "BEL_ST_RecreateAllTextures: Recreating textures\n");
+	BESDLManagedTexture *managedTexture = g_sdlManagedTexturesPool;
+	for (int i = 0; i < g_sdlNumOfManagedTexturesInPool; ++i, ++managedTexture)
+	{
+		SDL_Texture **pTexture = managedTexture->texturePtr;
+		if (*pTexture == NULL)
+			continue;
+
+		SDL_QueryTexture(*pTexture, &format, &access, &w, &h);
+		SDL_DestroyTexture(*pTexture);
+
+		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, managedTexture->scaleQuality);
+		*pTexture = SDL_CreateTexture(g_sdlRenderer, format, access, w, h);
+		if (*pTexture == NULL)
+		{
+			BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "BEL_ST_RecreateAllTextures: Failed to recreate SDL2 texture %d out of %d,\n%s\n", i+1, g_sdlNumOfManagedTexturesInPool, SDL_GetError());
+			exit(1);
+		}
+		BE_Cross_LogMessage(BE_LOG_MSG_NORMAL, "BEL_ST_RecreateAllTextures: Recreated texture no %d out of %d\n", i+1, g_sdlNumOfManagedTexturesInPool);
+	}
+
+	BEL_ST_ForceHostDisplayUpdate();
+	g_sdlDoRefreshGfxOutput = true; // BE_ST_MarkGfxForUpdate();
+	BE_ST_Launcher_MarkGfxCache();
+	// Also need to force refresh this way
+	if (g_sdlScreenMode == 4) // CGA graphics
+		g_sdlHostScrMemCache.cgaGfx[0] = g_sdlHostScrMem.cgaGfx[0]^0xFF;
+	else
+		g_sdlHostScrMemCache.egaGfx[0] = g_sdlHostScrMem.egaGfx[0]^0xFF;
 }
 
 // Scancode names for controller face buttons and d-pad UI, based on DOS
@@ -488,14 +585,43 @@ const uint32_t g_sdlEGABGRAScreenColors[] = {
 };
 
 
-void BEL_ST_SetRelativeMouseMotion(bool enable);
+extern const BE_ST_ControllerMapping *g_sdlControllerMappingActualCurr;
+extern bool g_sdlMouseButtonsStates[3];
+extern int g_sdlEmuMouseButtonsState;
+
+static bool g_sdlSomeOnScreenControlWasAccessibleWithMouse = false; // Used internally in BEL_ST_ConditionallyShowAltInputPointer
 
 /*static*/ void BEL_ST_ConditionallyShowAltInputPointer(void)
 {
-	// FIXME
-	if (g_refKeenCfg.enableTouchInput)
+	if (g_refKeenCfg.touchInputToggle == TOUCHINPUT_FORCED)
 		return;
-	BEL_ST_SetRelativeMouseMotion(!g_sdlShowControllerUI || !(g_sdlFaceButtonsAreShown || g_sdlDpadIsShown || g_sdlTextInputUIIsShown || g_sdlDebugKeysUIIsShown));
+
+	bool someOnScreenControlIsAccessibleWithMouse = ((g_sdlShowControllerUI || g_sdlShowTouchUI) && (g_sdlFaceButtonsAreShown || g_sdlDpadIsShown || g_sdlTextInputUIIsShown || g_sdlDebugKeysUIIsShown/* || (g_sdlShowTouchUI && g_sdlTouchControlsAreShown)*/));
+
+	if (someOnScreenControlIsAccessibleWithMouse != g_sdlSomeOnScreenControlWasAccessibleWithMouse)
+	{
+		// Better reset these when on-screen controls usable by the mouse are shown/hidden.
+		// Since touchInputToggle differs from TOUCHINPUT_FORCED, this EXCLUDES the touch controls.
+		g_sdlMouseButtonsStates[0] = g_sdlMouseButtonsStates[1] = g_sdlMouseButtonsStates[2] = 0;
+		g_sdlEmuMouseButtonsState = 0;
+	}
+
+	g_sdlSomeOnScreenControlWasAccessibleWithMouse = someOnScreenControlIsAccessibleWithMouse;
+
+	if (someOnScreenControlIsAccessibleWithMouse)
+		BEL_ST_SetMouseMode(BE_ST_MOUSEMODE_ABS_WITH_CURSOR);
+#ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
+	else if (g_sdlDoAbsMouseMotion && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
+		BEL_ST_SetMouseMode(BE_ST_MOUSEMODE_ABS_WITHOUT_CURSOR);
+#endif
+	else if (
+		(SDL_GetWindowFlags(g_sdlWindow) & SDL_WINDOW_FULLSCREEN) ||
+		(g_refKeenCfg.mouseGrab == MOUSEGRAB_COMMONLY) ||
+		((g_refKeenCfg.mouseGrab == MOUSEGRAB_AUTO) && g_sdlControllerMappingActualCurr->grabMouse)
+	)
+		BEL_ST_SetMouseMode(BE_ST_MOUSEMODE_REL);
+	else
+		BEL_ST_SetMouseMode(BE_ST_MOUSEMODE_ABS_WITH_CURSOR);
 }
 
 
@@ -505,8 +631,7 @@ static void BEL_ST_CreatePadTextureIfNeeded(SDL_Texture **padTexturePtrPtr, int 
 	{
 		return;
 	}
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-	*padTexturePtrPtr = SDL_CreateTexture(g_sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, len, len);
+	BEL_ST_SDLCreateTextureWrapper(padTexturePtrPtr, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, len, len, "nearest");
 	if (!(*padTexturePtrPtr))
 	{
 		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to (re)create SDL2 pad texture,\n%s\n", SDL_GetError());
@@ -615,75 +740,114 @@ static void BEL_ST_PrepareToShowOnePad(const int *scanCodes, const char **padXpm
 	if (memcmp(&dpadScancodes, &emptyScancodesArray, sizeof(emptyScancodesArray)))
 		BEL_ST_PrepareToShowOnePad(dpadScancodes, pad_dpad_xpm, &g_sdlDpadTexture, &g_sdlDpadIsShown, g_sdlControllerDpadTextLocs, ALTCONTROLLER_DPAD_PIX_DIM);
 
-	g_sdlPointerSelectedPadButtonScanCode = 0;
-	g_sdlControllerUIPointerPressed = false;
+	g_nOfTrackedFingers = 0;
 
 	BEL_ST_ConditionallyShowAltInputPointer();
+}
+
+static void BEL_ST_RecreateTouchControlTexture(BESDLCachedOnScreenTouchControl *touchControl)
+{
+	if (touchControl->texture)
+	{
+		BEL_ST_SDLDestroyTextureWrapper(&touchControl->texture);
+		touchControl->texture = NULL;
+	}
+	int texWidth = touchControl->xpmWidth, texHeight = touchControl->xpmHeight;
+	BEL_ST_SDLCreateTextureWrapper(&touchControl->texture, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, texWidth, texHeight, "nearest");
+	SDL_Texture *texture = touchControl->texture;
+	if (!texture)
+	{
+		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "BEL_ST_RecreateTouchControlTexture: Failed to (re)create SDL2 touch control texture,\n%s\n", SDL_GetError());
+		//Destroy window and renderer?
+		exit(0);
+	}
+	SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND); // Yes there's some Alpha
+	// Update texture
+	uint32_t *pixels = (uint32_t *)malloc(4*texWidth*texHeight);
+	if (pixels == NULL)
+	{
+		BE_ST_ExitWithErrorMsg("BEL_ST_RecreateTouchControlTexture: Out of memory for drawing to textures!");
+	}
+	uint32_t *currPtr = pixels;
+	const char **xpmImage = touchControl->xpmImage;
+	for (int currRow = 0; currRow < texHeight; ++currRow)
+	{
+		const char *xpmRowPtr = xpmImage[currRow];
+		for (int currCol = 0; currCol < texWidth; ++currCol, ++currPtr, ++xpmRowPtr)
+		{
+			switch (*xpmRowPtr)
+			{
+			case ' ':
+				*currPtr = 0x00000000; // HACK (BGRA, working with any order) because we don't have it defined elsewhere
+				break;
+			case '@':
+				*currPtr = g_sdlEGABGRAScreenColors[8]; // Gray
+				break;
+			case '.':
+				*currPtr = g_sdlEGABGRAScreenColors[7]; // Light gray
+				break;
+			// HACK - Compress 4 XPM colors into one
+			case '+':
+			case '#':
+			case '$':
+			case '%':
+				*currPtr = g_sdlEGABGRAScreenColors[15]; // White
+				break;
+			}
+			*currPtr &= 0xBFFFFFFF; // Add some alpha channel
+		}
+	}
+	SDL_UpdateTexture(texture, NULL, pixels, 4*texWidth);
+	free(pixels);
+}
+
+void BE_ST_AltControlScheme_InitTouchControlsUI(BE_ST_OnscreenTouchControl *onScreenTouchControls)
+{
+	if (g_refKeenCfg.touchInputToggle == TOUCHINPUT_OFF)
+		return;
+
+	int i;
+	BE_ST_OnscreenTouchControl *touchControl;
+	for (i = 0, touchControl = onScreenTouchControls; touchControl->xpmImage; ++i, ++touchControl)
+	{
+		int j;
+		BESDLCachedOnScreenTouchControl *cachedTouchControl;
+		for (j = 0, cachedTouchControl = g_sdlCachedOnScreenTouchControls; j < g_nOfCachedTouchControlsTextures; ++j, ++cachedTouchControl)
+			if ((touchControl->xpmImage == cachedTouchControl->xpmImage) &&
+			    (touchControl->xpmWidth == cachedTouchControl->xpmWidth) &&
+			    (touchControl->xpmHeight == cachedTouchControl->xpmHeight)
+			)
+			{
+				touchControl->miscData = cachedTouchControl; // Re-use texture
+				continue;
+			}
+
+		if (g_nOfCachedTouchControlsTextures == ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS)
+			BE_ST_ExitWithErrorMsg("BEL_ST_AltControlScheme_InitTouchControlsUI: On-screen touch controls overflow!");
+
+		cachedTouchControl->xpmImage = touchControl->xpmImage;
+		cachedTouchControl->xpmWidth = touchControl->xpmWidth;
+		cachedTouchControl->xpmHeight = touchControl->xpmHeight;
+
+		BEL_ST_RecreateTouchControlTexture(cachedTouchControl);
+
+		touchControl->miscData = cachedTouchControl;
+		++g_nOfCachedTouchControlsTextures;
+	}
 }
 
 static void BEL_ST_SetTouchControlsRects(void);
 
 void BEL_ST_PrepareToShowTouchControls(const BE_ST_ControllerMapping *mapping)
 {
-	// FIXME this is bad in terms of performance (texture creation, malloc, etc.)
 	int i;
-	for (int i = 0; i < g_sdlNumOfOnScreenTouchControls; ++i)
-	{
-		SDL_DestroyTexture(g_sdlOnScreenTouchControlsTextures[i]);
-		g_sdlOnScreenTouchControlsTextures[i] = NULL;
-	}
 	BE_ST_OnscreenTouchControl *touchControl;
 	for (i = 0, touchControl = mapping->onScreenTouchControls; touchControl->xpmImage; ++i, ++touchControl)
 	{
 		if (i == ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS)
 			BE_ST_ExitWithErrorMsg("BEL_ST_PrepareToShowTouchControls: On-screen touch controls overflow!");
 
-		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-		int texWidth = touchControl->xpmWidth, texHeight = touchControl->xpmHeight;
-		g_sdlOnScreenTouchControlsTextures[i] = SDL_CreateTexture(g_sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, texWidth, texHeight);
-		if (!(g_sdlOnScreenTouchControlsTextures[i]))
-		{
-			BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to (re)create SDL2 touch control texture,\n%s\n", SDL_GetError());
-			//Destroy window and renderer?
-			exit(0);
-		}
-		SDL_SetTextureBlendMode(g_sdlOnScreenTouchControlsTextures[i], SDL_BLENDMODE_BLEND); // Yes there's some Alpha
-		// Update texture
-		uint32_t *pixels = (uint32_t *)malloc(4*texWidth*texHeight); // FIXME!!!!
-		if (pixels == NULL)
-		{
-			BE_ST_ExitWithErrorMsg("BEL_ST_PrepareToShowTouchControls: Out of memory for drawing to textures!");
-		}
-		uint32_t *currPtr = pixels;
-		for (int currRow = 0; currRow < texHeight; ++currRow)
-		{
-			const char *xpmRowPtr = touchControl->xpmImage[currRow];
-			for (int currCol = 0; currCol < texWidth; ++currCol, ++currPtr, ++xpmRowPtr)
-			{
-				switch (*xpmRowPtr)
-				{
-				case ' ':
-					*currPtr = 0x00000000; // HACK (BGRA, working with any order) because we don't have it defined elsewhere
-					break;
-				case '@':
-					*currPtr = g_sdlEGABGRAScreenColors[8]; // Gray
-					break;
-				case '.':
-					*currPtr = g_sdlEGABGRAScreenColors[7]; // Light gray
-					break;
-				// HACK - Compress 4 XPM colors into one
-				case '+':
-				case '#':
-				case '$':
-				case '%':
-					*currPtr = g_sdlEGABGRAScreenColors[15]; // White
-					break;
-				}
-				*currPtr &= 0xBFFFFFFF; // Add some alpha channel
-			}
-		}
-		SDL_UpdateTexture(g_sdlOnScreenTouchControlsTextures[i], NULL, pixels, 4*texWidth);
-		free(pixels);
+		g_sdlOnScreenTouchControlsTextures[i] = ((BESDLCachedOnScreenTouchControl *)(touchControl->miscData))->texture;
 	}
 	g_sdlNumOfOnScreenTouchControls = i;
 
@@ -693,6 +857,9 @@ void BEL_ST_PrepareToShowTouchControls(const BE_ST_ControllerMapping *mapping)
 		;
 	if (i > ALTCONTROLLER_MAX_NUM_OF_TOUCH_CONTROLS)
 		BE_ST_ExitWithErrorMsg("BEL_ST_PrepareToShowTouchControls: Touch controls overflow!");
+
+	g_nOfTrackedFingers = 0;
+	g_sdlTouchControlsAreShown = true;
 
 	BEL_ST_SetTouchControlsRects();
 }
@@ -753,8 +920,7 @@ static void BEL_ST_CreateTextInputTextureIfNeeded(void)
 	{
 		return;
 	}
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-	g_sdlTextInputTexture = SDL_CreateTexture(g_sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, ALTCONTROLLER_TEXTINPUT_PIX_WIDTH, ALTCONTROLLER_TEXTINPUT_PIX_HEIGHT);
+	BEL_ST_SDLCreateTextureWrapper(&g_sdlTextInputTexture, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, ALTCONTROLLER_TEXTINPUT_PIX_WIDTH, ALTCONTROLLER_TEXTINPUT_PIX_HEIGHT, "nearest");
 	if (!g_sdlTextInputTexture)
 	{
 		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to (re)create SDL2 text input texture,\n%s\n", SDL_GetError());
@@ -770,8 +936,7 @@ static void BEL_ST_CreateDebugKeysTextureIfNeeded(void)
 	{
 		return;
 	}
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-	g_sdlDebugKeysTexture = SDL_CreateTexture(g_sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, ALTCONTROLLER_DEBUGKEYS_PIX_WIDTH, ALTCONTROLLER_DEBUGKEYS_PIX_HEIGHT);
+	BEL_ST_SDLCreateTextureWrapper(&g_sdlDebugKeysTexture, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, ALTCONTROLLER_DEBUGKEYS_PIX_WIDTH, ALTCONTROLLER_DEBUGKEYS_PIX_HEIGHT, "nearest");
 	if (!g_sdlDebugKeysTexture)
 	{
 		BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "Failed to (re)create SDL2 debug keys texture,\n%s\n", SDL_GetError());
@@ -824,7 +989,7 @@ static void BEL_ST_RedrawWholeDebugKeysUI(void)
 
 	g_sdlKeyboardUISelectedKeyX = 0;
 	g_sdlKeyboardUISelectedKeyY = 0;
-	g_sdlKeyboardUIPointerUsed = false;
+	g_sdlKeyboardUISelectedKeyIsMarked = true;
 	g_sdlTextInputIsKeyPressed = false;
 	g_sdlTextInputIsShifted = false;
 	g_sdlDOSScanCodeTextInputStrs_Ptr = g_sdlDOSScanCodeTextInputNonShiftedStrs;
@@ -833,6 +998,8 @@ static void BEL_ST_RedrawWholeDebugKeysUI(void)
 	g_sdlTextInputUIIsShown = true;
 
 	g_sdlForceGfxControlUiRefresh = true;
+
+	g_nOfTrackedFingers = 0;
 
 	BEL_ST_ConditionallyShowAltInputPointer();
 }
@@ -843,7 +1010,7 @@ static void BEL_ST_RedrawWholeDebugKeysUI(void)
 
 	g_sdlKeyboardUISelectedKeyX = 0;
 	g_sdlKeyboardUISelectedKeyY = 0;
-	g_sdlKeyboardUIPointerUsed = false;
+	g_sdlKeyboardUISelectedKeyIsMarked = true;
 
 	for (int currKeyRow = 0; currKeyRow < ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT; ++currKeyRow)
 		for (int currKeyCol = 0; currKeyCol < ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH; ++currKeyCol)
@@ -853,6 +1020,8 @@ static void BEL_ST_RedrawWholeDebugKeysUI(void)
 	g_sdlDebugKeysUIIsShown = true;
 
 	g_sdlForceGfxControlUiRefresh = true;
+
+	g_nOfTrackedFingers = 0;
 
 	BEL_ST_ConditionallyShowAltInputPointer();
 }
@@ -868,7 +1037,7 @@ static void BEL_ST_ToggleTextInputUIKey(int x, int y, bool isMarked, bool isPres
 	SDL_UpdateTexture(g_sdlTextInputTexture, &outRect, pixels, 4*ALTCONTROLLER_KEYBOARD_KEY_PIXWIDTH);
 }
 
-static void BEL_ST_ToggleDebugKeysKey(int x, int y, bool isMarked, bool isPressed)
+static void BEL_ST_ToggleDebugKeysUIKey(int x, int y, bool isMarked, bool isPressed)
 {
 	uint32_t pixels[ALTCONTROLLER_KEYBOARD_KEY_PIXWIDTH*ALTCONTROLLER_KEYBOARD_KEY_PIXHEIGHT];
 
@@ -879,312 +1048,599 @@ static void BEL_ST_ToggleDebugKeysKey(int x, int y, bool isMarked, bool isPresse
 	SDL_UpdateTexture(g_sdlDebugKeysTexture, &outRect, pixels, 4*ALTCONTROLLER_KEYBOARD_KEY_PIXWIDTH);
 }
 
-int BEL_ST_MoveUpInTextInputUI(void)
+
+static void BEL_ST_ToggleOffAllTextInputUIKeysTrackedbyFingers(void)
 {
-	int origScanCode = g_sdlTextInputIsKeyPressed ? (int)g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX] : 0;
-	if (origScanCode == BE_ST_SC_LSHIFT)
-		origScanCode = 0;
+	int i;
+	for (i = 0; i < g_nOfTrackedFingers; ++i)
+		BEL_ST_ToggleTextInputUIKey(g_sdlTrackedFingers[i].miscData.key.x, g_sdlTrackedFingers[i].miscData.key.y, false, false);
 
-	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
-	g_sdlTextInputIsKeyPressed = false;
-
-	--g_sdlKeyboardUISelectedKeyY;
-	if (g_sdlKeyboardUISelectedKeyY < 0)
-	{
-		g_sdlKeyboardUISelectedKeyY = ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT-1;
-	}
-	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
-
+	g_nOfTrackedFingers = 0;
 	g_sdlForceGfxControlUiRefresh = true;
-	return origScanCode;
 }
 
-int BEL_ST_MoveDownInTextInputUI(void)
+static void BEL_ST_ToggleOffAllDebugKeysUIKeysTrackedbyFingers(void)
 {
-	int origScanCode = g_sdlTextInputIsKeyPressed ? (int)g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX] : 0;
-	if (origScanCode == BE_ST_SC_LSHIFT)
-		origScanCode = 0;
-
-	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
-	g_sdlTextInputIsKeyPressed = false;
-
-	++g_sdlKeyboardUISelectedKeyY;
-	if (g_sdlKeyboardUISelectedKeyY >= ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT)
+	int i;
+	for (i = 0; i < g_nOfTrackedFingers; ++i)
 	{
-		g_sdlKeyboardUISelectedKeyY = 0;
+		int keyX = g_sdlTrackedFingers[i].miscData.key.x;
+		int keyY = g_sdlTrackedFingers[i].miscData.key.y;
+		BEL_ST_ToggleDebugKeysUIKey(keyX, keyY, false, g_sdlDebugKeysPressed[keyY][keyX]);
 	}
-	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
 
+	g_nOfTrackedFingers = 0;
 	g_sdlForceGfxControlUiRefresh = true;
-	return origScanCode;
 }
 
-int BEL_ST_MoveLeftInTextInputUI(void)
+void BEL_ST_ToggleShiftStateInTextInputUI(void);
+
+static void BEL_ST_ChangeKeyStateInTextInputUI(BE_ST_ScanCode_T scanCode, bool isPressed)
 {
-	int origScanCode = g_sdlTextInputIsKeyPressed ? (int)g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX] : 0;
-	if (origScanCode == BE_ST_SC_LSHIFT)
-		origScanCode = 0;
-
-	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
-	g_sdlTextInputIsKeyPressed = false;
-
-	--g_sdlKeyboardUISelectedKeyX;
-	if (g_sdlKeyboardUISelectedKeyX < 0)
+	if (scanCode == BE_ST_SC_LSHIFT)
 	{
-		g_sdlKeyboardUISelectedKeyX = ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH-1;
+		if (isPressed)
+			BEL_ST_ToggleShiftStateInTextInputUI();
+		return;
 	}
-	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
 
-	g_sdlForceGfxControlUiRefresh = true;
-	return origScanCode;
+	emulatedDOSKeyEvent dosKeyEvent;
+	dosKeyEvent.isSpecial = false;
+	dosKeyEvent.dosScanCode = scanCode;
+	BEL_ST_HandleEmuKeyboardEvent(isPressed, false, dosKeyEvent);
 }
 
-int BEL_ST_MoveRightInTextInputUI(void)
+static void BEL_ST_ChangeKeyStateInDebugKeysUI(BE_ST_ScanCode_T scanCode, bool isPressed)
 {
-	int origScanCode = g_sdlTextInputIsKeyPressed ? (int)g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX] : 0;
-	if (origScanCode == BE_ST_SC_LSHIFT)
-		origScanCode = 0;
+	emulatedDOSKeyEvent dosKeyEvent;
+	dosKeyEvent.isSpecial = false;
+	dosKeyEvent.dosScanCode = scanCode;
+	BEL_ST_HandleEmuKeyboardEvent(isPressed, false, dosKeyEvent);
+}
 
-	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
-	g_sdlTextInputIsKeyPressed = false;
 
-	++g_sdlKeyboardUISelectedKeyX;
-	if (g_sdlKeyboardUISelectedKeyX >= ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH)
+void BEL_ST_MoveUpInTextInputUI(void)
+{
+	BEL_ST_ToggleOffAllTextInputUIKeysTrackedbyFingers();
+
+	if (g_sdlKeyboardUISelectedKeyIsMarked)
+	{
+		if (g_sdlTextInputIsKeyPressed)
+		{
+			BEL_ST_ChangeKeyStateInTextInputUI(g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX], false);
+			g_sdlTextInputIsKeyPressed = false;
+		}
+		BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
+
+		--g_sdlKeyboardUISelectedKeyY;
+		if (g_sdlKeyboardUISelectedKeyY < 0)
+			g_sdlKeyboardUISelectedKeyY = ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT-1;
+	}
+	else
 	{
 		g_sdlKeyboardUISelectedKeyX = 0;
+		g_sdlKeyboardUISelectedKeyY = ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT-1;
+		g_sdlKeyboardUISelectedKeyIsMarked = true;
 	}
 	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
 
 	g_sdlForceGfxControlUiRefresh = true;
-	return origScanCode;
+}
+
+void BEL_ST_MoveDownInTextInputUI(void)
+{
+	BEL_ST_ToggleOffAllTextInputUIKeysTrackedbyFingers();
+
+	if (g_sdlKeyboardUISelectedKeyIsMarked)
+	{
+		if (g_sdlTextInputIsKeyPressed)
+		{
+			BEL_ST_ChangeKeyStateInTextInputUI(g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX], false);
+			g_sdlTextInputIsKeyPressed = false;
+		}
+		BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
+
+		++g_sdlKeyboardUISelectedKeyY;
+		if (g_sdlKeyboardUISelectedKeyY >= ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT)
+			g_sdlKeyboardUISelectedKeyY = 0;
+	}
+	else
+	{
+		g_sdlKeyboardUISelectedKeyX = 0;
+		g_sdlKeyboardUISelectedKeyY = 0;
+		g_sdlKeyboardUISelectedKeyIsMarked = true;
+	}
+	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
+
+	g_sdlForceGfxControlUiRefresh = true;
+}
+
+void BEL_ST_MoveLeftInTextInputUI(void)
+{
+	BEL_ST_ToggleOffAllTextInputUIKeysTrackedbyFingers();
+
+	if (g_sdlKeyboardUISelectedKeyIsMarked)
+	{
+		if (g_sdlTextInputIsKeyPressed)
+		{
+			BEL_ST_ChangeKeyStateInTextInputUI(g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX], false);
+			g_sdlTextInputIsKeyPressed = false;
+		}
+		BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
+
+		--g_sdlKeyboardUISelectedKeyX;
+		if (g_sdlKeyboardUISelectedKeyX < 0)
+			g_sdlKeyboardUISelectedKeyX = ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH-1;
+	}
+	else
+	{
+		g_sdlKeyboardUISelectedKeyX = ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH-1;
+		g_sdlKeyboardUISelectedKeyY = 0;
+		g_sdlKeyboardUISelectedKeyIsMarked = true;
+	}
+
+	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
+
+	g_sdlForceGfxControlUiRefresh = true;
+}
+
+void BEL_ST_MoveRightInTextInputUI(void)
+{
+	BEL_ST_ToggleOffAllTextInputUIKeysTrackedbyFingers();
+
+	if (g_sdlKeyboardUISelectedKeyIsMarked)
+	{
+		if (g_sdlTextInputIsKeyPressed)
+		{
+			BEL_ST_ChangeKeyStateInTextInputUI(g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX], false);
+			g_sdlTextInputIsKeyPressed = false;
+		}
+		BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
+
+		++g_sdlKeyboardUISelectedKeyX;
+		if (g_sdlKeyboardUISelectedKeyX >= ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH)
+			g_sdlKeyboardUISelectedKeyX = 0;
+	}
+	else
+	{
+		g_sdlKeyboardUISelectedKeyX = 0;
+		g_sdlKeyboardUISelectedKeyY = 0;
+		g_sdlKeyboardUISelectedKeyIsMarked = true;
+	}
+	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
+
+	g_sdlForceGfxControlUiRefresh = true;
 }
 
 void BEL_ST_MoveUpInDebugKeysUI(void)
 {
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+	BEL_ST_ToggleOffAllDebugKeysUIKeysTrackedbyFingers();
 
-	--g_sdlKeyboardUISelectedKeyY;
-	if (g_sdlKeyboardUISelectedKeyY < 0)
+	if (g_sdlKeyboardUISelectedKeyIsMarked)
 	{
-		g_sdlKeyboardUISelectedKeyY = ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT-1;
+		BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+
+		--g_sdlKeyboardUISelectedKeyY;
+		if (g_sdlKeyboardUISelectedKeyY < 0)
+			g_sdlKeyboardUISelectedKeyY = ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT-1;
 	}
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+	else
+	{
+		g_sdlKeyboardUISelectedKeyX = 0;
+		g_sdlKeyboardUISelectedKeyY = ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT-1;
+		g_sdlKeyboardUISelectedKeyIsMarked = true;
+	}
+	BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
 
 	g_sdlForceGfxControlUiRefresh = true;
 }
 
 void BEL_ST_MoveDownInDebugKeysUI(void)
 {
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+	BEL_ST_ToggleOffAllDebugKeysUIKeysTrackedbyFingers();
 
-	++g_sdlKeyboardUISelectedKeyY;
-	if (g_sdlKeyboardUISelectedKeyY >= ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT)
+	if (g_sdlKeyboardUISelectedKeyIsMarked)
 	{
-		g_sdlKeyboardUISelectedKeyY = 0;
+		BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+
+		++g_sdlKeyboardUISelectedKeyY;
+		if (g_sdlKeyboardUISelectedKeyY >= ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT)
+			g_sdlKeyboardUISelectedKeyY = 0;
 	}
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+	else
+	{
+		g_sdlKeyboardUISelectedKeyX = 0;
+		g_sdlKeyboardUISelectedKeyY = 0;
+		g_sdlKeyboardUISelectedKeyIsMarked = true;
+	}
+	BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
 
 	g_sdlForceGfxControlUiRefresh = true;
 }
 
 void BEL_ST_MoveLeftInDebugKeysUI(void)
 {
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+	BEL_ST_ToggleOffAllDebugKeysUIKeysTrackedbyFingers();
 
-	--g_sdlKeyboardUISelectedKeyX;
-	if (g_sdlKeyboardUISelectedKeyX < 0)
+	if (g_sdlKeyboardUISelectedKeyIsMarked)
 	{
-		g_sdlKeyboardUISelectedKeyX = ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH-1;
+		BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+
+		--g_sdlKeyboardUISelectedKeyX;
+		if (g_sdlKeyboardUISelectedKeyX < 0)
+			g_sdlKeyboardUISelectedKeyX = ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH-1;
 	}
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+	else
+	{
+		g_sdlKeyboardUISelectedKeyX = ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH-1;
+		g_sdlKeyboardUISelectedKeyY = 0;
+		g_sdlKeyboardUISelectedKeyIsMarked = true;
+	}
+	BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
 
 	g_sdlForceGfxControlUiRefresh = true;
 }
 
 void BEL_ST_MoveRightInDebugKeysUI(void)
 {
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+	BEL_ST_ToggleOffAllDebugKeysUIKeysTrackedbyFingers();
 
-	++g_sdlKeyboardUISelectedKeyX;
-	if (g_sdlKeyboardUISelectedKeyX >= ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH)
+	if (g_sdlKeyboardUISelectedKeyIsMarked)
+	{
+		BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+
+		++g_sdlKeyboardUISelectedKeyX;
+		if (g_sdlKeyboardUISelectedKeyX >= ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH)
+			g_sdlKeyboardUISelectedKeyX = 0;
+	}
+	else
 	{
 		g_sdlKeyboardUISelectedKeyX = 0;
+		g_sdlKeyboardUISelectedKeyY = 0;
+		g_sdlKeyboardUISelectedKeyIsMarked = true;
 	}
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+	BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
 
 	g_sdlForceGfxControlUiRefresh = true;
 }
 
 
-int BEL_ST_ToggleShiftStateInTextInputUI(bool *pToggle)
+void BEL_ST_ToggleShiftStateInTextInputUI(void)
 {
-	if (!(*pToggle))
-		return 0;
 	g_sdlTextInputIsShifted = !g_sdlTextInputIsShifted;
-	*pToggle = g_sdlTextInputIsShifted;
 	g_sdlDOSScanCodeTextInputStrs_Ptr = g_sdlTextInputIsShifted ? g_sdlDOSScanCodeTextInputShiftedStrs : g_sdlDOSScanCodeTextInputNonShiftedStrs;
 
 	BEL_ST_RedrawWholeTextInputUI();
 
-	g_sdlForceGfxControlUiRefresh = true;
-
-	return BE_ST_SC_LSHIFT;
-}
-
-int BEL_ST_ToggleKeyPressInTextInputUI(bool *pToggle)
-{
-	if (g_sdlTextInputIsKeyPressed == *pToggle)
-		return 0;
-	g_sdlTextInputIsKeyPressed = *pToggle;
-
-	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, *pToggle);
+	emulatedDOSKeyEvent dosKeyEvent;
+	dosKeyEvent.isSpecial = false;
+	dosKeyEvent.dosScanCode = BE_ST_SC_LSHIFT;
+	BEL_ST_HandleEmuKeyboardEvent(g_sdlTextInputIsShifted, false, dosKeyEvent);
 
 	g_sdlForceGfxControlUiRefresh = true;
-
-	// Shift key is a special case
-	if ((g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX] == BE_ST_SC_LSHIFT))
-		return BEL_ST_ToggleShiftStateInTextInputUI(pToggle);
-
-	return (int)g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX];
 }
 
-int BEL_ST_ToggleKeyPressInDebugKeysUI(bool *pToggle)
+void BEL_ST_ToggleKeyPressInTextInputUI(bool toggle)
 {
-	g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX] ^= true;
-	*pToggle = g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX];
+	BEL_ST_ToggleOffAllTextInputUIKeysTrackedbyFingers();
 
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, *pToggle);
+	if (!g_sdlKeyboardUISelectedKeyIsMarked)
+	{
+		g_sdlKeyboardUISelectedKeyX = g_sdlKeyboardUISelectedKeyY = 0;
+		g_sdlKeyboardUISelectedKeyIsMarked = true;
+		BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
+		g_sdlForceGfxControlUiRefresh = true;
+		return;
+	}
+
+	if (g_sdlTextInputIsKeyPressed == toggle)
+		return;
+	g_sdlTextInputIsKeyPressed = toggle;
+
+	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, toggle);
 
 	g_sdlForceGfxControlUiRefresh = true;
 
-	return (int)g_sdlDOSScanCodeDebugKeysLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX];
+	BEL_ST_ChangeKeyStateInTextInputUI(g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX], toggle);
+}
+
+void BEL_ST_ToggleKeyPressInDebugKeysUI(void)
+{
+	BEL_ST_ToggleOffAllDebugKeysUIKeysTrackedbyFingers();
+
+	bool *keyStatus = &g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX];
+
+	if (!g_sdlKeyboardUISelectedKeyIsMarked)
+	{
+		g_sdlKeyboardUISelectedKeyX = g_sdlKeyboardUISelectedKeyY = 0;
+		g_sdlKeyboardUISelectedKeyIsMarked = true;
+		BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, *keyStatus);
+		g_sdlForceGfxControlUiRefresh = true;
+		return;
+	}
+
+	*keyStatus ^= true;
+
+	BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, *keyStatus);
+
+	g_sdlForceGfxControlUiRefresh = true;
+
+	BEL_ST_ChangeKeyStateInDebugKeysUI(g_sdlDOSScanCodeDebugKeysLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX], *keyStatus);
+}
+
+/*** Pointer stuff common to all kinds of controller / touch input UI ***/
+
+static BESDLTrackedFinger *BEL_ST_ProcessAndGetPressedTrackedFinger(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
+{
+	int i;
+	for (i = 0; i < g_nOfTrackedFingers; ++i)
+		if ((g_sdlTrackedFingers[i].touchId == touchId) && (g_sdlTrackedFingers[i].fingerId == fingerId))
+		{
+			if (g_refKeenCfg.touchInputDebugging)
+			{
+				g_sdlTrackedFingers[i].lastX = x;
+				g_sdlTrackedFingers[i].lastY = y;
+				g_sdlForceGfxControlUiRefresh = true;
+			}
+			return NULL; // In case of some mistaken double-tap of same finger
+		}
+
+	if (g_nOfTrackedFingers == MAX_NUM_OF_TRACKED_FINGERS)
+		return NULL;
+
+	BESDLTrackedFinger *trackedFinger = &g_sdlTrackedFingers[g_nOfTrackedFingers++];
+	trackedFinger->touchId = touchId;
+	trackedFinger->fingerId = fingerId;
+	trackedFinger->isDefaultBinaryStateToggle = false;
+	if (g_refKeenCfg.touchInputDebugging)
+	{
+		trackedFinger->lastX = x;
+		trackedFinger->lastY = y;
+		g_sdlForceGfxControlUiRefresh = true;
+	}
+	return trackedFinger;
+}
+
+static BESDLTrackedFinger *BEL_ST_ProcessAndGetMovedTrackedFinger(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
+{
+	int i;
+	for (i = 0; i < g_nOfTrackedFingers; ++i)
+		if ((g_sdlTrackedFingers[i].touchId == touchId) && (g_sdlTrackedFingers[i].fingerId == fingerId))
+			break;
+
+	if (i == g_nOfTrackedFingers)
+		return NULL;
+
+	BESDLTrackedFinger *trackedFinger = &g_sdlTrackedFingers[i];
+	if (g_refKeenCfg.touchInputDebugging)
+	{
+		trackedFinger->lastX = x;
+		trackedFinger->lastY = y;
+		g_sdlForceGfxControlUiRefresh = true;
+	}
+	return trackedFinger;
+}
+
+static BESDLTrackedFinger *BEL_ST_GetReleasedTrackedFinger(SDL_TouchID touchId, SDL_FingerID fingerId)
+{
+	int i;
+	for (i = 0; i < g_nOfTrackedFingers; ++i)
+		if ((g_sdlTrackedFingers[i].touchId == touchId) && (g_sdlTrackedFingers[i].fingerId == fingerId))
+			return &g_sdlTrackedFingers[i];
+
+	return NULL;
+}
+
+static void BEL_ST_RemoveTrackedFinger(BESDLTrackedFinger *trackedFinger)
+{
+	*trackedFinger = g_sdlTrackedFingers[--g_nOfTrackedFingers]; // Remove finger entry without moving the rest, except for maybe the last
+	if (g_refKeenCfg.touchInputDebugging)
+		g_sdlForceGfxControlUiRefresh = true; // Remove debugging finger mark from screen
+}
+
+static void BEL_ST_UnmarkAndReleaseSelectedKeyInTextInputUI(void)
+{
+	if (g_sdlKeyboardUISelectedKeyIsMarked)
+	{
+		if (g_sdlTextInputIsKeyPressed)
+		{
+			BEL_ST_ChangeKeyStateInTextInputUI(g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX], false);
+			g_sdlTextInputIsKeyPressed = false;
+		}
+		BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
+		g_sdlKeyboardUISelectedKeyIsMarked = false;
+	}
+}
+
+static void BEL_ST_UnmarkSelectedKeyInDebugKeysUI(void)
+{
+	if (g_sdlKeyboardUISelectedKeyIsMarked)
+	{
+		BEL_ST_ToggleDebugKeysUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+		g_sdlKeyboardUISelectedKeyIsMarked = false;
+	}
 }
 
 
-void BEL_ST_CheckMovedPointerInTextInputUI(int x, int y)
+void BEL_ST_CheckMovedPointerInTextInputUI(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
 {
-	if (!g_sdlKeyboardUIPointerUsed)
+	BESDLTrackedFinger *trackedFinger = BEL_ST_ProcessAndGetMovedTrackedFinger(touchId, fingerId, x, y);
+	if (!trackedFinger || trackedFinger->isDefaultBinaryStateToggle)
 		return;
 
 	if ((x < g_sdlControllerTextInputRect.x) || (x >= g_sdlControllerTextInputRect.x+g_sdlControllerTextInputRect.w)
 	    || (y < g_sdlControllerTextInputRect.y) || (y >= g_sdlControllerTextInputRect.y+g_sdlControllerTextInputRect.h))
 		return;
 
-	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
-	g_sdlTextInputIsKeyPressed = false;
+	BEL_ST_UnmarkAndReleaseSelectedKeyInTextInputUI();
 
 	// Normalize coordinates to keys
-	g_sdlKeyboardUISelectedKeyX = (x-g_sdlControllerTextInputRect.x)*ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH/g_sdlControllerTextInputRect.w;
-	g_sdlKeyboardUISelectedKeyY = (y-g_sdlControllerTextInputRect.y)*ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT/g_sdlControllerTextInputRect.h;
+	int keyX = (x-g_sdlControllerTextInputRect.x)*ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH/g_sdlControllerTextInputRect.w;
+	int keyY = (y-g_sdlControllerTextInputRect.y)*ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT/g_sdlControllerTextInputRect.h;
 
-	BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
+	if ((trackedFinger->miscData.key.x != keyX) || (trackedFinger->miscData.key.y != keyY))
+	{
+		BEL_ST_ToggleTextInputUIKey(trackedFinger->miscData.key.x, trackedFinger->miscData.key.y, false, false);
+		BEL_ST_ToggleTextInputUIKey(keyX, keyY, true, false);
+		trackedFinger->miscData.key.x = keyX;
+		trackedFinger->miscData.key.y = keyY;
+	}
 
 	g_sdlForceGfxControlUiRefresh = true;
 }
 
-extern const BE_ST_ControllerMapping *g_sdlControllerMappingActualCurr;
 extern const int g_sdlJoystickAxisMax;
 extern bool g_sdlDefaultMappingBinaryState;
 
 bool BEL_ST_AltControlScheme_HandleEntry(const BE_ST_ControllerSingleMap *map, int value, bool *lastBinaryStatusPtr);
 
-void BEL_ST_CheckPressedPointerInTextInputUI(int x, int y)
+void BEL_ST_CheckPressedPointerInTextInputUI(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
 {
+	BESDLTrackedFinger *trackedFinger = BEL_ST_ProcessAndGetPressedTrackedFinger(touchId, fingerId, x, y);
+	if (!trackedFinger)
+		return;
+
 	if ((x < g_sdlControllerTextInputRect.x) || (x >= g_sdlControllerTextInputRect.x+g_sdlControllerTextInputRect.w)
 	    || (y < g_sdlControllerTextInputRect.y) || (y >= g_sdlControllerTextInputRect.y+g_sdlControllerTextInputRect.h)
 	)
+	{
+		trackedFinger->isDefaultBinaryStateToggle = true;
 		BEL_ST_AltControlScheme_HandleEntry(&g_sdlControllerMappingActualCurr->defaultMapping, g_sdlJoystickAxisMax, &g_sdlDefaultMappingBinaryState);
-
-	g_sdlKeyboardUIPointerUsed = true;
-	BEL_ST_CheckMovedPointerInTextInputUI(x, y);
-}
-
-void BEL_ST_CheckReleasedPointerInTextInputUI(int x, int y)
-{
-	if (!g_sdlKeyboardUIPointerUsed)
 		return;
+	}
 
-	g_sdlKeyboardUIPointerUsed = false;
-	if ((x < g_sdlControllerTextInputRect.x) || (x >= g_sdlControllerTextInputRect.x+g_sdlControllerTextInputRect.w)
-	    || (y < g_sdlControllerTextInputRect.y) || (y >= g_sdlControllerTextInputRect.y+g_sdlControllerTextInputRect.h))
-		return;
-
-	//BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
-
-	emulatedDOSKeyEvent dosKeyEvent;
-	dosKeyEvent.isSpecial = false;
+	BEL_ST_UnmarkAndReleaseSelectedKeyInTextInputUI();
 
 	// Normalize coordinates to keys
-	g_sdlKeyboardUISelectedKeyX = (x-g_sdlControllerTextInputRect.x)*ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH/g_sdlControllerTextInputRect.w;
-	g_sdlKeyboardUISelectedKeyY = (y-g_sdlControllerTextInputRect.y)*ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT/g_sdlControllerTextInputRect.h;
-	// Hack for covering the special case of the shift key
-	g_sdlTextInputIsKeyPressed = false;
-	bool toggle = true;
-	dosKeyEvent.dosScanCode = BEL_ST_ToggleKeyPressInTextInputUI(&toggle);
-	if (dosKeyEvent.dosScanCode)
-		BEL_ST_HandleEmuKeyboardEvent(toggle, false, dosKeyEvent);
-	// FIXME: A delay may be required here in certain cases, but this works for now...
-	toggle = false;
-	dosKeyEvent.dosScanCode = BEL_ST_ToggleKeyPressInTextInputUI(&toggle);
-	if (dosKeyEvent.dosScanCode)
-		BEL_ST_HandleEmuKeyboardEvent(toggle, false, dosKeyEvent);
-}
+	trackedFinger->miscData.key.x = (x-g_sdlControllerTextInputRect.x)*ALTCONTROLLER_TEXTINPUT_KEYS_WIDTH/g_sdlControllerTextInputRect.w;
+	trackedFinger->miscData.key.y = (y-g_sdlControllerTextInputRect.y)*ALTCONTROLLER_TEXTINPUT_KEYS_HEIGHT/g_sdlControllerTextInputRect.h;
 
-
-void BEL_ST_CheckMovedPointerInDebugKeysUI(int x, int y)
-{
-	if (!g_sdlKeyboardUIPointerUsed)
-		return;
-
-	if ((x < g_sdlControllerDebugKeysRect.x) || (x >= g_sdlControllerDebugKeysRect.x+g_sdlControllerDebugKeysRect.w)
-	    || (y < g_sdlControllerDebugKeysRect.y) || (y >= g_sdlControllerDebugKeysRect.y+g_sdlControllerDebugKeysRect.h))
-		return;
-
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
-
-	// Normalize coordinates to keys
-	g_sdlKeyboardUISelectedKeyX = (x-g_sdlControllerDebugKeysRect.x)*ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH/g_sdlControllerDebugKeysRect.w;
-	g_sdlKeyboardUISelectedKeyY = (y-g_sdlControllerDebugKeysRect.y)*ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT/g_sdlControllerDebugKeysRect.h;
-
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
+	BEL_ST_ToggleTextInputUIKey(trackedFinger->miscData.key.x, trackedFinger->miscData.key.y, true, false);
 
 	g_sdlForceGfxControlUiRefresh = true;
 }
 
-void BEL_ST_CheckPressedPointerInDebugKeysUI(int x, int y)
+void BEL_ST_CheckReleasedPointerInTextInputUI(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
 {
-	if ((x < g_sdlControllerDebugKeysRect.x) || (x >= g_sdlControllerDebugKeysRect.x+g_sdlControllerDebugKeysRect.w)
-	    || (y < g_sdlControllerDebugKeysRect.y) || (y >= g_sdlControllerDebugKeysRect.y+g_sdlControllerDebugKeysRect.h)
-	)
-		BEL_ST_AltControlScheme_HandleEntry(&g_sdlControllerMappingActualCurr->defaultMapping, g_sdlJoystickAxisMax, &g_sdlDefaultMappingBinaryState);
-
-	g_sdlKeyboardUIPointerUsed = true;
-	BEL_ST_CheckMovedPointerInDebugKeysUI(x, y);
-}
-
-void BEL_ST_CheckReleasedPointerInDebugKeysUI(int x, int y)
-{
-	if (!g_sdlKeyboardUIPointerUsed)
+	BESDLTrackedFinger *trackedFinger = BEL_ST_GetReleasedTrackedFinger(touchId, fingerId);
+	if (!trackedFinger)
 		return;
 
-	g_sdlKeyboardUIPointerUsed = false;
+	int prevKeyX = trackedFinger->miscData.key.x;
+	int prevKeyY = trackedFinger->miscData.key.y;
+
+	bool isDefaultBinaryStateToggle = trackedFinger->isDefaultBinaryStateToggle;
+	BEL_ST_RemoveTrackedFinger(trackedFinger);
+
+	if (isDefaultBinaryStateToggle)
+	{
+		BEL_ST_AltControlScheme_HandleEntry(&g_sdlControllerMappingActualCurr->defaultMapping, 0, &g_sdlDefaultMappingBinaryState);
+		return;
+	}
+
+	if ((x >= g_sdlControllerTextInputRect.x) && (x < g_sdlControllerTextInputRect.x+g_sdlControllerTextInputRect.w)
+	    && (y >= g_sdlControllerTextInputRect.y) && (y < g_sdlControllerTextInputRect.y+g_sdlControllerTextInputRect.h))
+	{
+		// Do key press and release (including any special handling possibly required for shift key)
+		// FIXME: A delay may be required here in certain cases, but this works for now...
+		BE_ST_ScanCode_T scanCode = g_sdlDOSScanCodeTextInputLayout[prevKeyY][prevKeyX];
+		BEL_ST_ChangeKeyStateInTextInputUI(scanCode, true);
+		BEL_ST_ChangeKeyStateInTextInputUI(scanCode, false);
+	}
+
+	BEL_ST_UnmarkAndReleaseSelectedKeyInTextInputUI();
+	BEL_ST_ToggleTextInputUIKey(prevKeyX, prevKeyY, false, false);
+
+	g_sdlForceGfxControlUiRefresh = true;
+}
+
+
+void BEL_ST_CheckMovedPointerInDebugKeysUI(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
+{
+	BESDLTrackedFinger *trackedFinger = BEL_ST_ProcessAndGetMovedTrackedFinger(touchId, fingerId, x, y);
+	if (!trackedFinger || trackedFinger->isDefaultBinaryStateToggle)
+		return;
+
 	if ((x < g_sdlControllerDebugKeysRect.x) || (x >= g_sdlControllerDebugKeysRect.x+g_sdlControllerDebugKeysRect.w)
 	    || (y < g_sdlControllerDebugKeysRect.y) || (y >= g_sdlControllerDebugKeysRect.y+g_sdlControllerDebugKeysRect.h))
 		return;
 
-	//BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, g_sdlDebugKeysPressed[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX]);
-
-	emulatedDOSKeyEvent dosKeyEvent;
-	dosKeyEvent.isSpecial = false;
+	BEL_ST_UnmarkSelectedKeyInDebugKeysUI();
 
 	// Normalize coordinates to keys
-	g_sdlKeyboardUISelectedKeyX = (x-g_sdlControllerDebugKeysRect.x)*ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH/g_sdlControllerDebugKeysRect.w;
-	g_sdlKeyboardUISelectedKeyY = (y-g_sdlControllerDebugKeysRect.y)*ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT/g_sdlControllerDebugKeysRect.h;
+	int keyX = (x-g_sdlControllerDebugKeysRect.x)*ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH/g_sdlControllerDebugKeysRect.w;
+	int keyY = (y-g_sdlControllerDebugKeysRect.y)*ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT/g_sdlControllerDebugKeysRect.h;
 
-	bool toggle;
-	dosKeyEvent.dosScanCode = BEL_ST_ToggleKeyPressInDebugKeysUI(&toggle);
-	if (dosKeyEvent.dosScanCode)
-		BEL_ST_HandleEmuKeyboardEvent(toggle, false, dosKeyEvent);
+	if ((trackedFinger->miscData.key.x != keyX) || (trackedFinger->miscData.key.y != keyY))
+	{
+		BEL_ST_ToggleDebugKeysUIKey(trackedFinger->miscData.key.x, trackedFinger->miscData.key.y, false, g_sdlDebugKeysPressed[trackedFinger->miscData.key.y][trackedFinger->miscData.key.x]);
+		BEL_ST_ToggleDebugKeysUIKey(keyX, keyY, true, g_sdlDebugKeysPressed[keyY][keyX]);
+		trackedFinger->miscData.key.x = keyX;
+		trackedFinger->miscData.key.y = keyY;
+	}
+
+	g_sdlForceGfxControlUiRefresh = true;
+}
+
+void BEL_ST_CheckPressedPointerInDebugKeysUI(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
+{
+	BESDLTrackedFinger *trackedFinger = BEL_ST_ProcessAndGetPressedTrackedFinger(touchId, fingerId, x, y);
+	if (!trackedFinger)
+		return;
+
+	if ((x < g_sdlControllerDebugKeysRect.x) || (x >= g_sdlControllerDebugKeysRect.x+g_sdlControllerDebugKeysRect.w)
+	    || (y < g_sdlControllerDebugKeysRect.y) || (y >= g_sdlControllerDebugKeysRect.y+g_sdlControllerDebugKeysRect.h)
+	)
+	{
+		trackedFinger->isDefaultBinaryStateToggle = true;
+		BEL_ST_AltControlScheme_HandleEntry(&g_sdlControllerMappingActualCurr->defaultMapping, g_sdlJoystickAxisMax, &g_sdlDefaultMappingBinaryState);
+		return;
+	}
+
+	BEL_ST_UnmarkSelectedKeyInDebugKeysUI();
+
+	// Normalize coordinates to keys
+	int keyX = (x-g_sdlControllerDebugKeysRect.x)*ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH/g_sdlControllerDebugKeysRect.w;
+	int keyY = (y-g_sdlControllerDebugKeysRect.y)*ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT/g_sdlControllerDebugKeysRect.h;
+
+	trackedFinger->miscData.key.x = keyX;
+	trackedFinger->miscData.key.y = keyY;
+	BEL_ST_ToggleDebugKeysUIKey(keyX, keyY, true, g_sdlDebugKeysPressed[keyY][keyX]);
+
+	g_sdlForceGfxControlUiRefresh = true;
+}
+
+void BEL_ST_CheckReleasedPointerInDebugKeysUI(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
+{
+	BESDLTrackedFinger *trackedFinger = BEL_ST_GetReleasedTrackedFinger(touchId, fingerId);
+	if (!trackedFinger)
+		return;
+
+	int prevKeyX = trackedFinger->miscData.key.x;
+	int prevKeyY = trackedFinger->miscData.key.y;
+
+	bool isDefaultBinaryStateToggle = trackedFinger->isDefaultBinaryStateToggle;
+	BEL_ST_RemoveTrackedFinger(trackedFinger);
+
+	if (isDefaultBinaryStateToggle)
+	{
+		BEL_ST_AltControlScheme_HandleEntry(&g_sdlControllerMappingActualCurr->defaultMapping, 0, &g_sdlDefaultMappingBinaryState);
+		return;
+	}
+
+	bool *keyStatus = &g_sdlDebugKeysPressed[prevKeyY][prevKeyX];
+
+	if ((x >= g_sdlControllerDebugKeysRect.x) && (x < g_sdlControllerDebugKeysRect.x+g_sdlControllerDebugKeysRect.w)
+	    && (y >= g_sdlControllerDebugKeysRect.y) && (y < g_sdlControllerDebugKeysRect.y+g_sdlControllerDebugKeysRect.h))
+	{
+		*keyStatus ^= true;
+		BEL_ST_ChangeKeyStateInDebugKeysUI(g_sdlDOSScanCodeDebugKeysLayout[prevKeyY][prevKeyX], *keyStatus);
+	}
+
+	BEL_ST_UnmarkSelectedKeyInDebugKeysUI();
+	BEL_ST_ToggleDebugKeysUIKey(prevKeyX, prevKeyY, false, *keyStatus);
+
+	g_sdlForceGfxControlUiRefresh = true;
 }
 
 // Returns matching scanCode if found (possibly 0 if not set), -1 if not
@@ -1238,56 +1694,70 @@ static int BEL_ST_GetControllerUIScanCodeFromPointer(int x, int y)
 	return -1;
 }
 
-void BEL_ST_CheckPressedPointerInControllerUI(int x, int y)
+void BEL_ST_CheckPressedPointerInControllerUI(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
 {
-	if (g_sdlControllerUIPointerPressed)
+	BESDLTrackedFinger *trackedFinger = BEL_ST_ProcessAndGetPressedTrackedFinger(touchId, fingerId, x, y);
+	if (!trackedFinger)
 		return;
-	g_sdlControllerUIPointerPressed = true;
 
-	g_sdlPointerSelectedPadButtonScanCode = BEL_ST_GetControllerUIScanCodeFromPointer(x,y);
-	if (g_sdlPointerSelectedPadButtonScanCode > 0)
+	int scanCode = BEL_ST_GetControllerUIScanCodeFromPointer(x,y);
+	trackedFinger->miscData.padButtonScanCode = scanCode;
+	if (scanCode > 0)
 	{
 		emulatedDOSKeyEvent dosKeyEvent;
 		dosKeyEvent.isSpecial = false;
-		dosKeyEvent.dosScanCode = g_sdlPointerSelectedPadButtonScanCode;
+		dosKeyEvent.dosScanCode = scanCode;
 		BEL_ST_HandleEmuKeyboardEvent(true, false, dosKeyEvent);
 	}
-	else if (g_sdlPointerSelectedPadButtonScanCode < 0)
+	else if (scanCode < 0)
 	{
-		g_sdlPointerSelectedPadButtonScanCode = 0;
+		trackedFinger->isDefaultBinaryStateToggle = true;
 		BEL_ST_AltControlScheme_HandleEntry(&g_sdlControllerMappingActualCurr->defaultMapping, g_sdlJoystickAxisMax, &g_sdlDefaultMappingBinaryState);
 	}
 
 }
 
-void BEL_ST_CheckReleasedPointerInControllerUI(void)
+void BEL_ST_CheckReleasedPointerInControllerUI(SDL_TouchID touchId, SDL_FingerID fingerId)
 {
-	if (!g_sdlControllerUIPointerPressed)
+	BESDLTrackedFinger *trackedFinger = BEL_ST_GetReleasedTrackedFinger(touchId, fingerId);
+	if (!trackedFinger)
 		return;
-	g_sdlControllerUIPointerPressed = false;
 
-	if (g_sdlPointerSelectedPadButtonScanCode)
+	int scanCode = trackedFinger->miscData.padButtonScanCode;
+
+	bool isDefaultBinaryStateToggle = trackedFinger->isDefaultBinaryStateToggle;
+	BEL_ST_RemoveTrackedFinger(trackedFinger);
+
+	if (isDefaultBinaryStateToggle)
+	{
+		BEL_ST_AltControlScheme_HandleEntry(&g_sdlControllerMappingActualCurr->defaultMapping, 0, &g_sdlDefaultMappingBinaryState);
+		return;
+	}
+
+	if (scanCode)
 	{
 		emulatedDOSKeyEvent dosKeyEvent;
 		dosKeyEvent.isSpecial = false;
-		dosKeyEvent.dosScanCode = g_sdlPointerSelectedPadButtonScanCode;
+		dosKeyEvent.dosScanCode = trackedFinger->miscData.padButtonScanCode;
 		BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
 	}
-	g_sdlPointerSelectedPadButtonScanCode = 0;
 }
 
-void BEL_ST_CheckMovedPointerInControllerUI(int x, int y)
+void BEL_ST_CheckMovedPointerInControllerUI(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
 {
-	if (!g_sdlControllerUIPointerPressed)
+	BESDLTrackedFinger *trackedFinger = BEL_ST_ProcessAndGetMovedTrackedFinger(touchId, fingerId, x, y);
+	if (!trackedFinger || trackedFinger->isDefaultBinaryStateToggle)
 		return;
 
-	int oldScanCode = g_sdlPointerSelectedPadButtonScanCode;
-	g_sdlPointerSelectedPadButtonScanCode = BEL_ST_GetControllerUIScanCodeFromPointer(x,y);
+	int oldScanCode = trackedFinger->miscData.padButtonScanCode;
+	int newScanCode = BEL_ST_GetControllerUIScanCodeFromPointer(x,y);
 
-	if (g_sdlPointerSelectedPadButtonScanCode < 0)
-		g_sdlPointerSelectedPadButtonScanCode = 0;
+	if (newScanCode < 0)
+		newScanCode = 0;
 
-	if (oldScanCode != g_sdlPointerSelectedPadButtonScanCode)
+	trackedFinger->miscData.padButtonScanCode = newScanCode;
+
+	if (oldScanCode != newScanCode)
 	{
 		emulatedDOSKeyEvent dosKeyEvent;
 		dosKeyEvent.isSpecial = false;
@@ -1296,9 +1766,9 @@ void BEL_ST_CheckMovedPointerInControllerUI(int x, int y)
 			dosKeyEvent.dosScanCode = oldScanCode;
 			BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
 		}
-		if (g_sdlPointerSelectedPadButtonScanCode)
+		if (newScanCode)
 		{
-			dosKeyEvent.dosScanCode = g_sdlPointerSelectedPadButtonScanCode;
+			dosKeyEvent.dosScanCode = newScanCode;
 			BEL_ST_HandleEmuKeyboardEvent(true, false, dosKeyEvent);
 		}
 	}
@@ -1336,11 +1806,11 @@ static void BEL_ST_HandleDefaultPointerActionInTouchControls(int touchControlInd
 	);
 }
 
-static void BEL_ST_UpdateVirtualCursorPositionFromPointer(int x, int y)
+void BEL_ST_UpdateVirtualCursorPositionFromPointer(int x, int y)
 {
 	extern int16_t g_sdlEmuMouseMotionAccumulatedState[2];
 	extern int16_t g_sdlVirtualMouseCursorState[2];
-	//g_sdlForceGfxControlUiRefresh = true; // FIXME WHY???
+
 	if (x < g_sdlAspectCorrectionRect.x)
 		x = 0;
 	else if (x >= g_sdlAspectCorrectionRect.x + g_sdlAspectCorrectionRect.w)
@@ -1363,39 +1833,19 @@ static void BEL_ST_UpdateVirtualCursorPositionFromPointer(int x, int y)
 
 extern int g_sdlEmuMouseButtonsState;
 
-void BEL_ST_CheckPressedPointerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
+void BEL_ST_CheckPressedPointerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y, bool forceAbsoluteFingerPositioning)
 {
-	int i;
-	for (i = 0; i < nOfTrackedFingers; ++i)
-		if ((g_sdlTrackedFingers[i].touchId == touchId) && (g_sdlTrackedFingers[i].fingerId == fingerId))
-		{
-			if (g_refKeenCfg.touchInputDebugging)
-			{
-				g_sdlTrackedFingers[i].lastX = x;
-				g_sdlTrackedFingers[i].lastY = y;
-				g_sdlForceGfxControlUiRefresh = true;
-			}
-			return; // In case of some mistaken double-tap of same finger
-		}
-
-
-	if (nOfTrackedFingers == MAX_NUM_OF_TRACKED_FINGERS)
+	BESDLTrackedFinger *trackedFinger = BEL_ST_ProcessAndGetPressedTrackedFinger(touchId, fingerId, x, y);
+	if (!trackedFinger)
 		return;
 
 	int touchControlIndex = BEL_ST_GetPointedTouchControlIndex(x, y);
-	BESDLTrackedFinger* trackedFinger = &g_sdlTrackedFingers[nOfTrackedFingers++];
-	trackedFinger->touchId = touchId;
-	trackedFinger->fingerId = fingerId;
-	trackedFinger->touchMappingIndex = touchControlIndex;
-	if (g_refKeenCfg.touchInputDebugging)
-	{
-		trackedFinger->lastX = x;
-		trackedFinger->lastY = y;
-		g_sdlForceGfxControlUiRefresh = true;
-	}
+	trackedFinger->miscData.touchMappingIndex = touchControlIndex;
 
-	if ((touchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
+	if (forceAbsoluteFingerPositioning || ((touchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning))
 	{
+		trackedFinger->miscData.touchMappingIndex = -2; // Special mark
+		// Mouse cursor control
 		g_sdlEmuMouseButtonsState |= 1;
 		BEL_ST_UpdateVirtualCursorPositionFromPointer(x, y);
 	}
@@ -1403,154 +1853,89 @@ void BEL_ST_CheckPressedPointerInTouchControls(SDL_TouchID touchId, SDL_FingerID
 		BEL_ST_HandleDefaultPointerActionInTouchControls(touchControlIndex, true);
 }
 
-void BEL_ST_CheckPressedMouseInTouchControls(int x, int y)
-{
-	BEL_ST_CheckPressedPointerInTouchControls(0, 0, x, y); // Touch device id of 0 is invalid according to description of SDL_GetTouchDevice, so re-using this for mouse
-}
-
-void BEL_ST_CheckPressedFingerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId, float floatX, float floatY)
-{
-	BEL_ST_CheckPressedPointerInTouchControls(touchId, fingerId, floatX * g_sdlLastReportedWindowWidth, floatY * g_sdlLastReportedWindowHeight);
-}
-
-
 void BEL_ST_CheckReleasedPointerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId)
 {
-	int i;
-	for (i = 0; i < nOfTrackedFingers; ++i)
-		if ((g_sdlTrackedFingers[i].touchId == touchId) && (g_sdlTrackedFingers[i].fingerId == fingerId))
-			break;
-
-	if (i == nOfTrackedFingers)
+	BESDLTrackedFinger* trackedFinger = BEL_ST_GetReleasedTrackedFinger(touchId, fingerId);
+	if (!trackedFinger)
 		return;
 
-	BESDLTrackedFinger* trackedFinger = &g_sdlTrackedFingers[i];
-	int prevTouchControlIndex = trackedFinger->touchMappingIndex;
+	int prevTouchControlIndex = trackedFinger->miscData.touchMappingIndex;
 
-	if ((prevTouchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
-		g_sdlEmuMouseButtonsState &= ~1;
+	if (prevTouchControlIndex == -2)
+		g_sdlEmuMouseButtonsState &= ~1; // Mouse cursor control
 	else
 		BEL_ST_HandleDefaultPointerActionInTouchControls(prevTouchControlIndex, false);
 
-	*trackedFinger = g_sdlTrackedFingers[--nOfTrackedFingers]; // Remove finger entry without moving the rest, except for maybe the last
-	if (g_refKeenCfg.touchInputDebugging)
-		g_sdlForceGfxControlUiRefresh = true; // Remove debugging finger mark from screen
+	BEL_ST_RemoveTrackedFinger(trackedFinger);
 }
-
-void BEL_ST_CheckReleasedMouseInTouchControls(void)
-{
-	BEL_ST_CheckReleasedPointerInTouchControls(0, 0); // Touch device id of 0 is invalid according to description of SDL_GetTouchDevice, so re-using this for mouse
-}
-
-void BEL_ST_CheckReleasedFingerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId)
-{
-	BEL_ST_CheckReleasedPointerInTouchControls(touchId, fingerId);
-}
-
 
 void BEL_ST_CheckMovedPointerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId, int x, int y)
 {
-	int i;
-	for (i = 0; i < nOfTrackedFingers; ++i)
-		if ((g_sdlTrackedFingers[i].touchId == touchId) && (g_sdlTrackedFingers[i].fingerId == fingerId))
-			break;
-
-	if (i == nOfTrackedFingers)
+	BESDLTrackedFinger *trackedFinger = BEL_ST_ProcessAndGetMovedTrackedFinger(touchId, fingerId, x, y);
+	if (!trackedFinger)
 		return;
 
-	BESDLTrackedFinger* trackedFinger = &g_sdlTrackedFingers[i];
-	int prevTouchControlIndex = trackedFinger->touchMappingIndex;
-	int touchControlIndex = BEL_ST_GetPointedTouchControlIndex(x, y);
-	if (g_refKeenCfg.touchInputDebugging)
+	int prevTouchControlIndex = trackedFinger->miscData.touchMappingIndex;
+	if (prevTouchControlIndex == -2)
 	{
-		trackedFinger->lastX = x;
-		trackedFinger->lastY = y;
-		g_sdlForceGfxControlUiRefresh = true;
+		BEL_ST_UpdateVirtualCursorPositionFromPointer(x, y);  // Mouse cursor control
+		return;
 	}
+
+	int touchControlIndex = BEL_ST_GetPointedTouchControlIndex(x, y);
 	if (touchControlIndex != prevTouchControlIndex)
 	{
-		if ((prevTouchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
-			g_sdlEmuMouseButtonsState &= ~1;
-		else
+		if (prevTouchControlIndex >= 0)
 			BEL_ST_HandleDefaultPointerActionInTouchControls(prevTouchControlIndex, false);
 
-		if ((touchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
-			g_sdlEmuMouseButtonsState |= 1;
-		else
+		if (touchControlIndex >= 0)
 			BEL_ST_HandleDefaultPointerActionInTouchControls(touchControlIndex, true);
 
-		trackedFinger->touchMappingIndex = touchControlIndex;
+		trackedFinger->miscData.touchMappingIndex = touchControlIndex;
 	}
-	if ((touchControlIndex < 0) && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
-		BEL_ST_UpdateVirtualCursorPositionFromPointer(x, y);
 }
-
-void BEL_ST_CheckMovedMouseInTouchControls(int x, int y)
-{
-	BEL_ST_CheckMovedPointerInTouchControls(0, 0, x, y); // Touch device id of 0 is invalid according to description of SDL_GetTouchDevice, so re-using this for mouse
-}
-
-void BEL_ST_CheckMovedFingerInTouchControls(SDL_TouchID touchId, SDL_FingerID fingerId, float floatX, float floatY)
-{
-	BEL_ST_CheckMovedPointerInTouchControls(touchId, fingerId, floatX * g_sdlLastReportedWindowWidth, floatY * (float)g_sdlLastReportedWindowHeight);
-}
-
 
 void BEL_ST_ReleasePressedKeysInTextInputUI(void)
 {
-	emulatedDOSKeyEvent dosKeyEvent;
-	dosKeyEvent.isSpecial = false;
-
 	if (g_sdlTextInputIsKeyPressed)
 	{
-		bool toggle = false;
-		dosKeyEvent.dosScanCode = BEL_ST_ToggleKeyPressInTextInputUI(&toggle);
-		if (dosKeyEvent.dosScanCode) // Don't forget to "release" a key pressed in the text input UI
-			BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
+		BEL_ST_ChangeKeyStateInTextInputUI(g_sdlDOSScanCodeTextInputLayout[g_sdlKeyboardUISelectedKeyY][g_sdlKeyboardUISelectedKeyX], false);
+		//BEL_ST_ToggleTextInputUIKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, false, false);
+		g_sdlTextInputIsKeyPressed = false;
 	}
 
 	// Shift key may further be held, don't forget this too!
 	if (g_sdlTextInputIsShifted)
-	{
-		dosKeyEvent.dosScanCode = BE_ST_SC_LSHIFT;
-		BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
+		BEL_ST_ToggleShiftStateInTextInputUI();
 
-		g_sdlTextInputIsShifted = false;
-		BEL_ST_RedrawWholeTextInputUI();
-	}
-
+	g_nOfTrackedFingers = 0; // Remove all tracked fingers
 	g_sdlForceGfxControlUiRefresh = true;
 }
 
 void BEL_ST_ReleasePressedKeysInDebugKeysUI(void)
 {
-	emulatedDOSKeyEvent dosKeyEvent;
-	dosKeyEvent.isSpecial = false;
 	for (int currKeyRow = 0; currKeyRow < ALTCONTROLLER_DEBUGKEYS_KEYS_HEIGHT; ++currKeyRow)
 		for (int currKeyCol = 0; currKeyCol < ALTCONTROLLER_DEBUGKEYS_KEYS_WIDTH; ++currKeyCol)
 			if (g_sdlDebugKeysPressed[currKeyRow][currKeyCol])
 			{
-				dosKeyEvent.dosScanCode = g_sdlDOSScanCodeDebugKeysLayout[currKeyRow][currKeyCol];
-				// Don't forget to "release" a key pressed in the text input UI
-				BEL_ST_HandleEmuKeyboardEvent(false, false, dosKeyEvent);
-
+				BEL_ST_ChangeKeyStateInDebugKeysUI(g_sdlDOSScanCodeDebugKeysLayout[currKeyRow][currKeyCol], false);
+				//BEL_ST_ToggleDebugKeysUIKey(currKeyCol, currKeyRow, false, false);
 				g_sdlDebugKeysPressed[currKeyRow][currKeyCol] = false;
-				BEL_ST_ToggleDebugKeysKey(currKeyCol, currKeyRow, false, false);
 			}
 
-	BEL_ST_ToggleDebugKeysKey(g_sdlKeyboardUISelectedKeyX, g_sdlKeyboardUISelectedKeyY, true, false);
+	g_nOfTrackedFingers = 0; // Remove all tracked fingers
 	g_sdlForceGfxControlUiRefresh = true;
 }
 
 void BEL_ST_ReleasePressedKeysInControllerUI(void)
 {
-	if (g_sdlControllerUIPointerPressed)
-		BEL_ST_CheckReleasedPointerInControllerUI();
+	while (g_nOfTrackedFingers > 0)
+		BEL_ST_CheckReleasedPointerInControllerUI(g_sdlTrackedFingers[0].touchId, g_sdlTrackedFingers[0].fingerId);
 }
 
 void BEL_ST_ReleasePressedButtonsInTouchControls(void)
 {
-	while (nOfTrackedFingers > 0)
+	while (g_nOfTrackedFingers > 0)
 		BEL_ST_CheckReleasedPointerInTouchControls(g_sdlTrackedFingers[0].touchId, g_sdlTrackedFingers[0].fingerId);
 }
 
@@ -1560,10 +1945,46 @@ void BEL_ST_ReleasePressedButtonsInTouchControls(void)
 	g_sdlDpadIsShown = false;
 	g_sdlTextInputUIIsShown = false;
 	g_sdlDebugKeysUIIsShown = false;
+	g_sdlTouchControlsAreShown = false;
 
 	g_sdlForceGfxControlUiRefresh = true;
+}
 
-	BEL_ST_ConditionallyShowAltInputPointer();
+
+static void BEL_ST_CalcWindowDimsFromCfg(int *outWidth, int *outHeight)
+{
+	int windowWidthToSet = g_refKeenCfg.winWidth;
+	int windowHeightToSet = g_refKeenCfg.winHeight;
+	if (!windowWidthToSet || !windowHeightToSet)
+	{
+		if (g_sdlIsSoftwareRendered)
+		{
+			windowWidthToSet = 640;
+			windowHeightToSet = 480;
+		}
+		else
+		{
+			SDL_DisplayMode mode;
+			SDL_GetDesktopDisplayMode(g_refKeenCfg.displayNum, &mode);
+			// In the 200-lines modes on the VGA, where line doubling is in effect,
+			// and after adding the overscan borders, the aspect ratio for the whole output
+			// (after aspect correction i.e., multiplying height by 1.2) is 280:207.
+			if (207*mode.w < 280*mode.h) // Thinner than 280:207
+			{
+				mode.h = mode.w*207/280;
+			}
+			else  // As wide as 280:207 at the least
+			{
+				mode.w = mode.h*280/207;
+			}
+			// Just for the sake of it, using the golden ratio...
+			windowWidthToSet = mode.w*500/809;
+			windowHeightToSet = mode.h*500/809;
+		}
+	}
+
+	*outWidth = windowWidthToSet;
+	*outHeight = windowHeightToSet;
 }
 
 
@@ -1634,6 +2055,12 @@ static void BEL_ST_SetTouchControlsRects(void)
 		}
 	}
 }
+
+#ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
+bool g_sdlDoAbsMouseMotion;
+int g_sdlHostVirtualMouseCursorState[2];
+static int g_sdlHostVirtualMouseCursorSideLen;
+#endif
 
 void BEL_ST_SetGfxOutputRects(bool allowResize)
 {
@@ -1780,6 +2207,12 @@ void BEL_ST_SetGfxOutputRects(bool allowResize)
 
 	g_sdlDebugFingerRectSideLen = minWinDim/4;
 	BEL_ST_SetTouchControlsRects();
+
+#ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
+	g_sdlHostVirtualMouseCursorState[0] = winWidth/2;
+	g_sdlHostVirtualMouseCursorState[1] = winHeight/2;
+	g_sdlHostVirtualMouseCursorSideLen = minWinDim/64;
+#endif
 }
 
 void BEL_ST_ForceHostDisplayUpdate(void)
@@ -1797,6 +2230,54 @@ uint8_t *BE_ST_GetTextModeMemoryPtr(void)
 {
 	return g_sdlVidMem.text;
 }
+
+bool BE_ST_HostGfx_CanToggleAspectRatio(void)
+{
+	return (!g_sdlIsSoftwareRendered || g_refKeenCfg.forceFullSoftScaling);
+}
+
+bool BE_ST_HostGfx_GetAspectRatioToggle(void)
+{
+	return (g_refKeenCfg.scaleType == SCALE_FILL);
+}
+
+void BE_ST_HostGfx_SetAspectRatioToggle(bool aspectToggle)
+{
+	g_refKeenCfg.scaleType = aspectToggle ? SCALE_FILL : SCALE_ASPECT;
+	BEL_ST_SetGfxOutputRects(false);
+	BEL_ST_ForceHostDisplayUpdate();
+}
+
+bool BE_ST_HostGfx_CanToggleFullScreen(void)
+{
+#ifdef REFKEEN_CONFIG_USER_FULLSCREEN_TOGGLE
+	return true;
+#else
+	return false;
+#endif
+}
+
+bool BE_ST_HostGfx_GetFullScreenToggle(void)
+{
+	return ((SDL_GetWindowFlags(g_sdlWindow) & SDL_WINDOW_FULLSCREEN) == SDL_WINDOW_FULLSCREEN);
+}
+
+void BE_ST_HostGfx_SetFullScreenToggle(bool fullScreenToggle)
+{
+	if (fullScreenToggle)
+		SDL_SetWindowFullscreen(g_sdlWindow, (g_refKeenCfg.fullWidth && g_refKeenCfg.fullHeight) ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_FULLSCREEN_DESKTOP);
+	else
+		SDL_SetWindowFullscreen(g_sdlWindow, 0);
+
+	g_refKeenCfg.isFullscreen = BE_ST_HostGfx_GetFullScreenToggle();
+}
+
+#ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
+void BE_ST_HostGfx_SetAbsMouseCursorToggle(bool cursorToggle)
+{
+	g_sdlDoAbsMouseMotion = cursorToggle;
+}
+#endif
 
 static uint32_t g_sdlEGACurrBGRAPaletteAndBorder[17], g_sdlEGACurrBGRAPaletteAndBorderCache[17];
 
@@ -2013,12 +2494,14 @@ void BE_ST_EGAFetchGFXBufferFromPlane(uint8_t *destPtr, uint16_t srcOff, uint16_
 
 void BE_ST_EGAUpdateGFXBitsFrom4bitsPixel(uint16_t destOff, uint8_t color, uint8_t bitsMask)
 {
+	color &= 0xF; // We may get a larger value in The Catacombs Armageddon (sky color)
 	g_sdlVidMem.egaGfx[destOff] = (g_sdlVidMem.egaGfx[destOff] & ~g_be_st_lookup_bitsmask[bitsMask]) | (g_be_st_lookup_repeat[color] & g_be_st_lookup_bitsmask[bitsMask]);
 	g_sdlDoRefreshGfxOutput = true;
 }
 
 void BE_ST_EGAUpdateGFXBufferFrom4bitsPixel(uint16_t destOff, uint8_t color, uint16_t count)
 {
+	color &= 0xF; // We may get a larger value in The Catacombs Armageddon (sky color)
 	BEL_ST_EGAPlane_MemSet(g_sdlVidMem.egaGfx, destOff, color, count);
 	g_sdlDoRefreshGfxOutput = true;
 }
@@ -2298,7 +2781,7 @@ static void BEL_ST_FinishHostDisplayUpdate(void)
 		SDL_SetRenderDrawColor(g_sdlRenderer, 0xFF, 0x00, 0x00, 0xBF); // Includes some alpha
 		SDL_SetRenderDrawBlendMode(g_sdlRenderer, SDL_BLENDMODE_BLEND);
 		BESDLTrackedFinger *trackedFinger = g_sdlTrackedFingers;
-		for (int i = 0; i < nOfTrackedFingers; ++i, ++trackedFinger)
+		for (int i = 0; i < g_nOfTrackedFingers; ++i, ++trackedFinger)
 		{
 			SDL_Rect rect = {trackedFinger->lastX-g_sdlDebugFingerRectSideLen/2, trackedFinger->lastY-g_sdlDebugFingerRectSideLen/2, g_sdlDebugFingerRectSideLen, g_sdlDebugFingerRectSideLen};
 			SDL_RenderFillRect(g_sdlRenderer, &rect);
@@ -2306,12 +2789,12 @@ static void BEL_ST_FinishHostDisplayUpdate(void)
 		SDL_SetRenderDrawBlendMode(g_sdlRenderer, SDL_BLENDMODE_NONE);
 	}
 
-	if (g_refKeenCfg.enableTouchInput && (g_sdlControllerMappingActualCurr->touchMappings != NULL)) // FIXME use a different state bool var?
+	if (g_sdlShowTouchUI && g_sdlTouchControlsAreShown)
 	{
 		for (int i = 0; i < g_sdlNumOfOnScreenTouchControls; ++i)
 			SDL_RenderCopy(g_sdlRenderer, g_sdlOnScreenTouchControlsTextures[i], NULL, &g_sdlOnScreenTouchControlsRects[i]);
 	}
-	if (g_sdlShowControllerUI || g_refKeenCfg.enableTouchInput)
+	if (g_sdlShowControllerUI || g_sdlShowTouchUI)
 	{
 		if (g_sdlFaceButtonsAreShown)
 		{
@@ -2334,9 +2817,16 @@ static void BEL_ST_FinishHostDisplayUpdate(void)
 	SDL_RenderPresent(g_sdlRenderer);
 }
 
+static uint32_t g_be_sdlLastRefreshTicks = 0;
 
 void BEL_ST_UpdateHostDisplay(void)
 {
+	// Refresh graphics from time to time in case a part of the window is overridden by anything,
+	// like the Steam Overlay.
+	uint32_t currRefreshTicks = SDL_GetTicks();
+	if (currRefreshTicks - g_be_sdlLastRefreshTicks >= 100)
+		g_sdlForceGfxControlUiRefresh = true;
+
 	if (g_sdlScreenMode == 3) // Text mode
 	{
 		// For graphics modes we don't have to refresh if g_sdlDoRefreshGfxOutput is set to false,
@@ -2515,18 +3005,35 @@ dorefresh:
 	SDL_RenderClear(g_sdlRenderer);
 	SDL_SetRenderDrawColor(g_sdlRenderer, (g_sdlEGACurrBGRAPaletteAndBorder[16]>>16)&0xFF, (g_sdlEGACurrBGRAPaletteAndBorder[16]>>8)&0xFF, g_sdlEGACurrBGRAPaletteAndBorder[16]&0xFF, SDL_ALPHA_OPAQUE);
 	SDL_RenderFillRect(g_sdlRenderer, &g_sdlAspectCorrectionBorderedRect);
+#ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
+	if (g_sdlDoAbsMouseMotion && g_sdlControllerMappingActualCurr->absoluteFingerPositioning)
+	{
+		SDL_SetRenderDrawColor(g_sdlRenderer, 0xFF, 0x00, 0x00, SDL_ALPHA_OPAQUE);
+		SDL_Rect rect = {g_sdlHostVirtualMouseCursorState[0]-g_sdlHostVirtualMouseCursorSideLen/2, g_sdlHostVirtualMouseCursorState[1]-g_sdlHostVirtualMouseCursorSideLen/2, g_sdlHostVirtualMouseCursorSideLen, g_sdlHostVirtualMouseCursorSideLen};
+		SDL_RenderFillRect(g_sdlRenderer, &rect);
+	}
+#endif
 
 	if (g_sdlTargetTexture)
 	{
-		SDL_SetRenderTarget(g_sdlRenderer, g_sdlTargetTexture);
+		if (SDL_SetRenderTarget(g_sdlRenderer, g_sdlTargetTexture) != 0)
+		{
+			BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "BEL_ST_UpdateHostDisplay: Failed to set target texture as render target (disabling),\n%s\n", SDL_GetError());
+			BEL_ST_SDLDestroyTextureWrapper(&g_sdlTargetTexture);
+			g_sdlTargetTexture = NULL;
+			goto refreshwithnorendertarget;
+		}
 		SDL_RenderCopy(g_sdlRenderer, g_sdlTexture, NULL, NULL);
-		SDL_SetRenderTarget(g_sdlRenderer, NULL);
+		if (SDL_SetRenderTarget(g_sdlRenderer, NULL) != 0)
+			BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "BEL_ST_UpdateHostDisplay: Failed to set default render target!\n%s\n", SDL_GetError());
 		SDL_RenderCopy(g_sdlRenderer, g_sdlTargetTexture, NULL, &g_sdlAspectCorrectionRect);
 	}
 	else
 	{
+refreshwithnorendertarget:
 		SDL_RenderCopy(g_sdlRenderer, g_sdlTexture, NULL, &g_sdlAspectCorrectionRect);
 	}
 
 	BEL_ST_FinishHostDisplayUpdate();
+	g_be_sdlLastRefreshTicks = SDL_GetTicks();
 }

@@ -41,7 +41,7 @@ static void show_command_line_help()
 	}
 
 	// HACK - For text mode emulation (and exit handler)
-	BE_ST_PrepareForGameStartup();
+	BE_ST_PrepareForGameStartupWithoutAudio();
 
 	BE_ST_puts("*** " REFKEEN_TITLE_AND_VER_STRING " - Command line arguments ***");
 	BE_ST_puts("");
@@ -78,6 +78,17 @@ int main(int argc, char **argv)
 	bool skipIntro = false;
 #endif
 	int selectedGameVerVal = BE_GAMEVER_LAST;
+
+#ifdef REFKEEN_PLATFORM_OSX
+	// A weird OS X hack, ignoring an argument possibly passed
+	// if the app is launched from Finder (or with "open" command)
+	if ((argc >= 2) && !strncmp(argv[1], "-psn_", 5))
+	{
+		++argv;
+		--argc;
+	}
+#endif
+
 #ifdef REFKEEN_ENABLE_LAUNCHER
 	bool startLauncher = (argc == 1);
 #endif

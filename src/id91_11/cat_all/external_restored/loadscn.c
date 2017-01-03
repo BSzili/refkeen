@@ -84,7 +84,7 @@ void id0_loadscn_exe_main (void)
 	ext_MoveGfxDst(0, 200);
 	UnpackEGAShapeToScreen(&armashape, 0, 0);
 #ifndef __AMIGA__
-	// (REFKEEN) Add an artificial (screen not shown immediately on older machines)
+	// (REFKEEN) Add an artificial delay (screen not shown immediately on older machines)
 	BE_ST_Delay(250);
 #endif
 	ScreenToScreen(8000, 0, 40, 200);

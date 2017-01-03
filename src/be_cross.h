@@ -169,6 +169,16 @@ void BE_Cross_PrepareAppPaths(void);
 
 #define BE_CROSS_MAX_ROOT_PATHS 32
 
+// Describes a required file from a specific game version
+typedef struct {
+	const char *filename;
+	int filesize;
+	uint32_t crc32;
+} BE_GameFileDetails_T;
+
+// Maps each game version to an array of game file details, ending with a NULL entry (filename == NULL)
+extern const BE_GameFileDetails_T *g_be_gamefiledetails_ptrs[];
+
 const char *BE_Cross_GetGameInstallationDescription(int num);
 int BE_Cross_GetGameVerFromInstallation(int num);
 extern int g_be_gameinstallations_num;
@@ -184,9 +194,18 @@ void BE_Cross_DirSelection_Finish(void); // Finish dir selection
 const char **BE_Cross_DirSelection_GetNext(int dirIndex, int *outNumOfSubDirs); // Enter dir by index into last array
 const char **BE_Cross_DirSelection_GetPrev(int *outNumOfSubDirs); // Go up in the filesystem hierarchy
 
+// If select game version has digitized sounds with a common sample rate,
+// then this rate is returned, otherwise 0 is returned.
+int BE_Cross_GetSelectedGameVerSampleRate(void);
+
+typedef char BE_TryAddGameInstallation_ErrorMsg_T[40];
+
 // Attempt to add a game installation from currently selected dir;
 // Returns BE_GAMEVER_LAST if no new supported game version is found; Otherwise game version id is returned.
-int BE_Cross_DirSelection_TryAddGameInstallation(void);
+// The given array is used in order to report an error for each checked version, in case of failure.
+//
+// Array MUST have at least BE_GAMEVER_LAST elements.
+int BE_Cross_DirSelection_TryAddGameInstallation(BE_TryAddGameInstallation_ErrorMsg_T errorMsgsArray[]);
 
 // Often used as a replacement for file handles of type "int",
 // this one is given a different name so it's easy to swap in case of a need
@@ -196,6 +215,10 @@ typedef FILE * BE_FILE_T;
 static
 #endif
 inline BE_FILE_T BE_Cross_IsFileValid(BE_FILE_T fp) { return fp; }
+#ifdef __AMIGA__
+static
+#endif
+inline BE_FILE_T BE_Cross_GetNilFile(void) { return NULL; }
 #ifdef __AMIGA__
 static
 #endif
@@ -273,8 +296,10 @@ size_t BE_Cross_read_EnumType_From16LE(BE_FILE_T fp, EnumType *ptr);
 #endif
 // boolean implementation may be separated from enums, otherwise it's the same
 size_t BE_Cross_read_boolean_From16LE(BE_FILE_T fp, bool *ptr);
+size_t BE_Cross_read_boolean_From32LE(BE_FILE_T fp, bool *ptr);
 // booleans buffer
 size_t BE_Cross_read_booleans_From16LEBuffer(BE_FILE_T fp, bool *ptr, size_t nbyte);
+size_t BE_Cross_read_booleans_From32LEBuffer(BE_FILE_T fp, bool *ptr, size_t nbyte);
 
 // Same but for writing
 size_t BE_Cross_writeInt8LE(BE_FILE_T fp, const void *ptr);
@@ -288,7 +313,9 @@ size_t BE_Cross_write_EnumType_To16LE(BE_FILE_T fp, const EnumType *ptr);
 #endif
 
 size_t BE_Cross_write_boolean_To16LE(BE_FILE_T fp, const bool *ptr);
+size_t BE_Cross_write_boolean_To32LE(BE_FILE_T fp, const bool *ptr);
 size_t BE_Cross_write_booleans_To16LEBuffer(BE_FILE_T fp, const bool *ptr, size_t nbyte);
+size_t BE_Cross_write_booleans_To32LEBuffer(BE_FILE_T fp, const bool *ptr, size_t nbyte);
 
 // Assuming segPtr is replacement for a 16-bit segment pointer, and offInSegPtr
 // is a replacement for an offset in this segment (pointing to a place in the
@@ -316,6 +343,12 @@ uint16_t BE_Cross_Compat_GetFarPtrRelocationSegOffset(void);
 // Alternatives for Borland's randomize and random macros used in Catacomb Abyss
 void BE_Cross_Brandomize(void);
 int16_t BE_Cross_Brandom(int16_t num);
+
+// UNSAFE alternative for Borland's getdate function used in Keen Dreams v1.00;
+//
+// Do NOT call the function from multiple threads!
+// (Internally it uses localtime, which isn't thread-safe on Linux.)
+void BE_Cross_GetLocalDate_UNSAFE(int *y, int *m, int *d);
 
 // Hack for Catacomb Abyss' INTRO and LOADSCN
 #ifdef __AMIGA__

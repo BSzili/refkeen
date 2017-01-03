@@ -1303,7 +1303,7 @@ extern id0_byte_t fontcolor/*= 15*/; // 0-15 mapmask value
 //#define charwidth		514	// every character's width in pixels
 
 
-//id0_word_t propchar; // the character number to shift // UNUSED VARIABLE
+//id0_word_t propchar; // the character number to shift // REFKEEN - UNUSED VARIABLE
 //id0_char_t *stringptr; // REFKEEN - UNUSED VARIABLE
 
 
@@ -1851,7 +1851,7 @@ ENDP
 // (REFKEEN) Used for patching version-specific stuff
 void RefKeen_Patch_id_vw_ae(void)
 {
-	if (refkeen_current_gamever != BE_GAMEVER_KDREAMSC105)
+	if (GRMODE == EGAGR) // GRMODE *must* be patched first
 	{
 		VW_MaskBlock = VW_MaskBlock_EGA;
 		VW_MemToScreen = VW_MemToScreen_EGA;

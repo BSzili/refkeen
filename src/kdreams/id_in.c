@@ -499,17 +499,33 @@ IN_SetupJoy(id0_word_t joy,id0_word_t minx,id0_word_t maxx,id0_word_t miny,id0_w
 static id0_boolean_t
 INL_StartJoy(id0_word_t joy)
 {
-	id0_word_t x,y;
+	if (current_gamever_int == 100)
+	{
+		id0_boolean_t		result;
+		id0_word_t		x,y/*,d*/;
+		//JoystickDef	*def;
 
-	IN_GetJoyAbs(joy, &x, &y);
+		IN_GetJoyAbs(joy,&x,&y);
 
-	if (((x == 0) || (x > MaxJoyValue - 10)) ||
-		 ((y == 0) || (y > MaxJoyValue - 10)))
-		return(false);
+		result = (x < MaxJoyValue - 10);
+		if (result)
+			IN_SetupJoy(joy,0,x * 2,0,y * 2);
+		return(result);
+	}
 	else
 	{
-		IN_SetupJoy(joy, 0, x*2, 0, y*2);
-		return(true);
+		id0_word_t x,y;
+
+		IN_GetJoyAbs(joy, &x, &y);
+
+		if (((x == 0) || (x > MaxJoyValue - 10)) ||
+			 ((y == 0) || (y > MaxJoyValue - 10)))
+			return(false);
+		else
+		{
+			IN_SetupJoy(joy, 0, x*2, 0, y*2);
+			return(true);
+		}
 	}
 }
 
@@ -561,8 +577,8 @@ IN_Startup(void)
 	INL_StartKbd();
 	MousePresent = checkmouse? INL_StartMouse() : false;
 	// REFKEEN - Alternative controllers support
-	void FillControlPanelTouchMappings(bool withmouse);
-	FillControlPanelTouchMappings(MousePresent);
+	void FinalizeControlPanelMappingsByMousePresence(bool withmouse);
+	FinalizeControlPanelMappingsByMousePresence(MousePresent);
 	//
 
 	for (i = 0;i < MaxJoys;i++)
@@ -836,6 +852,9 @@ IN_SetControlType(id0_int_t player,ControlType type)
 {
 	// DEBUG - check that type is present?
 	Controls[player] = type;
+	// REFKEEN - Alternative controllers support
+	void UpdateGameplayMappingsByMousePresence(bool withmouse);
+	UpdateGameplayMappingsByMousePresence(MousePresent && (type == ctrl_Mouse));
 }
 
 ///////////////////////////////////////////////////////////////////////////
