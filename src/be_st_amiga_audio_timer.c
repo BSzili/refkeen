@@ -112,8 +112,8 @@ static void BEL_ST_LoadDigiSounds(void)
 	for (int i = 0; i < LASTSOUND; i++)
 	{
 		snprintf(filename, sizeof(filename), "asound%02d.raw", i);
-		//if ((fp = BE_Cross_open_readonly_for_reading(filename)))
-		if ((fp = fopen(filename, "rb")))
+		if ((fp = BE_Cross_open_readonly_for_reading(filename)))
+		//if ((fp = fopen(filename, "rb")))
 		{
 			int32_t nbyte = BE_Cross_FileLengthFromHandle(fp);
 			if ((g_digiSounds[i] = AllocVec(nbyte, MEMF_CHIP|MEMF_PUBLIC)))
@@ -441,4 +441,14 @@ void BE_ST_ShortSleep(void)
 void BE_ST_Delay(uint16_t msec) // Replacement for delay from dos.h
 {
 	Delay(msec/2);
+}
+
+// Keen Dreams 2015 digitized sounds playback
+
+void BE_ST_PlayS16SoundEffect(int16_t *data, int numOfSamples)
+{
+}
+
+void BE_ST_StopSoundEffect(void)
+{
 }

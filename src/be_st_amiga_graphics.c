@@ -480,6 +480,42 @@ uint8_t *BE_ST_GetTextModeMemoryPtr(void)
 	return g_textMemory;
 }
 
+
+bool BE_ST_HostGfx_CanToggleAspectRatio(void)
+{
+	return false;
+}
+
+bool BE_ST_HostGfx_GetAspectRatioToggle(void)
+{
+	return false;
+}
+
+void BE_ST_HostGfx_SetAspectRatioToggle(bool aspectToggle)
+{
+}
+
+bool BE_ST_HostGfx_CanToggleFullScreen(void)
+{
+	return false;
+}
+
+bool BE_ST_HostGfx_GetFullScreenToggle(void)
+{
+	return false;
+}
+
+void BE_ST_HostGfx_SetFullScreenToggle(bool fullScreenToggle)
+{
+}
+
+#ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
+void BE_ST_HostGfx_SetAbsMouseCursorToggle(bool cursorToggle)
+{
+}
+#endif
+
+
 void BE_ST_SetBorderColor(uint8_t color)
 {
 	D(bug("%s(%d)\n", __FUNCTION__, color));
@@ -1475,4 +1511,9 @@ void BE_ST_EGAMaskBlockSrcToSrc(int destOff, int linedelta, uint8_t *srcPtr, int
 		destOff += linedelta;
 		--height;
 	} while (height);
+}
+
+// touch control stubs
+void BE_ST_AltControlScheme_InitTouchControlsUI(BE_ST_OnscreenTouchControl *onScreenTouchControls)
+{
 }

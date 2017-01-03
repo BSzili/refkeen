@@ -78,6 +78,7 @@ const BE_ST_ControllerMapping *g_sdlControllerMappingActualCurr;
 static BE_ST_ControllerMapping g_sdlControllerMappingDefault;
 
 static void (*g_sdlKeyboardInterruptFuncPtr)(uint8_t) = 0;
+static void (*g_sdlAppQuitCallback)(void) = 0;
 extern struct Screen *g_amigaScreen;
 
 uint8_t g_sdlLastKeyScanCode;
@@ -480,7 +481,7 @@ static void BEL_ST_ShutdownInput(void)
 #endif
 }
 
-void BE_ST_PrepareForGameStartup(void)
+void BE_ST_PrepareForGameStartupWithoutAudio(void)
 {
 #ifndef USE_INPUT_DEVICE
 	SystemControl(
@@ -493,7 +494,7 @@ void BE_ST_PrepareForGameStartup(void)
 	if (BEL_ST_InitInput())
 	{
 		BE_ST_InitGfx();
-		BE_ST_InitAudio();
+		//BE_ST_InitAudio();
 
 		// Preparing a controller scheme (with no special UI) in case the relevant feature is enabled
 		g_sdlControllerMappingPtrsStack.stack[0] = &g_sdlControllerMappingDefault;
@@ -874,6 +875,11 @@ void BE_ST_AltControlScheme_PrepareControllerMapping(const BE_ST_ControllerMappi
 void BE_ST_AltControlScheme_UpdateVirtualMouseCursor(int x, int y)
 {
 	// unused
+}
+
+void BE_ST_SetAppQuitCallback(void (*funcPtr)(void))
+{
+	g_sdlAppQuitCallback = funcPtr;
 }
 
 void BE_ST_PollEvents(void)

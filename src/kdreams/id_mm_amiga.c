@@ -32,6 +32,7 @@ typedef struct mmnodestruct
 #ifdef USE_NODE_SIZE
 	id0_unsigned_long_t size;
 #endif
+	id0_unsigned_t attributes;
 } mmnodetype;
 
 mminfotype	mminfo;
@@ -208,4 +209,31 @@ id0_long_t MM_TotalFree (void)
 void MM_BombOnError (id0_boolean_t bomb)
 {
 	bombonerror = bomb;
+}
+
+id0_unsigned_t MM_GetAttributes (memptr *baseptr)
+{
+	mmnodetype *node;
+
+	//bug("%s(%p)\n", __FUNCTION__, baseptr);
+
+	if (!baseptr || !*baseptr)
+		return;
+
+	node = ((mmnodetype *)*baseptr - 1);
+
+	return node->attributes;
+}
+
+void MM_SetAttributes (memptr *baseptr, id0_unsigned_t attributes)
+{
+	mmnodetype *node;
+
+	//bug("%s(%p,%d)\n", __FUNCTION__, baseptr, attributes);
+
+	if (!baseptr || !*baseptr)
+		return;
+
+	node = ((mmnodetype *)*baseptr - 1);
+	node->attributes = attributes;
 }
