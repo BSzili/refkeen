@@ -248,33 +248,17 @@ const emulatedDOSKeyEvent sdlKeyMappings[128] = {
 
 static void BEL_ST_HandleEmuKeyboardEvent(bool isPressed, emulatedDOSKeyEvent keyEvent)
 {
-	if (keyEvent.dosScanCode == BE_ST_SC_PAUSE)
+	if (g_sdlKeyboardInterruptFuncPtr)
 	{
-		if (isPressed && g_sdlKeyboardInterruptFuncPtr)
+		if (keyEvent.isSpecial)
 		{
-			// SPECIAL: 6 scancodes sent on key press ONLY
-			g_sdlKeyboardInterruptFuncPtr(0xe1);
-			g_sdlKeyboardInterruptFuncPtr(0x1d);
-			g_sdlKeyboardInterruptFuncPtr(0x45);
-			g_sdlKeyboardInterruptFuncPtr(0xe1);
-			g_sdlKeyboardInterruptFuncPtr(0x9d);
-			g_sdlKeyboardInterruptFuncPtr(0xc5);
+			g_sdlKeyboardInterruptFuncPtr(0xe0);
 		}
+		g_sdlKeyboardInterruptFuncPtr(keyEvent.dosScanCode | (isPressed ? 0 : 0x80));
 	}
-	else
+	else if (isPressed)
 	{
-		if (g_sdlKeyboardInterruptFuncPtr)
-		{
-			if (keyEvent.isSpecial)
-			{
-				g_sdlKeyboardInterruptFuncPtr(0xe0);
-			}
-			g_sdlKeyboardInterruptFuncPtr(keyEvent.dosScanCode | (isPressed ? 0 : 0x80));
-		}
-		else if (isPressed)
-		{
-			g_sdlLastKeyScanCode = keyEvent.dosScanCode;
-		}
+		g_sdlLastKeyScanCode = keyEvent.dosScanCode;
 	}
 }
 
@@ -287,9 +271,7 @@ static struct InputEvent * __saveds BEL_ST_InputHandler(register struct InputEve
 	if (g_amigaScreen != IntuitionBase->FirstScreen)
 		return moo;
 
-	coin = moo;
-
-	do
+	for (coin = moo; coin; coin = coin->ie_NextEvent)
 	{
 		isPressed = !(coin->ie_Code & IECODE_UP_PREFIX);
 		scanCode = coin->ie_Code & ~IECODE_UP_PREFIX;
@@ -324,9 +306,7 @@ static struct InputEvent * __saveds BEL_ST_InputHandler(register struct InputEve
 			g_mx += coin->ie_position.ie_xy.ie_x;
 			g_my += coin->ie_position.ie_xy.ie_y;
 		}
-
-		coin = coin->ie_NextEvent;
-	} while (coin);
+	}
 
 	return moo;
 }
