@@ -1,7 +1,7 @@
 // This header MUST be included early, so macros can be properly used
 
-#ifndef _REFKEEN_CONFIG_H_
-#define _REFKEEN_CONFIG_H_
+#ifndef REFKEEN_CONFIG_H
+#define REFKEEN_CONFIG_H
 
 // BIG ***FIXME*** - Should probably be externally generated instead
 
@@ -25,8 +25,10 @@
 
 #ifdef __APPLE__
 #include "TargetConditionals.h"
-#if (!defined TARGET_OS_IPHONE) && (!defined TARGET_IPHONE_SIMULATOR)
-#define REFKEEN_PLATFORM_OSX
+// Depending on the SDK version, TARGET_OS_IPHONE may either be
+// undefined, or defined to 0. So check the macros this way.
+#if (!TARGET_OS_IPHONE && !TARGET_IPHONE_SIMULATOR)
+#define REFKEEN_PLATFORM_MACOS
 #endif
 #endif
 
@@ -38,7 +40,7 @@
 #define REFKEEN_PLATFORM_EMSCRIPTEN
 #endif
 
-#if (defined __unix__) || (defined __unix) || (defined unix)
+#if (defined __unix__) || (defined __unix) || (defined unix) || (defined __APPLE__)
 #define REFKEEN_PLATFORM_UNIX
 #endif
 
@@ -51,6 +53,14 @@
 #define REFKEEN_CONFIG_USER_FULLSCREEN_RES_SETTING
 #define REFKEEN_CONFIG_LAUNCHER_WINDOWTYPE_MENUITEM
 #define REFKEEN_CONFIG_CHECK_FOR_STEAM_INSTALLATION
+#define REFKEEN_CONFIG_ENABLE_CMDLINE
+#endif
+
+// On the Mac, usage of multitouch trackpad may lead to SDL2
+// finger events, and these should not be mistakenly
+// processed as touchscreen input
+#ifndef REFKEEN_PLATFORM_MACOS
+#define REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 #endif
 
 #ifdef REFKEEN_PLATFORM_ANDROID

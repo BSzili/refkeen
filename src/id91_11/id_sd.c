@@ -78,7 +78,8 @@
 				NeedsDigitized,NeedsMusic;
 	SDMode		SoundMode;
 	SMMode		MusicMode;
-	// NEVER accessed directly now - done from backend via functions
+	// NEVER accessed directly now - Done via wrapper functions
+static	id0_longword_t	TimeCount;
 	//id0_longword_t	TimeCount;
 	id0_word_t		HackCount;
 	SoundCommon		**SoundTable;
@@ -154,7 +155,7 @@ static	id0_long_t			sqHackTime;
 static void
 SDL_SetTimer0(id0_word_t speed)
 {
-	BE_ST_SetTimer(speed, (MusicMode == smm_AdLib)); // HACK for different timing with music on
+	BE_ST_SetTimer(speed);
 #if 0
 #ifndef TPROF	// If using Borland's profiling, don't screw with the timer
 	outportb(0x43,0x36);				// Change timer 0
@@ -413,7 +414,7 @@ asm	out	0x61,al
 void
 alOut(id0_byte_t n,id0_byte_t b)
 {
-	BE_ST_ALOut(n, b);
+	BE_ST_OPL2Write(n, b);
 #if 0
 asm	pushf
 asm	cli
@@ -1102,9 +1103,9 @@ SD_Startup(void)
 	/*** (REFKEEN) UNUSED ***/
 	//SDL_InitDelay();			// SDL_InitDelay() uses t0OldService
 
-	BE_ST_StartAudioSDService(&SDL_t0Service);
+	BE_ST_StartAudioAndTimerInt(&SDL_t0Service);
 	//setvect(8,SDL_t0Service);	// Set to my timer 0 ISR
-	/*LocalTime = TimeCount =*/ alTimeCount = 0;
+	/*LocalTime = */TimeCount = alTimeCount = 0;
 
 	SD_SetSoundMode(sdm_Off);
 #if USE_MUSIC
@@ -1185,7 +1186,7 @@ SD_Shutdown(void)
 	if (!SD_Started)
 		return;
 
-	BE_ST_StopAudioSDService();
+	BE_ST_StopAudioAndTimerInt();
 
 #if USE_MUSIC
 	SD_MusicOff();
@@ -1200,7 +1201,7 @@ SD_Shutdown(void)
 	SDL_SetTimer0(0);
 
 // Do NOT call this here - A deadlock is a possibility (via recursive lock)
-//	BE_ST_StopAudioSDService(void);
+//	BE_ST_StopAudioAndTimerInt(void);
 //	setvect(8,t0OldService);
 
 	BE_ST_UnlockAudioRecursively();
@@ -1447,6 +1448,42 @@ SD_MusicPlaying(void)
 #endif // USE_MUSIC
 
 // Replacements for direct accesses to TimeCount variable
-// (should be instantiated here even if inline, as of C99)
-id0_longword_t SD_GetTimeCount(void);
-void SD_SetTimeCount(id0_longword_t newcount);
+
+// Clone of "count" var from SDL_t0Service
+static id0_word_t g_t0CountClone = 1;
+
+id0_longword_t SD_GetTimeCount(void)
+{
+	const int factor = (MusicMode == smm_AdLib) ? 8 : 2;
+	int intCallsCount = BE_ST_TimerIntClearLastCalls();
+	TimeCount += (intCallsCount + (g_t0CountClone % factor)) / factor;
+	g_t0CountClone += intCallsCount;
+	return TimeCount;
+}
+
+void SD_SetTimeCount(id0_longword_t newcount)
+{
+	BE_ST_TimerIntClearLastCalls();
+	TimeCount = newcount;
+}
+
+void SD_AddToTimeCount(id0_longword_t count)
+{
+	TimeCount += count;
+}
+
+// C99
+void SD_TimeCountWaitFromSrc(id0_longword_t src, id0_int_t ticks);
+void SD_TimeCountWaitTicks(id0_int_t ticks);
+
+void SD_TimeCountWaitForDest(id0_longword_t dst)
+{
+	id0_long_t diff = (id0_long_t)(dst - TimeCount);
+	if (diff <= 0)
+		return;
+	const int factor = (MusicMode == smm_AdLib) ? 8 : 2;
+	int intCallsCount = factor*diff - (g_t0CountClone % factor);
+	BE_ST_TimerIntCallsDelayWithOffset(intCallsCount);
+	TimeCount = dst;
+	g_t0CountClone += intCallsCount;
+}

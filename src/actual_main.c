@@ -1,4 +1,4 @@
-/* Copyright (C) 2014-2016 NY00123
+/* Copyright (C) 2014-2017 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -17,9 +17,13 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "id_heads.h"
+#include "refkeen.h"
 #ifndef __AMIGA__
 #include "SDL_main.h"
+#endif
+
+#if (!defined REFKEEN_ENABLE_LAUNCHER) && (!defined REFKEEN_CONFIG_ENABLE_CMDLINE)
+#error "At least one of REFKEEN_ENABLE_LAUNCHER and REFKEEN_CONFIG_ENABLE_CMDLINE must be defined!"
 #endif
 
 int id0_argc;
@@ -28,6 +32,7 @@ const char **id0_argv;
 const char *be_main_arg_datadir = NULL;
 const char *be_main_arg_newcfgdir = NULL;
 
+#ifdef REFKEEN_CONFIG_ENABLE_CMDLINE
 static void show_command_line_help()
 {
 	char gameverstrbuffer[80] = "";
@@ -68,10 +73,14 @@ static void show_command_line_help()
 	BE_ST_printf("%s\n", gameverstrbuffer);
 	BE_ST_HandleExit(0);
 }
+#endif // REFKEEN_CONFIG_ENABLE_CMDLINE
 
 int main(int argc, char **argv)
 {
 	BE_ST_InitCommon();
+
+#ifdef REFKEEN_CONFIG_ENABLE_CMDLINE
+
 	// Parse arguments
 	bool showHelp = false;
 #ifdef REFKEEN_VER_CATADVENTURES
@@ -79,7 +88,7 @@ int main(int argc, char **argv)
 #endif
 	int selectedGameVerVal = BE_GAMEVER_LAST;
 
-#ifdef REFKEEN_PLATFORM_OSX
+#ifdef REFKEEN_PLATFORM_MACOS
 	// A weird OS X hack, ignoring an argument possibly passed
 	// if the app is launched from Finder (or with "open" command)
 	if ((argc >= 2) && !strncmp(argv[1], "-psn_", 5))
@@ -199,6 +208,14 @@ int main(int argc, char **argv)
 #endif
 		}
 	}
+
+#else // REFKEEN_CONFIG_ENABLE_CMDLINE
+
+	BE_Cross_PrepareGameInstallations();
+	BE_Launcher_Start();
+
+#endif // REFKEEN_CONFIG_ENABLE_CMDLINE
+
 	BE_ST_ShutdownAll();
 	return 0;
 }

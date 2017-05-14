@@ -1,4 +1,4 @@
-/* Copyright (C) 2015-2016 NY00123
+/* Copyright (C) 2015-2017 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -53,7 +53,7 @@ extern const uint8_t g_cga_8x8TextFont[256*8*8];
 
 static uint8_t *g_be_launcher_screenPtr;
 
-static BEMenu *g_be_launcher_currMenu;
+/*static*/ BEMenu *g_be_launcher_currMenu;
 static BEMenuItem **g_be_launcher_selectedMenuItemPtr;
 
 bool g_be_launcher_wasAnySettingChanged;
@@ -374,7 +374,7 @@ static void BEL_Launcher_DrawMenuItems(BEMenu *menu)
 	BE_ST_Launcher_MarkGfxCache();
 }
 
-static void BEL_Launcher_SetCurrentMenu(BEMenu *menu)
+/*static*/ void BEL_Launcher_SetCurrentMenu(BEMenu *menu)
 {
 	g_be_launcher_currMenu = menu;
 	g_be_launcher_selectedMenuItemPtr = menu->menuItems;

@@ -14,8 +14,11 @@ Terms of use
 Reflection Keen and the DBOPL emulator are released under the GNU GPLv2+.
 See LICENSE for more details.
 
-Furthermore, the included CRC-32 implementation is in the public domain. The
-same applies to the modified unlzexe source (based on UNLZEXE.DOC from v0.4).
+The included depklite implementation, a modification of ExeUnpacker,
+is released under the MIT License. See LICENSE-depklite for details.
+
+The included CRC-32 implementation is in the public domain. The same
+applies to the modified unlzexe source (based on UNLZEXE.DOC from v0.4).
 
 Note that these terms do not cover any original game data required for usage
 with Reflection Keen, which should be obtained separately. Check below for
@@ -113,13 +116,25 @@ Reflection Keen consists of ports of Keen Dreams and all 3D Catacomb games.
 Note that these ports do not come with a copy of any game, which is required.
 Look below for mentions of "game data" to find possible sources for these.
 
+-------------------
+Supported platforms
+-------------------
+
+Reflection Keen builds for Windows, Linux and Android are available.
+Thanks to external assistance, it was also made possible to
+build Reflection Keen for OS X/macOS, but this isn't
+well-tested due to lack of access to a Mac.
+
 ----------------------------------------------
 Supported game data, described by DOS versions
 ----------------------------------------------
 
-- Keen Dreams: Shareware (EGA) v1.13, CGA v1.05, Registered (EGA) v1.93
-and Shareware (EGA) v1.20. There's also partial support for the data
-from the 2015 re-release (Steam / IndieGameStand).
+- Keen Dreams: Registered CGA+EGA v1.00, Shareware (EGA) v1.13,
+CGA v1.05, Registered (EGA) v1.93 and Shareware (EGA) v1.20.
+There's also partial support for the data from the 2015 re-release
+(Steam / IndieGameStand). However, this may fail to work with
+the game as downloaded via the Steam client on Windows,
+due to minor differences in GAMETEXT.KDR.
 - Catacomb 3-D (The Descent): Versions 1.00 and 1.22.
 - The Catacomb Abyss: Versions 1.13 (QA [0], Shareware) and 1.24 (rev 1).
 - The Catacomb Armageddon: Version 1.02 (rev 1).
@@ -152,6 +167,10 @@ data, it is still recommended to use data from any of the supported
 DOS versions. In particular, the Reflection Keen Dreams codebase
 is known to be internally different from the re-release's
 codebase in many ways.
+
+Also, this will *not* work with the 2015 re-release as downloaded
+from Steam on Windows, due to minor differences in GAMETEXT.KDR;
+Or at least, not as of this release of Reflection Keen.
 
 Links to stores' pages:
 - http://store.steampowered.com/app/356200/
@@ -241,6 +260,7 @@ with ".cfg".
 These are the default locations for the configuration file:
 
 - Windows: %APPDATA%\reflection-keen.
+- OS X/macOS (not well-tested): ~/Library/Application Support/reflection-keen
 - Linux: $XDG_CONFIG_HOME/reflection-keen, if $XDG_CONFIG_HOME is defined
 and filled. Otherwise, ~/.config/reflection-keen.
 - Android: This is separated per installed Android app. For Keen Dreams,
@@ -265,6 +285,7 @@ of the games (although there may be exceptions).
 These are the default locations for the various files:
 
 - Windows: %APPDATA%\reflection-keen.
+- OS X/macOS (not well-tested): ~/Library/Application Support/reflection-keen
 - Linux: $XDG_DATA_HOME/reflection-keen, if $XDG_DATA_HOME is defined
 and filled. Otherwise, ~/.local/share/reflection-keen.
 - Android: Same as the location of the configuration file.
@@ -469,6 +490,9 @@ along with support for Android.
 - On Windows and Linux, multi-touch input is disabled by default, because there
 are chances such input may arrive from a multi-touch trackpad
 (at least on Macs).
+- In fact, if you're running Reflection Keen on OS X/macOS
+(not well-tested), then multi-touch input is not supported at all.
+Two-finger scrolling should still work in the launcher, though.
 - On Android, multi-touch input is auto-detected by default. This means
 that touch controls should be shown while touch input is in use, and hidden
 once you begin using a different input device (like a game controller).
@@ -584,6 +608,20 @@ while in the "src/kdreams" subtree (you can still pass e.g., RESAMPLER=NONE).
 For The Catacomb Abyss, it is "src/id91_11/cat_all/catabyss", and there are
 two more such subdirectories for The Catacomb Armageddon and Apocalypse.
 
+-----------------------------------------------------------------
+Building the ports from the source codes - OS X/macOS executables
+-----------------------------------------------------------------
+
+Due to the lack of direct access to a Mac, this was done using external
+assistance and isn't well-tested. In general, you should be able to
+follow the above instructions for building Linux executables,
+while using the clang compiler as available from Xcode.
+
+Note that you might have to pass "CXX=clang" to GNU make. For building as C++,
+you might have to pass "CXX=clang++", in addition to "BUILDASCPP=1".
+
+Further note that a successful build's output is a whole application bundle.
+
 --------------------------------------------------------------
 Building the ports from the source codes - Windows executables
 --------------------------------------------------------------
@@ -684,6 +722,7 @@ Original sources this is based on
 - The DBOPL emulator from the DOSBox project.
 - A CRC-32 implementation.
 - unlzexe v0.8.
+- depklite, a modification (mostly a C port) of ExeUnpacker from OpenTESArena.
 
 --------------------------------------------
 Additional sources/data used for these ports
@@ -749,6 +788,13 @@ the DOSBox debugger has surely (seriously) been very useful.
 Vesselin Bontchev (and possibly others) for their contributions leading to
 unlzexe v0.8.
 
+* Past and present developers of OpenTESArena, as well as other contributors,
+including afritz1, Allofich, Dozayon, kcat, mdmallardi, pcercuei and Ragora.
+OpenTESArena is an open-source re-implementation of The Elder Scrolls: Arena.
+A component of OpenTESArena, ExeUnpacker, was modified into depklite
+(mostly a port of ExeUnpacker from C++11 to C99), which is used to
+unpack Keen Dreams v1.00 executables (originally packed using PKLITE).
+
 * Craig Bruce for his CRC-32 implementation.
 
 * Richard Mandel for releasing original source codes for the complete
@@ -767,6 +813,54 @@ say to all of you, that you should be considered special here. :)
 ---------
 Changelog
 ---------
+
+Apr 01, 2017 (v0.17.0):
+
+* A POSSIBLE REGRESSION: An unexpectedly low(er) framerate may be reproduced
+on Android, at least in the Catacombs.
+* ANOTHER WARNING: If the classic controller scheme is in use, then
+re-calibration may be required. This is the case due to a few internal changes,
+with one of them fixing a possible division by zero error. The latter could
+be reproduced in Keen Dreams v1.00, for which support is now in (see below).
+* Not well-tested: Launcher window is now positioned in the same display as
+the in-game window, in multi-display setups. Also, there's a new setting,
+which tells if the last display is saved for later runs.
+It's toggled on by default.
+* -cfgdir related bug fix, timing fixes and other misc. fixes.
+* If you don't mind building your own binaries from the sources,
+then compatibility with OS X/macOS is now in (thanks rhoenie and Dominus).
+Note that this isn't well-tested, due to the lack of direct access to a Mac.
+* Added support for Keen Dreams v1.00. Internally, this includes the
+ability to read data from KDREAMS.EXE as originally released, being
+packed with PKLITE v1.05. Doing this is now possible thanks to depklite,
+which is more-or-less a port from C++11 to C99 of OpenTESArena's ExeUnpacker.
+* Known issue: Warping to a non-existant level in Keen Dreams v1.00
+(e.g., level 6) may, essentially, lead to undefined behaviors.
+* Added partial support for the Keen Dreams 2015 re-release
+(Steam, IndieGameStand). Note that this support is essentially a bonus, and
+it's still recommended to use the data from a supported DOS version. A great
+deal of updates were for sound playback support, but there's more than that.
+* Also, as of this release of Reflection Keen, this will *not* work with
+the 2015 re-release as downloaded from Steam on Windows, due to minor
+differences in GAMETEXT.KDR. These are a couple of text bugs, that should
+be corrected if the game is downloaded using the Linux (or Mac) client,
+but they haven't been carried over to Windows so far.
+* Further note that kdreams.cfg is updated after manually closing the
+game window, *only* if the 2015 data is used.
+* Compatibility with saved games from the 2015 re-release is more-or-less
+present, while compatibility with kdreams.cfg is only partial. So, watch out.
+* A few misc. 2015 specific features were implemented, e.g., a bug fix
+resetting the amount of keys when a new game is started. This does *not*
+necessarily cover all behaviors of the 2015 release, though. Also, as expected,
+2015 specific features are *not* in effect when a DOS version's data is in use.
+* Support for joysticks / game controllers with the 2015 data is
+the same as with the DOS versions' data.
+* Mouse support is also the same, although it's possible to pass the
+2015-specific command-line argument of /SWMOUSE to temporarily disable
+the "Absolute mouse motion" toggle. Note that the /NOASPECT and /WINDOWED
+arguments described in GAMETEXT.KDR didn't seem to work in the
+2015 port itself (using an EXE from May 9 2016 or earlier),
+so these are not implemented here, either.
 
 Oct 12, 2016 (v0.16.0):
 

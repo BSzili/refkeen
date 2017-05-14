@@ -1,4 +1,4 @@
-/* Copyright (C) 2015-2016 NY00123
+/* Copyright (C) 2015-2017 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -19,8 +19,8 @@
 
 // This header should be used by be_st_sdl* code internally
 
-#ifndef	_BE_ST_SDL_PRIVATE_
-#define _BE_ST_SDL_PRIVATE_
+#ifndef BE_ST_SDL_PRIVATE_H
+#define BE_ST_SDL_PRIVATE_H
 
 #include "SDL_version.h" // For SDL_RENDER_DEVICE_RESET hack
 #include "SDL_surface.h"
@@ -31,6 +31,8 @@
 #else
 #define BEL_ST_SleepMS SDL_Delay
 #endif
+
+#define BE_ST_MAXJOYSTICKS 8
 
 #define BE_ST_SDL_CONTROLLER_DELAY_BEFORE_DIGIACTION_REPEAT_MS 500
 #define BE_ST_SDL_CONTROLLER_DIGIACTION_REPEAT_RATE_MS 40
@@ -68,8 +70,10 @@ void BEL_ST_SDLCreateTextureWrapper(SDL_Texture **pTexture, Uint32 format, int a
 void BEL_ST_SDLDestroyTextureWrapper(SDL_Texture **pTexture);
 void BEL_ST_RecreateAllTextures(void);
 
+void BE_ST_PrepareForManualAudioCallbackCall(void);
+
 extern SDL_Surface *g_be_sdl_windowIconSurface;
 // NOT NECESSARILY AVAILABLE FOR ALL GAMES!
 extern bool g_sdlDoAbsMouseMotion;
 
-#endif
+#endif // BE_ST_SDL_PRIVATE_H

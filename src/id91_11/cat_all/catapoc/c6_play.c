@@ -192,7 +192,7 @@ void CheckKeys (void)
 //		SD_MusicOn();
 		Paused = false;
 		// (REFKEEN) Minor difference from vanilla Catacomb
-		if (MousePresent) BE_ST_GetMouseDelta(NULL, NULL);	// Clear accumulated mouse movement
+		if (MousePresent) BE_ST_GetEmuAccuMouseMotion(NULL, NULL);	// Clear accumulated mouse movement
 		//if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
 	}
 	else
@@ -203,7 +203,7 @@ void CheckKeys (void)
 		IN_Ack();
 //		SD_MusicOn();
 		// (REFKEEN) Minor difference from vanilla Catacomb
-		if (MousePresent) BE_ST_GetMouseDelta(NULL, NULL);	// Clear accumulated mouse movement
+		if (MousePresent) BE_ST_GetEmuAccuMouseMotion(NULL, NULL);	// Clear accumulated mouse movement
 		//if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
 	}
 	else
@@ -220,7 +220,7 @@ void CheckKeys (void)
 		IN_Ack();
 //		SD_MusicOn();
 		// (REFKEEN) Minor difference from vanilla Catacomb
-		if (MousePresent) BE_ST_GetMouseDelta(NULL, NULL);	// Clear accumulated mouse movement
+		if (MousePresent) BE_ST_GetEmuAccuMouseMotion(NULL, NULL);	// Clear accumulated mouse movement
 		//if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
 	}
 #endif
@@ -469,7 +469,7 @@ deadloop:;
 	{
 		DebugKeys();
 		// (REFKEEN) Minor difference from vanilla Catacomb
-		if (MousePresent) BE_ST_GetMouseDelta(NULL, NULL);	// Clear accumulated mouse movement
+		if (MousePresent) BE_ST_GetEmuAccuMouseMotion(NULL, NULL);	// Clear accumulated mouse movement
 		//if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
 		lasttimecount = SD_GetTimeCount();
 	}
@@ -705,8 +705,8 @@ void PollControls (void)
 	if (MousePresent)
 	{
 		// (REFKEEN) Minor difference from vanilla Catacomb
-		buttons = BE_ST_GetMouseButtons();
-		BE_ST_GetMouseDelta(&mousexmove, &mouseymove);
+		buttons = BE_ST_GetEmuMouseButtons();
+		BE_ST_GetEmuAccuMouseMotion(&mousexmove, &mouseymove);
 #if 0
 		Mouse(MButtons);
 		buttons = _BX;
@@ -879,7 +879,7 @@ void PlayLoop (void)
 		control.xaxis = 1;
 		//if (++TimeCount == 300)
 		//	return;
-		SD_SetTimeCount(SD_GetTimeCount()+1);
+		SD_AddToTimeCount(1);
 		if (SD_GetTimeCount() == 300)
 			return;
 #endif
@@ -1266,7 +1266,7 @@ nextactor:;
 		// is held. As a consequence, if the wait is done before the
 		// call to CheckKeys then the game may seem to get stuck while
 		// the debug key modifier is held.
-		BE_ST_TimeCountWaitFromSrc(SD_GetTimeCount(), 1);
+		SD_TimeCountWaitTicks(1);
 		//
 #endif
 	}while (!playstate);

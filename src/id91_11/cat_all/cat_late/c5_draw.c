@@ -2126,7 +2126,7 @@ void CalcTics (void)
 // take DEMOTICS or more tics, and modify Timecount to reflect time taken
 //
 		oldtimecount = lasttimecount;
-		BE_ST_TimeCountWaitForDest(oldtimecount+DEMOTICS*2);
+		SD_TimeCountWaitForDest(oldtimecount+DEMOTICS*2);
 #if 0
 		while (TimeCount<oldtimecount+DEMOTICS*2)
 		;
@@ -2155,7 +2155,7 @@ void CalcTics (void)
 
 		if (tics>MAXTICS)
 		{
-			SD_SetTimeCount(SD_GetTimeCount() - (tics-MAXTICS));
+			SD_AddToTimeCount(-(tics-MAXTICS));
 			tics = MAXTICS;
 		}
 
@@ -2346,7 +2346,7 @@ asm	rep stosw
 		// (REFKEEN) Minor difference from vanilla Catacomb
 		if (MousePresent)
 		{
-			BE_ST_GetMouseDelta(NULL, NULL); // Clear accumulated mouse movement
+			BE_ST_GetEmuAccuMouseMotion(NULL, NULL); // Clear accumulated mouse movement
 		}
 		//if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
 	}

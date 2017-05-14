@@ -1,4 +1,4 @@
-/* Copyright (C) 2014-2016 NY00123
+/* Copyright (C) 2014-2017 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -2093,6 +2093,9 @@ void BEL_ST_SetGfxOutputRects(bool allowResize)
 	int winWidth, winHeight;
 	SDL_GetWindowSize(g_sdlWindow, &winWidth, &winHeight);
 
+	if (g_refKeenCfg.rememberDisplayNum)
+		g_refKeenCfg.displayNum = SDL_GetWindowDisplayIndex(g_sdlWindow);
+
 	g_sdlLastReportedWindowWidth = winWidth;
 	g_sdlLastReportedWindowHeight = winHeight;
 
@@ -2220,12 +2223,6 @@ void BEL_ST_ForceHostDisplayUpdate(void)
 	g_sdlForceGfxControlUiRefresh = true; // HACK that technically does exactly what we want (even if controls are not drawn)
 }
 
-void BE_ST_SetScreenStartAddress(uint16_t crtc)
-{
-	g_sdlDoRefreshGfxOutput |= (g_sdlScreenStartAddress != crtc);
-	g_sdlScreenStartAddress = crtc;
-}
-
 uint8_t *BE_ST_GetTextModeMemoryPtr(void)
 {
 	return g_sdlVidMem.text;
@@ -2294,6 +2291,12 @@ static int BEL_ST_ConvertEGASignalToEGAEntry(int color)
 	return (color & 7) | ((color & 16) >> 1);
 }
 
+
+void BE_ST_SetScreenStartAddress(uint16_t crtc)
+{
+	g_sdlDoRefreshGfxOutput |= (g_sdlScreenStartAddress != crtc);
+	g_sdlScreenStartAddress = crtc;
+}
 
 void BE_ST_SetBorderColor(uint8_t color)
 {

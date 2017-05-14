@@ -1,4 +1,4 @@
-/* Copyright (C) 2014-2016 NY00123
+/* Copyright (C) 2014-2017 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -17,8 +17,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef	_BE_ST_
-#define _BE_ST_
+#ifndef BE_ST_H
+#define BE_ST_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -27,8 +27,6 @@
 #include <stdarg.h>
 #endif
 #include "be_launcher.h"
-
-#define BE_ST_MAXJOYSTICKS 8
 
 // On-screen touch controls are scaled such that the largest square
 // fitting in the window has the dimensions of 140x140 (scaled) pixels
@@ -41,14 +39,41 @@ void BE_ST_InitAudio(void);
 void BE_ST_ShutdownAll(void); // After game
 void BE_ST_HandleExit(int status); // Replacement for exit function (useful for displaying text screen)
 void BE_ST_QuickExit(void); // Where the usual exit handler isn't sufficient: Saves last settings, shutdowns subsystems and then exits immediately
+
+// Sets/Unsets interrupt handler for emulated keyboard events
 void BE_ST_StartKeyboardService(void (*funcPtr)(uint8_t));
 void BE_ST_StopKeyboardService(void);
-void BE_ST_GetMouseDelta(int16_t *x, int16_t *y);
-uint16_t BE_ST_GetMouseButtons(void);
-void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp);
-uint16_t BE_ST_GetJoyButtons(uint16_t joy);
+// Gets emulated mouse motion accumulated since a preceding call to
+// this function (if any). Note that the output (pointer) arguments
+// are optional; To ignore any of the motion axes,
+// pass NULL for the corresponding argument.
+void BE_ST_GetEmuAccuMouseMotion(int16_t *optX, int16_t *optY);
+// Gets emulated mouse buttons states (pressed/released) as bit flags.
+uint16_t BE_ST_GetEmuMouseButtons(void);
+// Gets the current emulated joystick axes states for the
+// given (emulated) joystick. Note that these axes don't have the
+// usual kind of scale (it's roughly gameport joystick emulation),
+// and some process of "calibration" might be required. Further note
+// that the output (pointer) arguments are optional; To ignore
+// any of the axes, pass NULL for the corresponding argument.
+void BE_ST_GetEmuJoyAxes(uint16_t joy, uint16_t *optX, uint16_t *optY);
+// Gets emulated joystick buttons states (pressed/released)
+// as bit flags, for the given (emulated) joystick.
+uint16_t BE_ST_GetEmuJoyButtons(uint16_t joy);
 
+// Replacement for Borland's kbhit function, checking if a key
+// (of emulated keyboard) has recently been pressed. The key can
+// be cleared by a call to BE_ST_BiosScanCode with command == 0.
 int16_t BE_ST_KbHit(void);
+// ***NON-EQUIVALENT*** replacement for Borland's bioskey function.
+// - If command == 0, the scan code of last pressed key
+// (from emulated keyboard) is returned. If no key is
+// pressed, the function waits for key press. Note that
+// a following call to this function with command == 1 is
+// expected to return 0, if no other key is pressed in-between.
+// - If command == 1, the function returns the scan code of
+// last key pressed, if there's any, or 0 if such code is not stored
+// (e.g., right after a call to the same function with command == 0).
 int16_t BE_ST_BiosScanCode(int16_t command);
 
 // Used internally, or alternatively for new errors: Logs to emulated text
@@ -208,28 +233,37 @@ void BE_ST_SetAppQuitCallback(void (*funcPtr)(void));
 
 void BE_ST_PollEvents(void);
 
+#ifdef REFKEEN_ENABLE_LAUNCHER
 // Launcher loop
 void BE_ST_Launcher_RunEventLoop(void);
+#endif
 
-// Returns an offset that should be added to the 16-bit segments of 32-bit
-// far pointers present in The Catacomb Armageddon/Apocalypse saved games
-// (in the case of the original DOS exes, it depends on the locations of
-// modified copies of them in memory)
+// Returns an offset that should be added to the 16-bit segments
+// of 32-bit far pointers read from/written to files. Saved games from
+// The Catacomb Armageddon/Apocalypse are good examples of such files.
+// (In the case of the original DOS exes, the offset depends on the
+// locations of modified copies of the far pointers in memory.)
 uint16_t BE_ST_Compat_GetFarPtrRelocationSegOffset(void);
 
 /*** Audio/timer (vanilla Keen kind-of has these mixed) ***/
-void BE_ST_StartAudioSDService(void (*funcPtr)(void));
-void BE_ST_StopAudioSDService(void);
+void BE_ST_StartAudioAndTimerInt(void (*funcPtr)(void));
+void BE_ST_StopAudioAndTimerInt(void);
 void BE_ST_LockAudioRecursively(void);
 void BE_ST_UnlockAudioRecursively(void);
-void BE_ST_PrepareForManualAudioSDServiceCall(void);
 bool BE_ST_IsEmulatedOPLChipReady(void);
-// Should be used in ID_SD.C only - Frequency is about 1193182Hz/spkVal
+// WARNING about using BE_ST_PCSpeakerOn/Off:
+//
+// You MUST call BE_ST_LockAudioRecursively before calling any of these
+// functions. Afterwards, you MUST call BE_ST_UnlockAudioRecursively.
+// If you don't, unexpected behaviors may be reproduced
+// (e.g., an audio callback thread hang).
+//
+// The sound frequency is about 1193182Hz/spkVal.
 void BE_ST_PCSpeakerOn(uint16_t spkVal);
 void BE_ST_PCSpeakerOff(void);
 // Used for playback from digitized sound data in signed 16-bit int format.
 // Do NOT assume the data is copied; You ***must*** call BE_ST_StopSoundEffect.
-// You can also use BE_ST_StartAudioSDService to set a callback function,
+// You can also use BE_ST_StartAudioAndTimerInt to set a callback function,
 // to be called when reading of sound data is complete. This can happen
 // a bit before actual sound playback is complete, in case
 // some mechanism of resampling is in use.
@@ -238,27 +272,33 @@ void BE_ST_StopSoundEffect(void);
 // Safe alternatives for Borland's sound and nosound functions from Catacomb Abyss' gelib.c
 void BE_ST_BSound(uint16_t frequency);
 void BE_ST_BNoSound(void);
-// Drop-in replacement for id_sd.c:alOut
-void BE_ST_ALOut(uint8_t reg,uint8_t val);
-// Here, the actual rate is about 1193182Hz/speed
-// NOTE: isALMusicOn is irrelevant for Keen Dreams (even with its music code)
-void BE_ST_SetTimer(uint16_t speed, bool isALMusicOn);
-uint32_t BE_ST_GetTimeCount(void);
-void BE_ST_SetTimeCount(uint32_t newcount);
-// Use this as a replacement for busy loops waiting for some ticks to pass
-// e.g., "while (TimeCount-srctimecount<timetowait)"
-void BE_ST_TimeCountWaitFromSrc(uint32_t srctimecount, int16_t timetowait);
-// Same as above, but instead waits to reach dsttimecount
-// e.g., a replacement for "while (TimeCount<dsttimecount)"
-void BE_ST_TimeCountWaitForDest(uint32_t dsttimecount);
+// Sends data to emulated OPL2/3 chip (e.g., AdLib), where "reg" is
+// written to the address/status port and "val" is written to the data
+// port. For the purpose of OPL emulation, this attempts to cover small
+// delays (measured in microseconds) as given by the AdLib manual.
+void BE_ST_OPL2Write(uint8_t reg,uint8_t val);
+// Sets the rate in which the timer interrupt is called, to about
+// 1193182Hz/rateVal. May also have an effect on sound generation.
+void BE_ST_SetTimer(uint16_t rateVal);
+// Resets to 0 an internal counter of calls to timer interrupt,
+// and returns the original counter's value
+int BE_ST_TimerIntClearLastCalls(void);
+// Attempts to wait for a given amount of calls to timer interrupt.
+// It may wait a bit more in practice (e.g., due to Sync to VBlank).
+// This is taken into account into a following call to the same function,
+// which may actually be a bit shorter than requested (as a consequence).
+void BE_ST_TimerIntCallsDelayWithOffset(int nCalls);
 
 /*** Graphics ***/
 void BE_ST_InitGfx(void);
 void BE_ST_ShutdownGfx(void);
-void BE_ST_SetScreenStartAddress(uint16_t crtc);
 
 void BE_ST_MarkGfxForUpdate(void);
+#ifdef REFKEEN_ENABLE_LAUNCHER
 void BE_ST_Launcher_MarkGfxCache(void);
+#else // HACK for situations in which this should be called, like recreation of textures
+#define BE_ST_Launcher_MarkGfxCache()
+#endif
 
 // ***WARNING*** SEE WARNING BELOW BEFORE USING!!!
 //
@@ -269,8 +309,10 @@ void BE_ST_Launcher_MarkGfxCache(void);
 // BE_ST_MarkGfxForUpdate (used as an optimization).
 uint8_t *BE_ST_GetTextModeMemoryPtr(void);
 
+#ifdef REFKEEN_ENABLE_LAUNCHER
 // ***WARNING***: Ensure BE_ST_Launcher_MarkGfxCache is called after drawing.
 uint8_t *BE_ST_Launcher_GetGfxPtr(void);
+#endif
 
 bool BE_ST_HostGfx_CanToggleAspectRatio(void);
 bool BE_ST_HostGfx_GetAspectRatioToggle(void);
@@ -306,15 +348,17 @@ void BE_ST_EGAXorGFXByteByPlaneMask(uint16_t destOff, uint8_t srcVal, uint16_t p
 // CGA graphics manipulations
 void BE_ST_CGAUpdateGFXBufferFromWrappedMem(const uint8_t *segPtr, const uint8_t *offInSegPtr, uint16_t byteLineWidth);
 
-//
+#ifdef REFKEEN_ENABLE_LAUNCHER
 void BE_ST_Launcher_Prepare(void);
 void BE_ST_Launcher_Shutdown(void);
 void BE_ST_Launcher_RefreshSelectGameMenuContents(void);
+#endif
 
 //
+void BE_ST_SetScreenStartAddress(uint16_t crtc);
 void BE_ST_SetBorderColor(uint8_t color);
 void BE_ST_SetScreenMode(int mode);
-void BE_ST_WaitVBL(int16_t number);
+void BE_ST_WaitForNewVerticalRetraces(int16_t number);
 void BE_ST_ShortSleep(void);
 void BE_ST_Delay(uint16_t msec); // Replacement for delay from dos.h
 void BE_ST_textcolor(int color);
@@ -447,4 +491,4 @@ typedef enum BE_ST_ScanCode_T {
 // MUST be included here (since be_st_sdl.h depends on be_st.h)
 #include "be_st_sdl.h"
 
-#endif
+#endif // BE_ST_H

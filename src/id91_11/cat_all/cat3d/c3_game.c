@@ -1016,7 +1016,7 @@ noxor:
 			};
 		}
 		frame++;
-		BE_ST_TimeCountWaitForDest(frame);
+		SD_TimeCountWaitForDest(frame);
 #if 0
 		while (TimeCount<frame)         // don't go too fast
 		;

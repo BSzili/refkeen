@@ -175,7 +175,7 @@ extern	id0_boolean_t		SoundSourcePresent,SoundBlasterPresent,AdLibPresent,
 					NeedsDigitized,NeedsMusic;	// For Caching Mgr
 extern	SDMode		SoundMode;
 extern	SMMode		MusicMode;
-//NOT DECLARED HERE - USE SD_GetTimeCount AND/OR SD_SetTimeCount
+//NOT DECLARED HERE - USE WRAPPERS LIKE SD_GetTimeCount
 //extern	id0_longword_t	TimeCount;					// Global time in ticks
 
 extern	id0_boolean_t		ssIsTandy;					// For config file
@@ -209,20 +209,11 @@ extern	void	SDL_PCPlaySound(PCSound id0_far *sound),
 #endif
 
 // Replacements for direct accesses to TimeCount variable
-#ifdef __AMIGA__
-static
-#endif
-inline id0_longword_t SD_GetTimeCount(void)
-{
-	return BE_ST_GetTimeCount();
-}
-
-#ifdef __AMIGA__
-static
-#endif
-inline void SD_SetTimeCount(id0_longword_t newcount)
-{
-	BE_ST_SetTimeCount(newcount);
-}
+id0_longword_t SD_GetTimeCount(void);
+void SD_SetTimeCount(id0_longword_t newcount);
+void SD_AddToTimeCount(id0_longword_t count);
+// Use this as a replacement for busy loops waiting for some ticks
+// to pass, as in "while (TimeCount-src<ticks)"
+void SD_TimeCountWaitFromSrc(id0_longword_t src, id0_int_t ticks);
 
 #endif

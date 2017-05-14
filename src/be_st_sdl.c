@@ -1,3 +1,22 @@
+/* Copyright (C) 2014-2017 NY00123
+ *
+ * This file is part of Reflection Keen.
+ *
+ * Reflection Keen is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,8 +27,15 @@
 #include "be_st.h"
 #include "be_st_sdl_private.h"
 
-#define BE_ST_MAXJOYSTICKS 8
-#define BE_ST_EMU_JOYSTICK_RANGEMAX 5000 // id_in.c MaxJoyValue
+// Using example of values from here:
+// http://www.intel-assembler.it/portale/5/program-joystick-port-210h/program-joystick-port-210h.asp
+#define BE_ST_EMU_JOYSTICK_RANGEMIN 8
+#define BE_ST_EMU_JOYSTICK_RANGECENTER 330
+#define BE_ST_EMU_JOYSTICK_RANGEMAX 980
+// This one is for init with no joysticks, for Keen Dreams v1.00
+// (It requires a large value, while 0 will lead to division by zero)
+#define BE_ST_EMU_JOYSTICK_OVERRANGEMAX 16384
+
 #define BE_ST_DEFAULT_FARPTRSEGOFFSET 0x14
 
 #if (defined REFKEEN_VER_CATARM) || (defined REFKEEN_VER_CATAPOC)
@@ -237,13 +263,13 @@ void BE_ST_PrepareForGameStartupWithoutAudio(void)
 	memset(g_sdlEmuMouseMotionAbsoluteState, 0, sizeof(g_sdlEmuMouseMotionAbsoluteState));
 	g_sdlEmuJoyButtonsState = 0;
 	// A bit tricky, should be reported as centered *if* any joystick is connected (and *not* while using modern controller scheme)
-	// Note 1: A single controller may support up to all 4
+	// Note 1: A single controller may support up to all 4 axes
 	// Note 2: Assigning 0 here may lead to division by zero in Keen Dreams v1.00
-	g_sdlEmuJoyMotionState[0] = g_sdlEmuJoyMotionState[1] = g_sdlEmuJoyMotionState[2] = g_sdlEmuJoyMotionState[3] = BE_ST_EMU_JOYSTICK_RANGEMAX;
+	g_sdlEmuJoyMotionState[0] = g_sdlEmuJoyMotionState[1] = g_sdlEmuJoyMotionState[2] = g_sdlEmuJoyMotionState[3] = BE_ST_EMU_JOYSTICK_OVERRANGEMAX;
 	for (int i = 0; i < BE_ST_MAXJOYSTICKS; ++i)
 		if (g_sdlJoysticks[i])
 		{
-			g_sdlEmuJoyMotionState[0] = g_sdlEmuJoyMotionState[1] = g_sdlEmuJoyMotionState[2] = g_sdlEmuJoyMotionState[3] = BE_ST_EMU_JOYSTICK_RANGEMAX/2; // These ones aren't centered around 0...
+			g_sdlEmuJoyMotionState[0] = g_sdlEmuJoyMotionState[1] = g_sdlEmuJoyMotionState[2] = g_sdlEmuJoyMotionState[3] = BE_ST_EMU_JOYSTICK_RANGECENTER;
 			break;
 		}
 	// Then use this to reset/update some states, and detect joysticks
@@ -435,7 +461,21 @@ static void BEL_ST_ParseSetting_LastSelectedGameVer(const char *keyprefix, const
 
 static void BEL_ST_ParseSetting_DisplayNum(const char *keyprefix, const char *buffer)
 {
-	sscanf(buffer, "%d", &g_refKeenCfg.displayNum);
+	if (sscanf(buffer, "%d", &g_refKeenCfg.displayNum) == 1)
+		if ((g_refKeenCfg.displayNum < 0) || (g_refKeenCfg.displayNum >= SDL_GetNumVideoDisplays()))
+			g_refKeenCfg.displayNum = 0;
+}
+
+static void BEL_ST_ParseSetting_RememberDisplayNum(const char *keyprefix, const char *buffer)
+{
+	if (!strcmp(buffer, "true"))
+	{
+		g_refKeenCfg.rememberDisplayNum = true;
+	}
+	else if (!strcmp(buffer, "false"))
+	{
+		g_refKeenCfg.rememberDisplayNum = false;
+	}
 }
 
 static void BEL_ST_ParseSetting_SDLRendererDriver(const char *keyprefix, const char *buffer)
@@ -584,6 +624,7 @@ static void BEL_ST_ParseSetting_UseResampler(const char *keyprefix, const char *
 }
 #endif
 
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 static void BEL_ST_ParseSetting_TouchInputToggle(const char *keyprefix, const char *buffer)
 {
 	if (!strcmp(buffer, "auto"))
@@ -611,6 +652,7 @@ static void BEL_ST_ParseSetting_TouchInputDebugging(const char *keyprefix, const
 		g_refKeenCfg.touchInputDebugging = false;
 	}
 }
+#endif // REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 
 static void BEL_ST_ParseSetting_AlternativeControlScheme(const char *keyprefix, const char *buffer)
 {
@@ -748,6 +790,7 @@ static BESDLCfgEntry g_sdlCfgEntries[] = {
 #endif
 	{"lastselectedgamever=", &BEL_ST_ParseSetting_LastSelectedGameVer},
 	{"displaynum=", &BEL_ST_ParseSetting_DisplayNum},
+	{"rememberdisplaynum=", &BEL_ST_ParseSetting_RememberDisplayNum},
 	{"sdlrenderer=", &BEL_ST_ParseSetting_SDLRendererDriver},
 	{"vsync=", &BEL_ST_ParseSetting_VSync},
 	{"bilinear=", &BEL_ST_ParseSetting_Bilinear},
@@ -764,8 +807,10 @@ static BESDLCfgEntry g_sdlCfgEntries[] = {
 #ifndef REFKEEN_RESAMPLER_NONE
 	{"useresampler=", &BEL_ST_ParseSetting_UseResampler},
 #endif
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 	{"touchinput=", &BEL_ST_ParseSetting_TouchInputToggle},
 	{"touchinputdebugging=", &BEL_ST_ParseSetting_TouchInputDebugging},
+#endif
 	{"altcontrolscheme=", &BEL_ST_ParseSetting_AlternativeControlScheme},
 
 	// HACK: Copy-paste... if this is updated, check g_sdlControlSchemeKeyMapCfgKeyPrefixes too!!!
@@ -822,6 +867,7 @@ static void BEL_ST_ParseConfig(void)
 #endif
 	g_refKeenCfg.lastSelectedGameVer = BE_GAMEVER_LAST;
 	g_refKeenCfg.displayNum = 0;
+	g_refKeenCfg.rememberDisplayNum = true;
 	g_refKeenCfg.sdlRendererDriver = -1;
 	g_refKeenCfg.vSync = VSYNC_AUTO;
 	g_refKeenCfg.isBilinear = true;
@@ -838,7 +884,7 @@ static void BEL_ST_ParseConfig(void)
 #ifndef REFKEEN_RESAMPLER_NONE
 	g_refKeenCfg.useResampler = true;
 #endif
-#ifdef REFKEEN_CONFIG_AUTODETECT_TOUCHINPUT_BY_DEFAULT
+#if (defined REFKEEN_CONFIG_ENABLE_TOUCHINPUT) && (defined REFKEEN_CONFIG_AUTODETECT_TOUCHINPUT_BY_DEFAULT)
 	g_refKeenCfg.touchInputToggle = TOUCHINPUT_AUTO;
 #else
 	g_refKeenCfg.touchInputToggle = TOUCHINPUT_OFF;
@@ -929,6 +975,7 @@ static void BEL_ST_SaveConfig(void)
 #endif
 	fprintf(fp, "lastselectedgamever=%s\n", (g_refKeenCfg.lastSelectedGameVer != BE_GAMEVER_LAST) ? refkeen_gamever_strs[g_refKeenCfg.lastSelectedGameVer] : "");
 	fprintf(fp, "displaynum=%d\n", g_refKeenCfg.displayNum);
+	fprintf(fp, "rememberdisplaynum=%s\n", g_refKeenCfg.rememberDisplayNum ? "true" : "false");
 	if (g_refKeenCfg.sdlRendererDriver < 0)
 	{
 		fprintf(fp, "sdlrenderer=auto\n");
@@ -954,8 +1001,10 @@ static void BEL_ST_SaveConfig(void)
 #ifndef REFKEEN_RESAMPLER_NONE
 	fprintf(fp, "useresampler=%s\n", g_refKeenCfg.useResampler ? "true" : "false");
 #endif
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 	fprintf(fp, "touchinput=%s\n", (g_refKeenCfg.touchInputToggle == TOUCHINPUT_AUTO) ? "auto" : ((g_refKeenCfg.touchInputToggle == TOUCHINPUT_FORCED) ? "forced" : "off"));
 	fprintf(fp, "touchinputdebugging=%s\n", g_refKeenCfg.touchInputDebugging ? "true" : "false");
+#endif
 	fprintf(fp, "altcontrolscheme=%s\n", g_refKeenCfg.altControlScheme.isEnabled ? "true" : "false");
 	// Go through an array of keys
 	for (int keyindex = 0; keyindex < BE_ST_CTRL_CFG_BUTMAP_AFTERLAST; ++keyindex)
@@ -1312,36 +1361,36 @@ void BE_ST_StopKeyboardService(void)
 	g_sdlKeyboardInterruptFuncPtr = 0;
 }
 
-void BE_ST_GetMouseDelta(int16_t *x, int16_t *y)
+void BE_ST_GetEmuAccuMouseMotion(int16_t *optX, int16_t *optY)
 {
 	BE_ST_PollEvents();
 
-	if (x)
-		*x = g_sdlEmuMouseMotionAccumulatedState[0] + g_sdlEmuMouseMotionAbsoluteState[0];
-	if (y)
-		*y = g_sdlEmuMouseMotionAccumulatedState[1] + g_sdlEmuMouseMotionAbsoluteState[1];
+	if (optX)
+		*optX = g_sdlEmuMouseMotionAccumulatedState[0] + g_sdlEmuMouseMotionAbsoluteState[0];
+	if (optY)
+		*optY = g_sdlEmuMouseMotionAccumulatedState[1] + g_sdlEmuMouseMotionAbsoluteState[1];
 
 	g_sdlEmuMouseMotionAccumulatedState[0] = g_sdlEmuMouseMotionAccumulatedState[1] = 0;
 }
 
-uint16_t BE_ST_GetMouseButtons(void)
+uint16_t BE_ST_GetEmuMouseButtons(void)
 {
 	BE_ST_PollEvents();
 
 	return g_sdlEmuMouseButtonsState;
 }
 
-void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
+void BE_ST_GetEmuJoyAxes(uint16_t joy, uint16_t *optX, uint16_t *optY)
 {
 	BE_ST_PollEvents();
 
-	if (xp)
-		*xp = g_sdlEmuJoyMotionState[2*joy];
-	if (yp)
-		*yp = g_sdlEmuJoyMotionState[2*joy+1];
+	if (optX)
+		*optX = g_sdlEmuJoyMotionState[2*joy];
+	if (optY)
+		*optY = g_sdlEmuJoyMotionState[2*joy+1];
 }
 
-uint16_t BE_ST_GetJoyButtons(uint16_t joy)
+uint16_t BE_ST_GetEmuJoyButtons(uint16_t joy)
 {
 	BE_ST_PollEvents();
 
@@ -1499,6 +1548,7 @@ static void BEL_ST_CheckForHidingTouchUI(void)
 		return;
 	BEL_ST_DoHideTouchUI();
 }
+
 static void BEL_ST_ConditionallyAddJoystick(int device_index)
 {
 	if (!g_refKeenCfg.altControlScheme.isEnabled)
@@ -1982,6 +2032,7 @@ void BE_ST_PollEvents(void)
 			}
 			break;
 
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 		case SDL_FINGERDOWN:
 			if ((g_refKeenCfg.touchInputToggle == TOUCHINPUT_AUTO) && !g_sdlShowTouchUI)
 			{
@@ -2012,13 +2063,17 @@ void BE_ST_PollEvents(void)
 		case SDL_FINGERMOTION:
 			BEL_ST_CheckCommonPointerMoveCases(event.tfinger.touchId, event.tfinger.fingerId, event.tfinger.x * g_sdlLastReportedWindowWidth, event.tfinger.y * g_sdlLastReportedWindowHeight);
 			break;
+#endif // REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 
 		case SDL_JOYAXISMOTION:
 			for (int i = 0; i < BE_ST_MAXJOYSTICKS; ++i)
 			{
 				if (g_sdlJoysticks[i] && (g_sdlJoysticksInstanceIds[i] == event.jaxis.which))
 				{
-					g_sdlEmuJoyMotionState[(event.jaxis.axis + 2*i) % 4] = (event.jaxis.value+32768)*BE_ST_EMU_JOYSTICK_RANGEMAX/65535;
+					if (event.jaxis.value >= 0)
+						g_sdlEmuJoyMotionState[(event.jaxis.axis + 2*i) % 4] = event.jaxis.value*(BE_ST_EMU_JOYSTICK_RANGEMAX-BE_ST_EMU_JOYSTICK_RANGECENTER)/32767 + BE_ST_EMU_JOYSTICK_RANGECENTER;
+					else
+						g_sdlEmuJoyMotionState[(event.jaxis.axis + 2*i) % 4] = (event.jaxis.value+32768)*(BE_ST_EMU_JOYSTICK_RANGECENTER-BE_ST_EMU_JOYSTICK_RANGEMIN)/32768 + BE_ST_EMU_JOYSTICK_RANGEMIN;
 					break;
 				}
 			}
@@ -2228,10 +2283,8 @@ void BE_ST_PollEvents(void)
 	// make the sound callback run (so e.g., no loop gets stuck waiting
 	// for sound playback to complete)
 	extern bool g_sdlAudioSubsystemUp;
-	if (! g_sdlAudioSubsystemUp)
-	{
-		BE_ST_PrepareForManualAudioSDServiceCall();
-	}
+	if (!g_sdlAudioSubsystemUp)
+		BE_ST_PrepareForManualAudioCallbackCall();
 }
 
 #ifdef REFKEEN_CONFIG_EVENTS_CALLBACK

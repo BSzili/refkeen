@@ -1,4 +1,4 @@
-/* Copyright (C) 2015-2016 NY00123
+/* Copyright (C) 2015-2017 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -49,7 +49,7 @@
 // Internally we use SDL2 scancodes for on-screen keyboards here,
 // but there are a few exceptions we make for convenience
 
-// Unused as of SDL v2.0.2
+// Unused as of SDL v2.0.5
 #define ALTCONTROLLER_LAUNCHER_KEYBOARD_INTERNALCODE_LEFT 1
 #define ALTCONTROLLER_LAUNCHER_KEYBOARD_INTERNALCODE_RIGHT 2
 #define ALTCONTROLLER_LAUNCHER_KEYBOARD_INTERNALCODE_SHIFT 3
@@ -152,7 +152,7 @@ static const char *g_be_settingsChoices_boolean[] = {"No","Yes",NULL};
 
 /*** Main menu ***/
 
-BEMENUITEM_DEF_HANDLER_LABELVAR(g_beMainMenuItem_PlayLastChosenGameVer,	40/* HACK to have enough room for string*/, &BE_Launcher_Handler_LastGameVerLaunch)
+BEMENUITEM_DEF_HANDLER_LABELVAR(g_beMainMenuItem_PlayLastChosenGameVer,	60/* HACK to have enough room for string*/, &BE_Launcher_Handler_LastGameVerLaunch)
 BEMENUITEM_DEF_TARGETMENU(g_beMainMenuItem_SelectGame, "Select game", &g_beSelectGameMenu)
 BEMENUITEM_DEF_HANDLER(g_beMainMenuItem_SetArguments, "Set arguments for game *CURRENTLY SET*", &BE_Launcher_Handler_SetArgumentsForGame)
 BEMENUITEM_DEF_TARGETMENU(g_beMainMenuItem_Settings, "Settings", &g_beSettingsMenu)
@@ -371,6 +371,7 @@ BEMENUITEM_DEF_SELECTION_WITH_HANDLER(g_beVideoSettingsMenuItem_DisplayNum, "Dis
 #else
 BEMENUITEM_DEF_SELECTION(g_beVideoSettingsMenuItem_DisplayNum, "Display number", g_be_videoSettingsChoices_displayNums)
 #endif
+BEMENUITEM_DEF_SELECTION(g_beVideoSettingsMenuItem_RememberDisplayNum, "Remember last used display number", g_be_settingsChoices_boolean)
 BEMENUITEM_DEF_SELECTION(g_beVideoSettingsMenuItem_SDLRenderer, "SDL renderer", g_be_videoSettingsChoices_sdlRendererDrivers)
 BEMENUITEM_DEF_SELECTION(g_beVideoSettingsMenuItem_Bilinear, "Bilinear interpolation", g_be_settingsChoices_boolean)
 BEMENUITEM_DEF_SELECTION(g_beVideoSettingsMenuItem_ScaleType, "Scale type*", g_be_videoSettingsChoices_scaleType)
@@ -396,6 +397,7 @@ BEMenu g_beVideoSettingsMenu = {
 		&g_beVideoSettingsMenuItem_FullscreenRes,
 #endif
 		&g_beVideoSettingsMenuItem_DisplayNum,
+		&g_beVideoSettingsMenuItem_RememberDisplayNum,
 		&g_beVideoSettingsMenuItem_SDLRenderer,
 		&g_beVideoSettingsMenuItem_Bilinear,
 		&g_beVideoSettingsMenuItem_ScaleType,
@@ -443,15 +445,21 @@ BEMenu g_beSoundSettingsMenu = {
 /*** Input settings menu ***/
 
 static const char *g_be_inputSettingsChoices_controllerScheme[] = {"Classic", "Modern", NULL};
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 static const char *g_be_inputSettingsChoices_touchControls[] = {"Auto", "Off", "Forced", NULL};
+#endif
 static const char *g_be_inputSettingsChoices_mouseGrab[] = {"Auto", "Off", "Commonly", NULL};
 
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 static void BEL_ST_Launcher_Handler_TouchInputDebugging(BEMenuItem **menuItemP);
+#endif
 
 BEMENUITEM_DEF_TARGETMENU(g_beInputSettingsMenuItem_ControllerSettings, "Modern controller settings", &g_beControllerSettingsMenu)
 BEMENUITEM_DEF_SELECTION(g_beInputSettingsMenuItem_ControllerScheme, "Game controller scheme", g_be_inputSettingsChoices_controllerScheme)
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 BEMENUITEM_DEF_SELECTION(g_beInputSettingsMenuItem_TouchControls, "Enable touch controls", g_be_inputSettingsChoices_touchControls);
 BEMENUITEM_DEF_SELECTION_WITH_HANDLER(g_beInputSettingsMenuItem_TouchInputDebugging, "Touch input debugging", g_be_settingsChoices_boolean, &BEL_ST_Launcher_Handler_TouchInputDebugging);
+#endif
 BEMENUITEM_DEF_SELECTION(g_beInputSettingsMenuItem_MouseGrab, "Mouse grab*\n(windowed mode specific)", g_be_inputSettingsChoices_mouseGrab)
 #ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
 BEMENUITEM_DEF_SELECTION(g_beInputSettingsMenuItem_AbsMouseMotion, "Absolute mouse motion**", g_be_settingsChoices_boolean)
@@ -472,8 +480,10 @@ BEMenu g_beInputSettingsMenu = {
 	{
 		&g_beInputSettingsMenuItem_ControllerSettings,
 		&g_beInputSettingsMenuItem_ControllerScheme,
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 		&g_beInputSettingsMenuItem_TouchControls,
 		&g_beInputSettingsMenuItem_TouchInputDebugging,
+#endif
 		&g_beInputSettingsMenuItem_MouseGrab,
 #ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
 		&g_beInputSettingsMenuItem_AbsMouseMotion,
@@ -494,6 +504,9 @@ static const char *g_be_controllerSettingsChoices_actionButton[] = {"A", "B", "X
 static const char *g_be_controllerSettingsChoices_analogMotion[] = {"Keyboard", "Mouse", NULL};
 #endif
 
+#ifdef REFKEEN_CONFIG_CHECK_FOR_STEAM_INSTALLATION
+static void BEL_ST_Launcher_Handler_ImportControllerMappingsFromSteam(BEMenuItem **menuItemP);
+#endif
 
 #ifdef REFKEEN_VER_KDREAMS
 BEMENUITEM_DEF_DYNAMIC_SELECTION(g_beControllerSettingsMenuItem_Action_Jump, "Action - Jump", g_be_controllerSettingsChoices_actionButton, &BE_Launcher_Handler_ControllerAction)
@@ -520,6 +533,9 @@ BEMENUITEM_DEF_SELECTION(g_beControllerSettingsMenuItem_LeftStick, "Use left sti
 BEMENUITEM_DEF_SELECTION(g_beControllerSettingsMenuItem_RightStick, "Use right stick", g_be_settingsChoices_boolean)
 #ifdef REFKEEN_VER_CATACOMB_ALL
 BEMENUITEM_DEF_SELECTION(g_beControllerSettingsMenuItem_AnalogMotion, "Motion emulation mode", g_be_controllerSettingsChoices_analogMotion)
+#endif
+#ifdef REFKEEN_CONFIG_CHECK_FOR_STEAM_INSTALLATION
+BEMENUITEM_DEF_HANDLER(g_beControllerSettingsMenuItem_ImportMappingsFromSteam, "Import controller mappings from Steam\n(shouldn't override existing mappings)", &BEL_ST_Launcher_Handler_ImportControllerMappingsFromSteam)
 #endif
 
 BEMenu g_beControllerSettingsMenu = {
@@ -552,10 +568,60 @@ BEMenu g_beControllerSettingsMenu = {
 #ifdef REFKEEN_VER_CATACOMB_ALL
 		&g_beControllerSettingsMenuItem_AnalogMotion,
 #endif
+#ifdef REFKEEN_CONFIG_CHECK_FOR_STEAM_INSTALLATION
+		&g_beControllerSettingsMenuItem_ImportMappingsFromSteam,
+#endif
 		NULL
 	},
 	// Ignore the rest
 };
+
+#ifdef REFKEEN_CONFIG_CHECK_FOR_STEAM_INSTALLATION
+/*** Controller mappings from Steam not found menu ***/
+
+BEMENUITEM_DEF_TARGETMENU(g_beControllerMappingsFromSteamNotFoundMenuItem_GoBack, "Go back", &g_beControllerSettingsMenu)
+
+static BEMenu g_beControllerMappingsFromSteamNotFoundMenu = {
+	"Can't find or open mappings",
+	&g_beControllerSettingsMenu,
+	(BEMenuItem *[])
+	{
+		&g_beControllerMappingsFromSteamNotFoundMenuItem_GoBack,
+		NULL
+	},
+	// Ignore the rest
+};
+
+/*** Failure to import controller mappings from Steam menu ***/
+
+BEMENUITEM_DEF_TARGETMENU(g_beControllerMappingsFromSteamFailedToImportMenuItem_GoBack, "Go back", &g_beControllerSettingsMenu)
+
+static BEMenu g_beControllerMappingsFromSteamFailedToImportMenu = {
+	"Failed to import mappings!",
+	&g_beControllerSettingsMenu,
+	(BEMenuItem *[])
+	{
+		&g_beControllerMappingsFromSteamFailedToImportMenuItem_GoBack,
+		NULL
+	},
+	// Ignore the rest
+};
+
+/*** Successfully imported controller mappings from Steam menu ***/
+
+BEMENUITEM_DEF_TARGETMENU(g_beControllerMappingsFromSteamImportedSuccessfullyMenuItem_GoBack, "Go back", &g_beControllerSettingsMenu)
+
+static BEMenu g_beControllerMappingsFromSteamImportedSuccessfullyMenu = {
+	"Mappings imported successfully!",
+	&g_beControllerSettingsMenu,
+	(BEMenuItem *[])
+	{
+		&g_beControllerMappingsFromSteamImportedSuccessfullyMenuItem_GoBack,
+		NULL
+	},
+	// Ignore the rest
+};
+#endif // REFKEEN_CONFIG_CHECK_FOR_STEAM_INSTALLATION
 
 /*** Show version menu ***/
 
@@ -611,7 +677,7 @@ void BE_ST_Launcher_Prepare(void)
 	}
 
 	BEL_ST_RecreateSDLWindowAndRenderer(
-		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, g_refKeenCfg.winWidth, g_refKeenCfg.winHeight, 0, 0,
+		SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), SDL_WINDOWPOS_UNDEFINED_DISPLAY(g_refKeenCfg.displayNum), g_refKeenCfg.winWidth, g_refKeenCfg.winHeight, 0, 0,
 		((g_refKeenCfg.launcherWinType == LAUNCHER_WINDOW_FULL) ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0) | ((g_refKeenCfg.launcherWinType != LAUNCHER_WINDOW_SOFTWARE) ? SDL_WINDOW_RESIZABLE : 0),
 		-1, (g_refKeenCfg.launcherWinType == LAUNCHER_WINDOW_SOFTWARE) ? SDL_RENDERER_SOFTWARE : (SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC)
 	);
@@ -670,6 +736,8 @@ void BE_ST_Launcher_Prepare(void)
 	/*** Prepare fullscreen resolutions list ***/
 	BEL_ST_Launcher_ResetDisplayModes(g_refKeenCfg.displayNum);
 #endif
+	// Set this related value
+	g_beVideoSettingsMenuItem_RememberDisplayNum.choice = g_refKeenCfg.rememberDisplayNum;
 	/*** Prepare SDL renderer drivers list ***/
 	int nOfSDLRendererDrivers = SDL_GetNumRenderDrivers();
 	if (nOfSDLRendererDrivers > BE_LAUNCHER_MAX_NUM_OF_SDL_RENDERER_DRIVERS)
@@ -722,10 +790,12 @@ void BE_ST_Launcher_Prepare(void)
 #endif
 	// Set ControllerScheme value
 	g_beInputSettingsMenuItem_ControllerScheme.choice = g_refKeenCfg.altControlScheme.isEnabled;
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 	// Set TouchControls value
 	g_beInputSettingsMenuItem_TouchControls.choice = g_refKeenCfg.touchInputToggle;
 	// Set TouchInputDebugging value
 	g_beInputSettingsMenuItem_TouchInputDebugging.choice = g_refKeenCfg.touchInputDebugging;
+#endif
 	// Set MouseGrab value
 	g_beInputSettingsMenuItem_MouseGrab.choice = g_refKeenCfg.mouseGrab;
 #ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
@@ -793,6 +863,13 @@ void BE_ST_Launcher_Prepare(void)
 		BE_Cross_safeandfastcstringcopy(label, label + BE_LAUNCHER_MENUITEM_STRBUFFER_LEN_BOUND, *rootPathNamePtr);
 	}
 	g_beSelectInitialPathMenuItemsPtrs[nOfRootPaths] = NULL;
+
+	/* Prepare a few menus *not* defined in be_launcher.h */
+#ifdef REFKEEN_CONFIG_CHECK_FOR_STEAM_INSTALLATION
+	BE_Launcher_PrepareMenu(&g_beControllerMappingsFromSteamNotFoundMenu);
+	BE_Launcher_PrepareMenu(&g_beControllerMappingsFromSteamFailedToImportMenu);
+	BE_Launcher_PrepareMenu(&g_beControllerMappingsFromSteamImportedSuccessfullyMenu);
+#endif
 }
 
 
@@ -836,11 +913,13 @@ void BE_ST_Launcher_Shutdown(void)
 	g_sdlWindow = NULL;
 #endif
 
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 	// BEFORE checking if we need to save anything, apply this HACK
 	if (g_beInputSettingsMenuItem_TouchControls.choice == TOUCHINPUT_AUTO)
 		g_sdlShowTouchUI = ((g_sdlLauncherLastEventType == SDL_FINGERDOWN) || (g_sdlLauncherLastEventType == SDL_FINGERUP));
 	else
 		g_sdlShowTouchUI = (g_beInputSettingsMenuItem_TouchControls.choice == TOUCHINPUT_FORCED);
+#endif
 
 	/*** Save settings if there's any change ***/
 	if (!g_be_launcher_wasAnySettingChanged)
@@ -850,6 +929,7 @@ void BE_ST_Launcher_Shutdown(void)
 	g_refKeenCfg.isFullscreen = g_beVideoSettingsMenuItem_Fullscreen.choice;
 #endif
 	g_refKeenCfg.displayNum = g_beVideoSettingsMenuItem_DisplayNum.choice;
+	g_refKeenCfg.rememberDisplayNum = g_beVideoSettingsMenuItem_RememberDisplayNum.choice;
 
 #ifdef BE_LAUNCHER_ENABLE_FULLSCREEN_RES_MENUITEM
 	if (g_beVideoSettingsMenuItem_FullscreenRes.choice > 0)
@@ -886,8 +966,10 @@ void BE_ST_Launcher_Shutdown(void)
 #ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
 	g_refKeenCfg.absMouseMotion = g_beInputSettingsMenuItem_AbsMouseMotion.choice;
 #endif
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 	g_refKeenCfg.touchInputToggle = (TouchInputSettingType)g_beInputSettingsMenuItem_TouchControls.choice;
 	g_refKeenCfg.touchInputDebugging = g_beInputSettingsMenuItem_TouchInputDebugging.choice;
+#endif
 
 	g_refKeenCfg.altControlScheme.useDpad = g_beControllerSettingsMenuItem_Dpad.choice;
 	g_refKeenCfg.altControlScheme.useLeftStick = g_beControllerSettingsMenuItem_LeftStick.choice;
@@ -1003,6 +1085,132 @@ void BEL_ST_Launcher_RefreshSetArgumentsMenuItemLabel(void)
 		strcpy(g_beMainMenuItem_SetArguments.label + 23, "               ");
 }
 
+
+/*** SPECIAL - An extra SDL(2)-specific handler not defined in be_launcher.c ***/
+
+#ifdef REFKEEN_CONFIG_CHECK_FOR_STEAM_INSTALLATION
+void BEL_Launcher_SetCurrentMenu(BEMenu *menu);
+
+/* FIXME - This is incomplete! Go over mappings
+ * from Steam config *and* refkeen mapping file,
+ * and ask the user if it overwrite anything.
+ * Also, avoid from needing an "append" wrapper over _tfopen.
+ */
+static void BEL_ST_Launcher_Handler_ImportControllerMappingsFromSteam(BEMenuItem **menuItemP)
+{
+	// WARNING: This opens file in BINARY mode, but that's ok
+	FILE *cfgfp = BE_Cross_open_steamcfg_for_reading();
+	if (!cfgfp)
+	{
+		BEL_Launcher_SetCurrentMenu(&g_beControllerMappingsFromSteamNotFoundMenu);
+		return;
+	}
+
+	// WARNING: This file is also opened in BINARY mode
+	// FIXME: Again, this is incomplete, for now we just
+	// read the file-as-is, then rewrite the contents and add
+	// more lines (we we don't need to add an "append" wrapper).
+	void *mappingfpinmem = NULL;
+	int32_t mappingfpsize = 0;
+	FILE *mappingfp = BE_Cross_open_additionalfile_for_reading("gamecontrollerdb.txt");
+	if (mappingfp)
+	{
+		mappingfpsize = BE_Cross_FileLengthFromHandle(mappingfp);
+		mappingfpinmem = malloc(mappingfpsize);
+		if (!mappingfpinmem)
+		{
+			fclose(mappingfp);
+			fclose(cfgfp);
+			BE_Cross_LogMessage(BE_LOG_MSG_ERROR, "BE_ST_Launcher_Handler_ImportControllerMappingsFromSteam: Out of memory!\n");
+			// Destroy window, renderer and more?
+			exit(0);
+		}
+
+		fread(mappingfpinmem, mappingfpsize, 1, mappingfp);
+		fclose(mappingfp);
+	}
+
+	// Let's overwrite file with old contents (if there are any),
+	// and then add new mappings (i.e., emulate file append)
+	mappingfp = BE_Cross_open_additionalfile_for_overwriting("gamecontrollerdb.txt");
+	if (!mappingfp)
+	{
+		fclose(cfgfp);
+		free(mappingfpinmem); // Possibly NULL
+		BEL_Launcher_SetCurrentMenu(&g_beControllerMappingsFromSteamFailedToImportMenu);
+		// Destroy window, renderer and more?
+		exit(0);
+	}
+
+	if (mappingfpinmem)
+	{
+		fwrite(mappingfpinmem, mappingfpsize, 1, mappingfp);
+		free(mappingfpinmem);
+	}
+
+	char buffer[512];
+
+	while (fgets(buffer, sizeof(buffer), cfgfp))
+	{
+		// Example for relevant config line:
+		// 	"SDL_GamepadBind"		"03000000100800000100000010010000,Twin USB Joystick,a:b2,b:b1,y:b0,x:b3,start:b9,back:b8,leftstick:b10,rightstick:b11,leftshoulder:b6,rightshoulder:b7,dpup:h0.1,dpleft:h0.8,dpdown:h0.4,dpright:h0.2,leftx:a0,lefty:a1,rightx:a3,righty:a2,lefttrigger:b4,righttrigger:b5,"
+
+		const char * const key = "\"SDL_GamepadBind\"";
+		/*const*/ char *substr = strstr(buffer, key);
+		if (!substr)
+			continue;
+		substr = strchr(substr + strlen(key), '"');
+		if (!substr)
+			continue;
+		++substr;
+		/*const*/  char *guidend = strchr(substr, ',');
+		if (!guidend || (guidend - substr != 32))
+			continue;
+		const char *nameend = strchr(guidend+1, ',');
+		if (!nameend)
+			continue;
+		const char *substrend = strchr(nameend+1, '"');
+		if (!substrend)
+			continue;
+
+		// HACK
+		*guidend = '\0';
+		SDL_JoystickGUID sdlJoyGuid = SDL_JoystickGetGUIDFromString(substr);
+
+		char *mappingStr = SDL_GameControllerMappingForGUID(sdlJoyGuid);
+		if (mappingStr)
+		{
+			SDL_free(mappingStr);
+			// FIXME let's skip this for now, simpler to not add mapping to file, etc.
+			continue;
+		}
+
+		// HACK again
+		*guidend = ',';
+
+		// And another HACK - Shift the contents...
+		int movedChunkSize = substrend - substr;
+		memmove(buffer, substr, movedChunkSize);
+		// ...so we can make the room for the additional platform field
+		snprintf(buffer + movedChunkSize, sizeof(buffer) - movedChunkSize, "platform:%s,\n", SDL_GetPlatform());
+		// Finally write new mapping to file, and internally add it, too
+		fwrite(buffer, strlen(buffer), 1, mappingfp);
+		SDL_GameControllerAddMappingsFromRW(SDL_RWFromConstMem(buffer, strlen(buffer)), 1);
+	}
+	// Adding a mapping doesn't imply we'll get a "joystick/controller added" event,
+	// so manually add what's missing
+	int nJoysticksToScan = BE_Cross_TypedMin(int, SDL_NumJoysticks(), BE_ST_MAXJOYSTICKS);
+	for (int i = 0; i < nJoysticksToScan; ++i)
+		if (!g_sdlControllers[i] && SDL_IsGameController(i))
+			g_sdlControllers[i] = SDL_GameControllerOpen(i);
+
+	BEL_Launcher_SetCurrentMenu(&g_beControllerMappingsFromSteamImportedSuccessfullyMenu);
+}
+#endif // REFKEEN_CONFIG_CHECK_FOR_STEAM_INSTALLATION
+
+/******/
+
+
 void BEL_Launcher_DrawMenuItem(BEMenuItem *menuItem);
 
 #ifdef BE_LAUNCHER_ENABLE_FULLSCREEN_RES_MENUITEM
@@ -1013,16 +1221,43 @@ static void BEL_ST_Launcher_Handler_DisplayNum(BEMenuItem **menuItemP)
 }
 #endif
 
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 static void BEL_ST_Launcher_Handler_TouchInputDebugging(BEMenuItem **menuItemP)
 {
 	// Apply this immediately, so the effect is observed in the launcher itself
 	g_refKeenCfg.touchInputDebugging = (*menuItemP)->choice;
 }
+#endif
 
 static void BEL_ST_Launcher_SetGfxOutputRects(void)
 {
 	int winWidth, winHeight;
 	SDL_GetWindowSize(g_sdlWindow, &winWidth, &winHeight);
+
+
+	if (g_refKeenCfg.rememberDisplayNum)
+	{
+		int displayNum = SDL_GetWindowDisplayIndex(g_sdlWindow);
+		// HUGE FIXME - Bad idea!!!
+		if (displayNum < sizeof(g_be_videoSettingsChoices_displayNums)/sizeof(*g_be_videoSettingsChoices_displayNums)) // Ignore last NULL entry
+			if (1/*g_beVideoSettingsMenuItem_DisplayNum.choice != displayNum*/)
+			{
+				extern BEMenu *g_be_launcher_currMenu;
+
+				g_beVideoSettingsMenuItem_DisplayNum.choice = displayNum;
+#ifdef BE_LAUNCHER_ENABLE_FULLSCREEN_RES_MENUITEM
+				BEL_ST_Launcher_ResetDisplayModes((*menuItemP)->choice);
+#endif
+				if (g_be_launcher_currMenu == &g_beVideoSettingsMenu)
+				{
+#ifdef BE_LAUNCHER_ENABLE_FULLSCREEN_RES_MENUITEM
+					BEL_Launcher_DrawMenuItem(&g_beVideoSettingsMenuItem_FullscreenRes);
+#endif
+					BEL_Launcher_DrawMenuItem(&g_beVideoSettingsMenuItem_DisplayNum);
+				}
+			}
+	}
+
 
 	g_sdlLastReportedWindowWidth = winWidth;
 	g_sdlLastReportedWindowHeight = winHeight;
@@ -2246,6 +2481,7 @@ void BE_ST_Launcher_RunEventLoop(void)
 				BE_Launcher_HandleInput_PointerVScroll(-10*event.wheel.y, ticksBeforePoll);
 				break;
 
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 			case SDL_FINGERDOWN:
 				BEL_ST_Launcher_CheckCommonPointerPressCases(event.tfinger.touchId, event.tfinger.fingerId, event.tfinger.x * g_sdlLastReportedWindowWidth, event.tfinger.y * g_sdlLastReportedWindowHeight, ticksBeforePoll);
 				break;
@@ -2255,6 +2491,7 @@ void BE_ST_Launcher_RunEventLoop(void)
 			case SDL_FINGERMOTION:
 				BEL_ST_Launcher_CheckCommonPointerMoveCases(event.tfinger.touchId, event.tfinger.fingerId, event.tfinger.x * g_sdlLastReportedWindowWidth, event.tfinger.y * g_sdlLastReportedWindowHeight, ticksBeforePoll);
 				break;
+#endif
 
 			/* Don't use SDL_CONTROLLERDEVICEADDED with alternative controller schemes, and for the sake of consistency avoid SDL_CONTROLLERDEVICEREMOVED as well.
 			 * Reason is that on init, there is a problem handling controller mappings loaded from the database using SDL_CONTROLLERDEVICEADDED
@@ -2379,9 +2616,11 @@ void BE_ST_Launcher_WaitForControllerButton(BEMenuItem *menuItem)
 					break; // Ignore
 				// Fall-through
 			case SDL_MOUSEBUTTONDOWN:
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 			case SDL_FINGERDOWN:
 				keepRunning = false;
 				break;
+#endif
 
 			case SDL_JOYDEVICEADDED:
 				if ((event.jdevice.which < BE_ST_MAXJOYSTICKS) && SDL_IsGameController(event.jdevice.which))
@@ -2683,6 +2922,7 @@ bool BEL_ST_SDL_Launcher_DoEditArguments(void)
 				BEL_ST_Launcher_ArgumentsEditing_CheckCommonPointerMoveCases(0, 0, event.motion.x, event.motion.y);
 				break;
 
+#ifdef REFKEEN_CONFIG_ENABLE_TOUCHINPUT
 			case SDL_FINGERDOWN:
 				BEL_ST_Launcher_ArgumentsEditing_CheckCommonPointerPressCases(event.tfinger.touchId, event.tfinger.fingerId, event.tfinger.x * g_sdlLastReportedWindowWidth, event.tfinger.y * g_sdlLastReportedWindowHeight);
 				break;
@@ -2693,6 +2933,7 @@ bool BEL_ST_SDL_Launcher_DoEditArguments(void)
 			case SDL_FINGERMOTION:
 				BEL_ST_Launcher_ArgumentsEditing_CheckCommonPointerMoveCases(event.tfinger.touchId, event.tfinger.fingerId, event.tfinger.x * g_sdlLastReportedWindowWidth, event.tfinger.y * g_sdlLastReportedWindowHeight);
 				break;
+#endif
 
 			case SDL_JOYDEVICEADDED:
 				if ((event.jdevice.which < BE_ST_MAXJOYSTICKS) && SDL_IsGameController(event.jdevice.which))

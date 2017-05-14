@@ -155,7 +155,7 @@ void CheckKeys (void)
 		SD_MusicOn();
 #endif
 		Paused = false;
-		if (MousePresent) BE_ST_GetMouseDelta(NULL, NULL); // Clear accumulated mouse movement
+		if (MousePresent) BE_ST_GetEmuAccuMouseMotion(NULL, NULL); // Clear accumulated mouse movement
 		//if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
 	}
 
@@ -194,7 +194,7 @@ void CheckKeys (void)
 		StartMusic ();
 #endif
 		lasttimecount = SD_GetTimeCount();
-		if (MousePresent) BE_ST_GetMouseDelta(NULL, NULL); // Clear accumulated mouse movement
+		if (MousePresent) BE_ST_GetEmuAccuMouseMotion(NULL, NULL); // Clear accumulated mouse movement
 		//if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
 	}
 
@@ -204,7 +204,7 @@ void CheckKeys (void)
 	if (Keyboard[sc_F10])
 	{
 		DebugKeys();
-		if (MousePresent) BE_ST_GetMouseDelta(NULL, NULL); // Clear accumulated mouse 			// if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
+		if (MousePresent) BE_ST_GetEmuAccuMouseMotion(NULL, NULL); // Clear accumulated mouse 			// if (MousePresent) Mouse(MDelta);	// Clear accumulated mouse movement
 		lasttimecount = SD_GetTimeCount();
 	}
 
@@ -370,8 +370,8 @@ void PollControls (void)
 
 	if (MousePresent)
 	{
-		buttons = BE_ST_GetMouseButtons();
-		BE_ST_GetMouseDelta(&mousexmove, &mouseymove);		
+		buttons = BE_ST_GetEmuMouseButtons();
+		BE_ST_GetEmuAccuMouseMotion(&mousexmove, &mouseymove);
 #if 0
 		Mouse(MButtons);
 		buttons = _BX;
@@ -509,6 +509,7 @@ void PlayLoop (void)
 	fizzlein = true;				// fizzle fade in the first refresh
 #endif
 	/*TimeCount = */lasttimecount = lastnuke = 0;
+	SD_SetTimeCount(0);
 
 	PollControls ();				// center mouse
 	StartMusic ();
@@ -520,7 +521,7 @@ void PlayLoop (void)
 		c.xaxis = 1;
 //		if (++TimeCount == 300)
 //			return;
-		SD_SetTimeCount(SD_GetTimeCount()+1);
+		SD_AddToTimeCount(1);
 		if (SD_GetTimeCount() == 300)
 			return;
 #endif
@@ -617,7 +618,7 @@ nextactor:;
 		// is held. As a consequence, if the wait is done before the
 		// call to CheckKeys then the game may seem to get stuck while
 		// the debug key modifier is held.
-		BE_ST_TimeCountWaitFromSrc(SD_GetTimeCount(), 1);
+		SD_TimeCountWaitTicks(1);
 		//
 #else
 		void BE_ST_UpdateMusic(void);

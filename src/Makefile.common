@@ -86,7 +86,7 @@ EXE_PATH=$(BESRC)/$(EXENAME)$(EXE_EXT)
 
 ifeq ($(PLATFORM), DARWIN)
 	APPBUNDLE_PATH=$(BESRC)/$(EXENAME).app
-	UNIVERSALBUILD=1
+	UNIVERSALBUILD=0
 	ifeq ($(UNIVERSALBUILD), 1)
 		INTCXXFLAGS+= -arch i386 -arch x86_64
 		INTLDFLAGS+= -arch i386 -arch x86_64
@@ -118,6 +118,9 @@ $(BEOBJ)/crc32.o: $(BESRC)/crc32/crc32.c | $(BEOBJ)
 	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
 
 $(BEOBJ)/dbopl.o: $(BESRC)/opl/dbopl.c | $(BEOBJ)
+	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
+
+$(BEOBJ)/depklite.o: $(BESRC)/depklite/depklite.c | $(BEOBJ)
 	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
 
 $(BEOBJ)/unlzexe.o: $(BESRC)/unlzexe/unlzexe.c | $(BEOBJ)

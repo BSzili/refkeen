@@ -2657,7 +2657,7 @@ USL_DoHelp(memptr text,id0_long_t len)
 	{
 		if (moved)
 		{
-			BE_ST_TimeCountWaitFromSrc(lasttime, 5);
+			SD_TimeCountWaitFromSrc(lasttime, 5);
 #if 0
 			while (TimeCount - lasttime < 5)
 				;
@@ -3967,7 +3967,7 @@ US_ControlPanel(void)
 					USL_DrawItem(hiti,hitn);
 					VW_UpdateScreen();
 
-					BE_ST_TimeCountWaitFromSrc(lasttime, TickBase / 4);
+					SD_TimeCountWaitFromSrc(lasttime, TickBase / 4);
 #if 0
 					while (TimeCount - lasttime < TickBase / 4)
 						;
@@ -3978,7 +3978,7 @@ US_ControlPanel(void)
 					USL_DrawItem(hiti,hitn);
 					VW_UpdateScreen();
 
-					BE_ST_TimeCountWaitFromSrc(lasttime, TickBase / 4);
+					SD_TimeCountWaitFromSrc(lasttime, TickBase / 4);
 #if 0
 					while (TimeCount - lasttime < TickBase / 4)
 						;

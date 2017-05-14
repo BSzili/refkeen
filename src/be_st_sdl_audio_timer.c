@@ -1,3 +1,22 @@
+/* Copyright (C) 2014-2017 NY00123
+ *
+ * This file is part of Reflection Keen.
+ *
+ * Reflection Keen is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #include <stdlib.h>
 #include <string.h>
 #include "SDL.h"
@@ -43,9 +62,15 @@ static SDL_AudioSpec g_sdlAudioSpec;
 bool g_sdlAudioSubsystemUp;
 
 static bool g_sdlEmulatedOPLChipReady;
-static uint32_t g_sdlSampleOffsetInSound, g_sdlSamplePerPart;
-static uint64_t g_sdlScaledSampleOffsetInSound, g_sdlScaledSamplePerPart; // For resampling callback
-static void (*g_sdlCallbackSDFuncPtr)(void) = 0;
+static uint32_t g_sdlSamplesPartNum = 0;
+// Simple callback: Scale is samples*PC_PIT_RATE
+// Resampling callback (with OPL emulation): Scale is samples*PC_PIT_RATE*OPL_SAMPLE_RATE
+static uint64_t g_sdlScaledSamplesPerPartsTimesPITRate;
+static uint64_t g_sdlScaledSampleOffsetInSound, g_sdlScaledSamplesInCurrentPart;
+
+static void (*g_sdlTimerIntFuncPtr)(void) = 0;
+
+static SDL_atomic_t g_sdlTimerIntCounter = {0};
 
 // Used for digitized sound playback
 static int16_t *g_sdlSoundEffectCurrPtr;
@@ -56,9 +81,6 @@ static uint32_t g_sdlSoundEffectSamplesLeft;
 #else
 #define MIXER_SAMPLE_FORMAT_SINT16
 #endif
-
-// Used for filling with samples from alOut (alOut_low), in addition to the
-// SDL CallBack itself (because waits between/after AdLib writes are expected)
 
 #define OPL_NUM_OF_SAMPLES 2048 // About 40ms of OPL sound data
 #define OPL_SAMPLE_RATE 49716
@@ -99,6 +121,9 @@ static SRC_STATE *g_sdlSrcResampler;
 static SRC_DATA g_sdlSrcData;
 #endif
 
+// Used for filling with samples from BE_ST_OPL2Write,
+// in addition to the SDL audio CallBack itself
+// (because waits between/after OPL writes are expected)
 static BE_ST_SndSample_T g_sdlALOutSamples[OPL_NUM_OF_SAMPLES];
 static uint32_t g_sdlALOutSamplesEnd = 0;
 
@@ -112,16 +137,6 @@ static bool g_sdlPCSpeakerOn = false;
 static BE_ST_SndSample_T g_sdlCurrentBeepSample;
 static uint32_t g_sdlBeepHalfCycleCounter, g_sdlBeepHalfCycleCounterUpperBound;
 
-// PIT timer divisor
-static uint32_t g_sdlScaledTimerDivisor;
-
-// A variable used for timing measurements
-static uint32_t g_sdlLastTicks;
-
-
-// A PRIVATE TimeCount variable we store
-// (SD_GetTimeCount/SD_SetTimeCount should be called instead)
-static uint32_t g_sdlTimeCount;
 
 static void BEL_ST_Simple_EmuCallBack(void *unused, Uint8 *stream, int len);
 static void BEL_ST_Resampling_EmuCallBack(void *unused, Uint8 *stream, int len);
@@ -193,7 +208,7 @@ void BE_ST_InitAudio(void)
 	if (!g_sdlAudioSubsystemUp)
 	{
 		g_sdlAudioSpec.freq = doDigitized ? inSampleRate : (NUM_OF_BYTES_FOR_SOUND_CALLBACK_WITH_DISABLED_SUBSYSTEM / sizeof(BE_ST_SndSample_T));
-		g_sdlAudioSpec.callback = doDigitized ? BEL_ST_Resampling_DigiCallBack : BEL_ST_Resampling_EmuCallBack;
+		g_sdlAudioSpec.callback = doDigitized ? BEL_ST_Simple_DigiCallBack : BEL_ST_Simple_EmuCallBack;
 		return;
 	}
 
@@ -342,8 +357,6 @@ static uint32_t g_sdlTicksOffset = 0;
 void BE_ST_InitTiming(void)
 {
 	g_sdlTicksOffset = 0;
-	g_sdlTimeCount = 0;
-	g_sdlLastTicks = SDL_GetTicks();
 }
 
 void BE_ST_ShutdownAudio(void)
@@ -385,25 +398,26 @@ void BE_ST_ShutdownAudio(void)
 		SDL_QuitSubSystem(SDL_INIT_AUDIO);
 		g_sdlAudioSubsystemUp = false;
 	}
-	g_sdlCallbackSDFuncPtr = 0; // Just in case this may be called after the audio subsystem was never really started (manual calls to callback)
+	g_sdlTimerIntFuncPtr = 0; // Just in case this may be called after the audio subsystem was never really started (manual calls to callback)
 }
 
-void BE_ST_StartAudioSDService(void (*funcPtr)(void))
+void BE_ST_StartAudioAndTimerInt(void (*funcPtr)(void))
 {
-	g_sdlCallbackSDFuncPtr = funcPtr;
+	g_sdlTimerIntFuncPtr = funcPtr;
+	SDL_AtomicSet(&g_sdlTimerIntCounter, 0);
 	if (g_sdlAudioSubsystemUp)
 	{
 		SDL_PauseAudio(0);
 	}
 }
 
-void BE_ST_StopAudioSDService(void)
+void BE_ST_StopAudioAndTimerInt(void)
 {
 	if (g_sdlAudioSubsystemUp)
 	{
 		SDL_PauseAudio(1);
 	}
-	g_sdlCallbackSDFuncPtr = 0;
+	g_sdlTimerIntFuncPtr = 0;
 }
 
 void BE_ST_LockAudioRecursively(void)
@@ -427,17 +441,17 @@ void BE_ST_UnlockAudioRecursively(void)
 }
 
 // Use this ONLY if audio subsystem isn't properly started up
-void BE_ST_PrepareForManualAudioSDServiceCall(void)
+void BE_ST_PrepareForManualAudioCallbackCall(void)
 {
 	// HACK: Rather than using SDL_PauseAudio for deciding if
-	// we call, just check if g_sdlCallbackSDFuncPtr is non-NULL
+	// we call, just check if g_sdlTimerIntFuncPtr is non-NULL
 	// (not necessarily the same behaviors, but "good enough")
-	if (!g_sdlCallbackSDFuncPtr)
+	if (!g_sdlTimerIntFuncPtr)
 		return;
 
 	static uint32_t s_lastTicks;
 	uint32_t currTicks = SDL_GetTicks();
-	if (currTicks != s_lastTicks)
+	if (currTicks == s_lastTicks)
 		return;
 
 	if (g_sdlAudioSpec.callback == BEL_ST_Simple_EmuCallBack)
@@ -450,13 +464,14 @@ void BE_ST_PrepareForManualAudioSDServiceCall(void)
 	}
 	else // BEL_ST_Simple_DigiCallBack
 	{
-		// Let's not use the callback directly
-		if (g_sdlSoundEffectSamplesLeft > 0)
-		{
-			g_sdlSoundEffectSamplesLeft -= BE_Cross_TypedMin(uint32_t, g_sdlSoundEffectSamplesLeft, currTicks*g_sdlAudioSpec.freq/1000 - s_lastTicks*g_sdlAudioSpec.freq/1000);
-			if (g_sdlSoundEffectSamplesLeft == 0)
-				g_sdlCallbackSDFuncPtr();
-		}
+		uint8_t buff[NUM_OF_BYTES_FOR_SOUND_CALLBACK_WITH_DISABLED_SUBSYSTEM];
+		uint32_t samplesPassed = g_sdlAudioSpec.freq*(currTicks-s_lastTicks)/1000; // Using g_sdlAudioSpec.freq as the rate
+		uint32_t bytesPassed = samplesPassed * sizeof(BE_ST_SndSample_T);
+		// Buffer has constant size unrelated to g_sdlAudioSpec.freq, so loop
+		for (; bytesPassed >= sizeof(buff); bytesPassed -= sizeof(buff))
+			BEL_ST_Simple_DigiCallBack(NULL, buff, sizeof(buff));
+		if (bytesPassed > 0)
+			BEL_ST_Simple_DigiCallBack(NULL, buff, bytesPassed);
 		s_lastTicks = currTicks;
 	}
 }
@@ -498,7 +513,7 @@ void BE_ST_BNoSound(void)
 OPL emulation, powered by dbopl from DOSBox and using bits of code from Wolf4SDL
 *******************************************************************************/
 
-Chip oplChip;
+static Chip oplChip;
 
 static inline void YM3812Init(int numChips, int clock, int rate)
 {
@@ -541,26 +556,27 @@ static inline void YM3812UpdateOne(Chip *which, BE_ST_SndSample_T *stream, int l
 	}
 }
 
-// Drop-in replacement for id_sd.c:alOut
-void BE_ST_ALOut(uint8_t reg,uint8_t val)
+void BE_ST_OPL2Write(uint8_t reg,uint8_t val)
 {
 	BE_ST_LockAudioRecursively(); // RECURSIVE lock
 
-	// FIXME: The original code for alOut adds 6 reads of the
-	// register port after writing to it (3.3 microseconds), and
-	// then 35 more reads of register port after writing to the
-	// data port (23 microseconds).
+	// Per the AdLib manual, this function should simulate 6 reads
+	// of the register port after writing to it (3.3 microseconds),
+	// and then 35 more reads of the register port after
+	// writing to the data port (23 microseconds).
 	//
-	// It is apparently important for a portion of the fuse
-	// breakage sound at the least. For now a hack is implied.
+	// The above appears to be important for reproduction
+	// of the fuse breakage sound in Keen 5 at the least,
+	// as well as a few sound effects in The Catacomb Abyss
+	// (hitting a locked gate, teleportation sound effect).
 	YM3812Write(&oplChip, reg, val);
-	// Hack comes with a "magic number"
-	// that appears to make it work better
+	// FIXME: For now we roughly simulate the above delays with a
+	// hack, using a "magic number" that appears to make this work.
 	unsigned int length = OPL_SAMPLE_RATE / 10000;
 
 	if (length > OPL_NUM_OF_SAMPLES - g_sdlALOutSamplesEnd)
 	{
-		BE_Cross_LogMessage(BE_LOG_MSG_WARNING, "BE_ST_ALOut overflow, want %u, have %u\n", length, OPL_NUM_OF_SAMPLES - g_sdlALOutSamplesEnd); // FIXME - Other thread
+		BE_Cross_LogMessage(BE_LOG_MSG_WARNING, "BE_ST_OPL2Write overflow, want %u, have %u\n", length, OPL_NUM_OF_SAMPLES - g_sdlALOutSamplesEnd); // FIXME - Other thread
 		length = OPL_NUM_OF_SAMPLES - g_sdlALOutSamplesEnd;
 	}
 	if (length)
@@ -695,17 +711,18 @@ static void BEL_ST_Simple_EmuCallBack(void *unused, Uint8 *stream, int len)
 
 	while (len)
 	{
-		if (!g_sdlSampleOffsetInSound)
+		if (!g_sdlScaledSampleOffsetInSound)
 		{
 			// FUNCTION VARIABLE (We should use this and we want to kind-of separate what we have here from original code.)
-			g_sdlCallbackSDFuncPtr();
+			g_sdlTimerIntFuncPtr();
+			SDL_AtomicAdd(&g_sdlTimerIntCounter, 1);
 		}
 		// Now generate sound
-		currNumOfSamples = BE_Cross_TypedMin(uint32_t, len/sizeof(BE_ST_SndSample_T), g_sdlSamplePerPart-g_sdlSampleOffsetInSound);
+		currNumOfSamples = BE_Cross_TypedMin(uint32_t, len/sizeof(BE_ST_SndSample_T), g_sdlScaledSamplesInCurrentPart-g_sdlScaledSampleOffsetInSound);
 		// PC Speaker
 		if (g_sdlPCSpeakerOn)
 			PCSpeakerUpdateOne(currSamplePtr, currNumOfSamples);
-		/*** AdLib (including hack for alOut delays) ***/
+		/*** AdLib (including hack for BE_ST_OPL2Write delays) ***/
 		if (g_sdlEmulatedOPLChipReady)
 		{
 			// We may have pending AL data ready, but probably less than required
@@ -734,12 +751,15 @@ static void BEL_ST_Simple_EmuCallBack(void *unused, Uint8 *stream, int len)
 		}
 		// We're done for now
 		currSamplePtr += currNumOfSamples;
-		g_sdlSampleOffsetInSound += currNumOfSamples;
+		g_sdlScaledSampleOffsetInSound += currNumOfSamples;
 		len -= sizeof(BE_ST_SndSample_T)*currNumOfSamples;
 		// End of part?
-		if (g_sdlSampleOffsetInSound >= g_sdlSamplePerPart)
+		if (g_sdlScaledSampleOffsetInSound >= g_sdlScaledSamplesInCurrentPart)
 		{
-			g_sdlSampleOffsetInSound = 0;
+			g_sdlScaledSampleOffsetInSound = 0;
+			if (++g_sdlSamplesPartNum == PC_PIT_RATE)
+				g_sdlSamplesPartNum = 0;
+			g_sdlScaledSamplesInCurrentPart = (g_sdlSamplesPartNum + 1) * g_sdlScaledSamplesPerPartsTimesPITRate / PC_PIT_RATE - g_sdlSamplesPartNum * g_sdlScaledSamplesPerPartsTimesPITRate / PC_PIT_RATE;
 		}
 	}
 
@@ -777,10 +797,11 @@ static void BEL_ST_Resampling_EmuCallBack(void *unused, Uint8 *stream, int len)
 			if (!g_sdlScaledSampleOffsetInSound)
 			{
 				// FUNCTION VARIABLE (We should use this and we want to kind-of separate what we have here from original code.)
-				g_sdlCallbackSDFuncPtr();
+				g_sdlTimerIntFuncPtr();
+				SDL_AtomicAdd(&g_sdlTimerIntCounter, 1);
 			}
 			// Now generate sound
-			currNumOfScaledSamples = BE_Cross_TypedMin(uint64_t, scaledSamplesToGenerate, g_sdlScaledSamplePerPart-g_sdlScaledSampleOffsetInSound);
+			currNumOfScaledSamples = BE_Cross_TypedMin(uint64_t, scaledSamplesToGenerate, g_sdlScaledSamplesInCurrentPart-g_sdlScaledSampleOffsetInSound);
 			processedScaledInputSamples += currNumOfScaledSamples;
 			/*** FIXME - Scaling back to the original rates may be a bit inaccurate (due to divisions) ***/
 
@@ -821,9 +842,12 @@ static void BEL_ST_Resampling_EmuCallBack(void *unused, Uint8 *stream, int len)
 			g_sdlScaledSampleOffsetInSound += currNumOfScaledSamples;
 			scaledSamplesToGenerate -= currNumOfScaledSamples;
 			// End of part?
-			if (g_sdlScaledSampleOffsetInSound >= g_sdlScaledSamplePerPart)
+			if (g_sdlScaledSampleOffsetInSound >= g_sdlScaledSamplesInCurrentPart)
 			{
 				g_sdlScaledSampleOffsetInSound = 0;
+				if (++g_sdlSamplesPartNum == PC_PIT_RATE)
+					g_sdlSamplesPartNum = 0;
+				g_sdlScaledSamplesInCurrentPart = (g_sdlSamplesPartNum + 1) * g_sdlScaledSamplesPerPartsTimesPITRate / PC_PIT_RATE - g_sdlSamplesPartNum * g_sdlScaledSamplesPerPartsTimesPITRate / PC_PIT_RATE;
 			}
 		}
 
@@ -916,6 +940,11 @@ static void BEL_ST_Simple_DigiCallBack(void *unused, Uint8 *stream, int len)
 
 	len /= sizeof(BE_ST_SndSample_T); // Convert to samples
 
+	// A little bit of cheating since we don't actually call any timer handler here
+	g_sdlScaledSampleOffsetInSound += len * PC_PIT_RATE;
+	SDL_AtomicAdd(&g_sdlTimerIntCounter, g_sdlScaledSampleOffsetInSound / g_sdlScaledSamplesPerPartsTimesPITRate);
+	g_sdlScaledSampleOffsetInSound %= g_sdlScaledSamplesPerPartsTimesPITRate;
+
 	if ((uint32_t)len >= g_sdlSoundEffectSamplesLeft)
 	{
 		memset((BE_ST_SndSample_T *)stream + g_sdlSoundEffectSamplesLeft, 0, sizeof(BE_ST_SndSample_T) * (len - g_sdlSoundEffectSamplesLeft));
@@ -923,8 +952,8 @@ static void BEL_ST_Simple_DigiCallBack(void *unused, Uint8 *stream, int len)
 		{
 			BEL_ST_ConvertS16SamplesToOutputFormat(g_sdlSoundEffectCurrPtr, (BE_ST_SndSample_T *)stream, g_sdlSoundEffectSamplesLeft);
 			g_sdlSoundEffectSamplesLeft = 0;
-			if (g_sdlCallbackSDFuncPtr)
-				g_sdlCallbackSDFuncPtr();
+			if (g_sdlTimerIntFuncPtr)
+				g_sdlTimerIntFuncPtr();
 		}
 	}
 	else
@@ -945,6 +974,11 @@ static void BEL_ST_Resampling_DigiCallBack(void *unused, Uint8 *stream, int len)
 	BE_ST_LockAudioRecursively(); // RECURSIVE lock
 	/////////////////////////////
 
+	// A little bit of cheating since we don't actually call any timer handler here
+	g_sdlScaledSampleOffsetInSound += (len / sizeof(BE_ST_SndSample_T)) * PC_PIT_RATE;
+	SDL_AtomicAdd(&g_sdlTimerIntCounter, g_sdlScaledSampleOffsetInSound / g_sdlScaledSamplesPerPartsTimesPITRate);
+	g_sdlScaledSampleOffsetInSound %= g_sdlScaledSamplesPerPartsTimesPITRate;
+
 	while (len > 0)
 	{
 		if (g_sdlSoundEffectSamplesLeft > 0) // Input is always SINT16, output may differ
@@ -955,8 +989,8 @@ static void BEL_ST_Resampling_DigiCallBack(void *unused, Uint8 *stream, int len)
 			g_sdlSoundEffectCurrPtr += samplesToCopy;
 			g_sdlSoundEffectSamplesLeft -= samplesToCopy;
 
-			if ((g_sdlSoundEffectSamplesLeft == 0) && g_sdlCallbackSDFuncPtr)
-				g_sdlCallbackSDFuncPtr();
+			if ((g_sdlSoundEffectSamplesLeft == 0) && g_sdlTimerIntFuncPtr)
+				g_sdlTimerIntFuncPtr();
 		}
 		if (g_sdlMiscOutSamplesEnd < g_sdlMiscOutNumOfSamples)
 			memset(&g_sdlMiscOutSamples[g_sdlMiscOutSamplesEnd], 0, sizeof(BE_ST_SndSample_T)*(g_sdlMiscOutNumOfSamples - g_sdlMiscOutSamplesEnd));
@@ -979,93 +1013,25 @@ static void BEL_ST_Resampling_DigiCallBack(void *unused, Uint8 *stream, int len)
 
 
 
-// Here, the actual rate is about 1193182Hz/speed
-// NOTE: isALMusicOn is irrelevant for Keen Dreams (even with its music code)
-void BE_ST_SetTimer(uint16_t speed, bool isALMusicOn)
+void BE_ST_SetTimer(uint16_t rateVal)
 {
 	BE_ST_LockAudioRecursively(); // RECURSIVE lock
 
-	g_sdlSamplePerPart = (int32_t)speed * g_sdlAudioSpec.freq / PC_PIT_RATE;
-	g_sdlScaledSamplePerPart = g_sdlSamplePerPart * OPL_SAMPLE_RATE;
-	// In the original code, the id_sd.c:SDL_t0Service callback
-	// is responsible for incrementing TimeCount at a given rate
-	// (~70Hz), although the rate in which the service itself is
-	// 560Hz with music on and 140Hz otherwise.
-	g_sdlScaledTimerDivisor = isALMusicOn ? (speed*8) : (speed*2);
+	g_sdlScaledSamplesPerPartsTimesPITRate = rateVal * g_sdlAudioSpec.freq;
+	if (g_sdlAudioSpec.callback == BEL_ST_Resampling_EmuCallBack)
+		g_sdlScaledSamplesPerPartsTimesPITRate *= OPL_SAMPLE_RATE;
+	// Since the following division may lead to truncation, g_sdlScaledSamplesInCurrentPart
+	// can change during playback by +-1 (otherwise music may be a bit faster than intended).
+	g_sdlScaledSamplesInCurrentPart = g_sdlScaledSamplesPerPartsTimesPITRate / PC_PIT_RATE;
 
 	BE_ST_UnlockAudioRecursively(); // RECURSIVE unlock
 }
 
-void BEL_ST_TicksDelayWithOffset(int sdltickstowait);
-void BEL_ST_TimeCountWaitByPeriod(int16_t timetowait);
+static void BEL_ST_TicksDelayWithOffset(int sdltickstowait);
 
-uint32_t BE_ST_GetTimeCount(void)
+
+void BE_ST_WaitForNewVerticalRetraces(int16_t number)
 {
-	// FIXME: What happens when SDL_GetTicks() reaches the upper bound?
-	// May be challenging to fix... A proper solution should
-	// only work with *differences between SDL_GetTicks values*.
-
-	// WARNING: This must have offset subtracted! (So the game "thinks" it gets the correct (but actually delayed) TimeCount value)
-	uint32_t currOffsettedSdlTicks = SDL_GetTicks() - g_sdlTicksOffset;
-	uint32_t ticksToAdd = (uint64_t)currOffsettedSdlTicks * (uint64_t)PC_PIT_RATE / (1000*g_sdlScaledTimerDivisor) - (uint64_t)g_sdlLastTicks * (uint64_t)PC_PIT_RATE / (1000*g_sdlScaledTimerDivisor);
-	g_sdlTimeCount += ticksToAdd;
-	g_sdlLastTicks = currOffsettedSdlTicks;
-	return g_sdlTimeCount;
-}
-
-void BE_ST_SetTimeCount(uint32_t newcount)
-{
-	g_sdlTimeCount = newcount;
-}
-
-void BE_ST_TimeCountWaitForDest(uint32_t dsttimecount)
-{
-	BEL_ST_TimeCountWaitByPeriod((int32_t)dsttimecount-(int32_t)g_sdlTimeCount);
-}
-
-void BE_ST_TimeCountWaitFromSrc(uint32_t srctimecount, int16_t timetowait)
-{
-	BEL_ST_TimeCountWaitByPeriod((srctimecount+timetowait)-g_sdlTimeCount);
-}
-
-void BEL_ST_TimeCountWaitByPeriod(int16_t timetowait)
-{
-	if (timetowait <= 0)
-	{
-		return;
-	}
-	// COMMENTED OUT - Do NOT refresh TimeCount and g_sdlLastTicks
-	//BE_ST_GetTimeCount();
-
-	// We want to find the minimal currSdlTicks value (mod 2^32) such that...
-	// ticksToWait <= (uint64_t)currSdlTicks * (uint64_t)PC_PIT_RATE / (1000*g_sdlScaledTimerDivisor) - (uint64_t)g_sdlLastTicks * (uint64_t)PC_PIT_RATE / (1000*g_sdlScaledTimerDivisor)
-	// (WARNING: The divisions here are INTEGER divisions!)
-	// i.e.,
-	// ticksToWait + (uint64_t)g_sdlLastTicks * (uint64_t)PC_PIT_RATE / (1000*g_sdlScaledTimerDivisor) <= (uint64_t)currSdlTicks * (uint64_t)PC_PIT_RATE / (1000*g_sdlScaledTimerDivisor)
-	// That is, ignoring the types and up to the division by PC_PIT_RATE being an integer:
-	// currSdlTicks >= [ticksToWait + (uint64_t)g_sdlLastTicks * (uint64_t)PC_PIT_RATE / (1000*g_sdlScaledTimerDivisor)]*1000*g_sdlScaledTimerDivisor / PC_PIT_RATE
-	// So it may seem like we can replace ">=" with "=" and give it a go.
-	//
-	// PROBLEM: The last division IS (or at leat should be) integer. Suppose e.g., the condition is
-	// currSdlTicks >= (PC_PIT_RATE-100) / PC_PIT_RATE
-	// Then we get currSdlTicks = 0, which is not what we want (the minimal integer which is at at least this ratio as a noninteger is 1.)
-	//
-	// SOLUTION: Add PC_PIC_RATE-1 to the numerator.
-
-	uint32_t nextSdlTicks = ((timetowait + (uint64_t)g_sdlLastTicks * (uint64_t)PC_PIT_RATE / (1000*g_sdlScaledTimerDivisor))*1000*g_sdlScaledTimerDivisor + (PC_PIT_RATE-1)) / PC_PIT_RATE;
-	// NOTE: nextSdlTicks is already adjusted in terms of offset, so we can simply reset it here
-	g_sdlTicksOffset = 0;
-	BEL_ST_TicksDelayWithOffset(nextSdlTicks-SDL_GetTicks());
-}
-
-
-void BE_ST_WaitVBL(int16_t number)
-{
-	// (REFKEEN) Difference from vanilla: If the input value is not
-	// positive then the game practically hangs for quite long
-	// (ok, more than 7 minutes). It basically feels like a true hang,
-	// which isn't desired anyway. So we assume that number > 0.
-
 	// TODO (REFKEEN) Make a difference based on HW?
 
 	// Simulate waiting while in vertical retrace first, and then
@@ -1098,7 +1064,7 @@ void BE_ST_Delay(uint16_t msec) // Replacement for delay from dos.h
 	BEL_ST_TicksDelayWithOffset(msec);
 }
 
-void BEL_ST_TicksDelayWithOffset(int sdltickstowait)
+static void BEL_ST_TicksDelayWithOffset(int sdltickstowait)
 {
 	if (sdltickstowait <= (int32_t)g_sdlTicksOffset)
 	{
@@ -1130,4 +1096,63 @@ void BEL_ST_TicksDelayWithOffset(int sdltickstowait)
 		}
 	} 
 	g_sdlTicksOffset = (currSdlTicks - nextSdlTicks);
+}
+
+
+// Resets to 0 an internal counter of calls to timer interrupt,
+// and returns the original counter's value
+int BE_ST_TimerIntClearLastCalls(void)
+{
+	return SDL_AtomicSet(&g_sdlTimerIntCounter, 0);
+}
+
+static int g_sdlTimerIntCounterOffset = 0;
+
+// Attempts to wait for a given amount of calls to timer interrupt.
+// It may wait a bit more in practice (e.g., due to Sync to VBlank).
+// This is taken into account into a following call to the same function,
+// which may actually be a bit shorter than requested (as a consequence).
+void BE_ST_TimerIntCallsDelayWithOffset(int nCalls)
+{
+	if (nCalls <= g_sdlTimerIntCounterOffset)
+	{
+		// Already waited for this time earlier, no need to do so now
+		if (nCalls > 0)
+		{
+			g_sdlTimerIntCounterOffset -= nCalls;
+			SDL_AtomicSet(&g_sdlTimerIntCounter, 0);
+		}
+		BE_ST_PollEvents(); // Still safer to do this
+		return;
+	}
+
+	// Call this BEFORE updating host display or doing anything else!!!
+	// (Because of things like VSync which may add their own delays)
+	int oldCount = SDL_AtomicAdd(&g_sdlTimerIntCounter, g_sdlTimerIntCounterOffset);
+	int newCount;
+
+	BEL_ST_UpdateHostDisplay();
+	BE_ST_PollEvents();
+	uint32_t currSdlTicks;
+	uint32_t lastRefreshTime = SDL_GetTicks();
+
+	do
+	{
+		BEL_ST_SleepMS(1);
+		BE_ST_PollEvents();
+		currSdlTicks = SDL_GetTicks();
+		// Refresh graphics from time to time in case a part of the window is overridden by anything,
+		// like the Steam Overlay, but also check if we should refresh the graphics more often
+		if (g_sdlForceGfxControlUiRefresh || (currSdlTicks - lastRefreshTime > 100))
+		{
+			BEL_ST_UpdateHostDisplay();
+			currSdlTicks = SDL_GetTicks(); // Just be a bit more pedantic
+			lastRefreshTime = currSdlTicks;
+		}
+
+		newCount = SDL_AtomicGet(&g_sdlTimerIntCounter);
+	}
+	while (newCount - oldCount < nCalls);
+	// Do call SDL_AtomicSet instead of accessing 'newCount', in case counter has just been updated again
+	g_sdlTimerIntCounterOffset = (SDL_AtomicSet(&g_sdlTimerIntCounter, 0) - oldCount) - nCalls;
 }

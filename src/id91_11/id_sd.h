@@ -176,7 +176,7 @@ extern	id0_boolean_t		AdLibPresent,
 					NeedsMusic;	// For Caching Mgr
 extern	SDMode		SoundMode;
 extern	SMMode		MusicMode;
-//NOT DECLARED HERE - USE SD_GetTimeCount AND/OR SD_SetTimeCount
+//NOT DECLARED HERE - USE WRAPPERS LIKE SD_GetTimeCount
 //extern	id0_longword_t	TimeCount;					// Global time in ticks
 #ifdef REFKEEN_VER_CATADVENTURES
 extern 	SDMode		oldsoundmode;
@@ -207,20 +207,28 @@ extern	void	SDL_PCPlaySound(PCSound id0_far *sound),
 #endif
 
 // Replacements for direct accesses to TimeCount variable
+id0_longword_t SD_GetTimeCount(void);
+void SD_SetTimeCount(id0_longword_t newcount);
+void SD_AddToTimeCount(id0_longword_t count);
+// Use this as a replacement for bosy loops waiting for TimeCount
+// to reach destination, as in "while (TimeCount<dst)
+void SD_TimeCountWaitForDest(id0_longword_t dst);
+// Use this as a replacement for busy loops waiting for some ticks
+// to pass, as in "while (TimeCount-src<ticks)"
 #if defined(__AROS__) || defined(__AMIGA__)
 static
 #endif
-inline id0_longword_t SD_GetTimeCount(void)
+inline void SD_TimeCountWaitFromSrc(id0_longword_t src, id0_int_t ticks)
 {
-	return BE_ST_GetTimeCount();
+	SD_TimeCountWaitForDest(src + ticks);
 }
-
+// Essentially SD_TimeCountWaitFromSrc with (src == SD_GetTimeCount())
 #if defined(__AROS__) || defined(__AMIGA__)
 static
 #endif
-inline void SD_SetTimeCount(id0_longword_t newcount)
+inline void SD_TimeCountWaitTicks(id0_int_t ticks)
 {
-	BE_ST_SetTimeCount(newcount);
+	SD_TimeCountWaitForDest(SD_GetTimeCount() + ticks);
 }
 
 #endif

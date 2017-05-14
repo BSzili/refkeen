@@ -1,4 +1,4 @@
-/* Copyright (C) 2014-2016 NY00123
+/* Copyright (C) 2014-2017 NY00123
  *
  * This file is part of Reflection Keen.
  *
@@ -17,8 +17,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef	_BE_ST_SDL_
-#define _BE_ST_SDL_
+#ifndef BE_ST_SDL_H
+#define BE_ST_SDL_H
 
 #include "be_st.h"
 
@@ -51,6 +51,7 @@ typedef struct
 #endif
 	int lastSelectedGameVer;
 	int displayNum;
+	bool rememberDisplayNum;
 	int sdlRendererDriver;
 	VSyncSettingType vSync;
 	bool isBilinear;
@@ -84,4 +85,4 @@ typedef struct
 
 extern RefKeenConfig g_refKeenCfg;
 
-#endif
+#endif // BE_ST_SDL_H

@@ -1454,7 +1454,7 @@ USL_PlayPong(void)
 		// ALTCONTROLLER
 		BE_ST_PollEvents();
 #endif
-		BE_ST_TimeCountWaitFromSrc(waittime, 1);
+		SD_TimeCountWaitFromSrc(waittime, 1);
 #if 0
 		while (waittime == TimeCount)
 			;       // DEBUG - do adaptiveness
