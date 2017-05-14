@@ -47,6 +47,7 @@ BEOBJECTS=$(BEOBJ)/actual_main.o \
           $(BEOBJ)/be_st_amiga_audio_timer.o \
           $(BEOBJ)/be_st_amiga_graphics.o \
           $(BEOBJ)/crc32.o \
+          $(BEOBJ)/depklite.o \
           $(BEOBJ)/unlzexe.o
 
 OBJECTS=$(GAMEOBJECTS) $(BEOBJECTS)
@@ -85,6 +86,9 @@ ifeq ($(DEBUG),0)
 endif
 
 $(BEOBJ)/crc32.o: $(BESRC)/crc32/crc32.c | $(BEOBJ)
+	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
+
+$(BEOBJ)/depklite.o: $(BESRC)/depklite/depklite.c | $(BEOBJ)
 	$(CXX) -c $(INTCXXFLAGS) $(CXXFLAGS) $< -o $@
 
 $(BEOBJ)/unlzexe.o: $(BESRC)/unlzexe/unlzexe.c | $(BEOBJ)

@@ -424,7 +424,7 @@ static bool BEL_ST_InitInput(void)
 	}
 #else
 	g_mousePort = 0;
-	BE_ST_GetMouseDelta(NULL, NULL);
+	BE_ST_GetEmuAccuMouseMotion(NULL, NULL);
 	if ((g_kbdIntHandle = AddKBInt(BEL_ST_KeyboardInterrupt, NULL)))
 	{
 		return true;
@@ -553,7 +553,7 @@ void BE_ST_StopKeyboardService(void)
 	g_sdlKeyboardInterruptFuncPtr = 0;
 }
 
-void BE_ST_GetMouseDelta(int16_t *x, int16_t *y)
+void BE_ST_GetEmuAccuMouseMotion(int16_t *x, int16_t *y)
 {
 #ifndef USE_INPUT_DEVICE
 	int newMouseX, newMouseY;
@@ -593,7 +593,7 @@ void BE_ST_GetMouseDelta(int16_t *x, int16_t *y)
 	g_mx = g_my = 0;
 }
 
-uint16_t BE_ST_GetMouseButtons(void)
+uint16_t BE_ST_GetEmuMouseButtons(void)
 {
 #ifndef USE_INPUT_DEVICE
 	ULONG portstate;
@@ -629,7 +629,7 @@ static ULONG BEL_ST_PortIndex(uint16_t joy)
 //#define JOYSTICK_MAX BE_ST_EMU_JOYSTICK_RANGEMAX
 #define JOYSTICK_CENTER ((JOYSTICK_MAX-JOYSTICK_MIN)/2)
 void BE_ST_DebugText(int x, int y, const char *fmt, ...);
-void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
+void BE_ST_GetEmuJoyAxes(uint16_t joy, uint16_t *xp, uint16_t *yp)
 {
 	uint16_t jx = JOYSTICK_MIN;
 	uint16_t jy = JOYSTICK_MIN;
@@ -677,7 +677,7 @@ void BE_ST_GetJoyAbs(uint16_t joy, uint16_t *xp, uint16_t *yp)
 	*yp = jy;
 }
 
-uint16_t BE_ST_GetJoyButtons(uint16_t joy)
+uint16_t BE_ST_GetEmuJoyButtons(uint16_t joy)
 {
 	uint16_t result = 0;
 	ULONG portstate;

@@ -223,14 +223,14 @@ void BE_ST_ShutdownAudio(void)
 #endif
 }
 
-void BE_ST_StartAudioSDService(void (*funcPtr)(void))
+void BE_ST_StartAudioAndTimerInt(void (*funcPtr)(void))
 {
 	D(bug("%s(%p)\n", __FUNCTION__, funcPtr));
 	g_sdlCallbackSDFuncPtr = funcPtr;
 	SD_SetUserHook(MySoundUserHook);
 }
 
-void BE_ST_StopAudioSDService(void)
+void BE_ST_StopAudioAndTimerInt(void)
 {
 	g_sdlCallbackSDFuncPtr = 0;
 }
@@ -356,13 +356,13 @@ void BE_ST_BNoSound(void)
 }
 
 // Drop-in replacement for id_sd.c:alOut
-void BE_ST_ALOut(uint8_t reg,uint8_t val)
+void BE_ST_OPL2Write(uint8_t reg,uint8_t val)
 {
 }
 
 // Here, the actual rate is about 1193182Hz/speed
 // NOTE: isALMusicOn is irrelevant for Keen Dreams (even with its music code)
-void BE_ST_SetTimer(uint16_t speed, bool isALMusicOn)
+void BE_ST_SetTimer(uint16_t speed)
 {
 	if (speed > 0)
 	{
@@ -382,6 +382,7 @@ uint32_t BE_ST_GetTimeCount(void)
 	return g_sdlTimeCount;
 }
 
+/*
 void BE_ST_SetTimeCount(uint32_t newcount)
 {
 	Forbid();
@@ -418,8 +419,9 @@ void BE_ST_TimeCountWaitFromSrc(uint32_t srctimecount, int16_t timetowait)
 		BE_ST_ShortSleep();
 #endif
 }
+*/
 
-void BE_ST_WaitVBL(int16_t number)
+void BE_ST_WaitForNewVerticalRetraces(int16_t number)
 {
 	while (number-- > 0)
 		WaitTOF();
@@ -441,6 +443,37 @@ void BE_ST_ShortSleep(void)
 void BE_ST_Delay(uint16_t msec) // Replacement for delay from dos.h
 {
 	Delay(msec/2);
+}
+
+// Resets to 0 an internal counter of calls to timer interrupt,
+// and returns the original counter's value
+int BE_ST_TimerIntClearLastCalls(void)
+{
+	uint32_t count = g_sdlTimeCount;
+	Forbid();
+	g_sdlTimeCount = 0;
+	Permit();
+	return count;
+}
+
+// Attempts to wait for a given amount of calls to timer interrupt.
+// It may wait a bit more in practice (e.g., due to Sync to VBlank).
+// This is taken into account into a following call to the same function,
+// which may actually be a bit shorter than requested (as a consequence).
+void BE_ST_TimerIntCallsDelayWithOffset(int nCalls)
+{
+	uint32_t dsttimecount = g_sdlTimeCount+nCalls;
+#ifdef TIMER_SIGNAL
+	if (g_sdlTimeCount >= dsttimecount)
+		return;
+
+	SetSignal(0, SIGBREAKF_CTRL_F);
+	g_dstTimeCount = dsttimecount;
+	Wait(SIGBREAKF_CTRL_F);
+#else
+	while (g_sdlTimeCount<dsttimecount)
+		BE_ST_ShortSleep();
+#endif
 }
 
 // Keen Dreams 2015 digitized sounds playback

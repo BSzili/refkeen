@@ -821,7 +821,7 @@ asm	out	dx,al
 	HackCount++;
 
 #if USE_MUSIC
-#ifndef __AMIGA__
+//#ifndef __AMIGA__
 	if (MusicMode == smm_AdLib)
 	{
 		SDL_ALService();
@@ -846,7 +846,7 @@ asm	out	dx,al
 		}
 	}
 	else
-#endif
+//#endif
 #endif
 	{
 		if (!(++count & 1))
@@ -1454,7 +1454,11 @@ static id0_word_t g_t0CountClone = 1;
 
 id0_longword_t SD_GetTimeCount(void)
 {
+#ifdef __AMIGA__
+	const int factor = 1;
+#else
 	const int factor = (MusicMode == smm_AdLib) ? 8 : 2;
+#endif
 	int intCallsCount = BE_ST_TimerIntClearLastCalls();
 	TimeCount += (intCallsCount + (g_t0CountClone % factor)) / factor;
 	g_t0CountClone += intCallsCount;
@@ -1481,7 +1485,11 @@ void SD_TimeCountWaitForDest(id0_longword_t dst)
 	id0_long_t diff = (id0_long_t)(dst - TimeCount);
 	if (diff <= 0)
 		return;
+#ifdef __AMIGA__
+	const int factor = 1;
+#else
 	const int factor = (MusicMode == smm_AdLib) ? 8 : 2;
+#endif
 	int intCallsCount = factor*diff - (g_t0CountClone % factor);
 	BE_ST_TimerIntCallsDelayWithOffset(intCallsCount);
 	TimeCount = dst;
