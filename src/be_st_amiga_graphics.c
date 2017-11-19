@@ -1145,8 +1145,59 @@ void BEL_ST_UpdateHostDisplay(void)
 #endif
 }
 
-// unrolled functions for Keen Dreams
+// common with Catacomb 3D
+// TODO: add word/dword aligned copies, unroll loops, etc.
+void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height)
+{
+	do
+	{
+		int colsLeft = width;
+		do
+		{
+			g_sdlVidMem->egaGfx[0][destOff] = g_sdlVidMem->egaGfx[0][srcOff];
+			g_sdlVidMem->egaGfx[1][destOff] = g_sdlVidMem->egaGfx[1][srcOff];
+			g_sdlVidMem->egaGfx[2][destOff] = g_sdlVidMem->egaGfx[2][srcOff];
+			g_sdlVidMem->egaGfx[3][destOff] = g_sdlVidMem->egaGfx[3][srcOff];
+			++srcOff;
+			++destOff;
+			--colsLeft;
+		} while (colsLeft);
+		destOff += dstLineDelta;
+		srcOff += srcLineDelta;
+		--height;
+	} while (height);
+}
+
+// used by Catacomb 3D too to draw the hand
+// TODO: add unrolled versions for common Keen Dreams sprite sizes (largest: 10 average: 4)
+void BE_ST_EGAMaskBlockSrcToScr(int destOff, int linedelta, const uint8_t *srcPtr, int width, int height, int planesize)
+{
+	do
+	{
+		int colsLeft = width;
+		do
+		{
+			g_sdlVidMem->egaGfx[0][destOff] = (g_sdlVidMem->egaGfx[0][destOff] & (*srcPtr)) | srcPtr[planesize*1];
+			g_sdlVidMem->egaGfx[1][destOff] = (g_sdlVidMem->egaGfx[1][destOff] & (*srcPtr)) | srcPtr[planesize*2];
+			g_sdlVidMem->egaGfx[2][destOff] = (g_sdlVidMem->egaGfx[2][destOff] & (*srcPtr)) | srcPtr[planesize*3];
+			g_sdlVidMem->egaGfx[3][destOff] = (g_sdlVidMem->egaGfx[3][destOff] & (*srcPtr)) | srcPtr[planesize*4];
+			++srcPtr;
+			++destOff;
+			--colsLeft;
+		} while (colsLeft);
+		destOff += linedelta;
+		--height;
+	} while (height);
+}
+
+// touch control stubs
+void BE_ST_AltControlScheme_InitTouchControlsUI(BE_ST_OnscreenTouchControl *onScreenTouchControls)
+{
+}
+
 #ifdef REFKEEN_VER_KDREAMS
+#ifdef UNROLL_LOOPS
+// unrolled functions for Keen Dreams
 #define IS_WORD_ALIGNED(x) (((intptr_t)(x) & 1) == 0)
 
 #define SCR_COPY_WORD \
@@ -1462,45 +1513,20 @@ void BE_ST_EGADrawTile16MaskedSrcToScr(int destOff, const uint8_t *srcPtr)
 	SRC_MASKED_COPY_PLANE_UNALIGNED(2)
 	SRC_MASKED_COPY_PLANE_UNALIGNED(3)
 }
-#endif
 
-// common with Catacomb 3D
-// TODO: add word/dword aligned copies, unroll loops, etc.
-void BE_ST_EGACopyBlockScrToScr(int destOff, int dstLineDelta, int srcOff, int srcLineDelta, int width, int height)
+#else
+
+static void BE_ST_EGACopyBlockMemToScr(int destOff, int linedelta, const uint8_t *srcPtr, int width, int height, int planesize)
 {
 	do
 	{
 		int colsLeft = width;
 		do
 		{
-			g_sdlVidMem->egaGfx[0][destOff] = g_sdlVidMem->egaGfx[0][srcOff];
-			g_sdlVidMem->egaGfx[1][destOff] = g_sdlVidMem->egaGfx[1][srcOff];
-			g_sdlVidMem->egaGfx[2][destOff] = g_sdlVidMem->egaGfx[2][srcOff];
-			g_sdlVidMem->egaGfx[3][destOff] = g_sdlVidMem->egaGfx[3][srcOff];
-			++srcOff;
-			++destOff;
-			--colsLeft;
-		} while (colsLeft);
-		destOff += dstLineDelta;
-		srcOff += srcLineDelta;
-		--height;
-	} while (height);
-}
-
-// used by Catacomb 3D too to draw the hand
-// TODO: add unrolled versions for common Keen Dreams sprite sizes (largest: 10 average: 4)
-void BE_ST_EGAMaskBlockSrcToSrc(int destOff, int linedelta, uint8_t *srcPtr, int width, int height, int planesize)
-{
-	//bool aligned = IS_WORD_ALIGNED(destOff);
-	do
-	{
-		int colsLeft = width;
-		do
-		{
-			g_sdlVidMem->egaGfx[0][destOff] = (g_sdlVidMem->egaGfx[0][destOff] & (*srcPtr)) | srcPtr[planesize*1];
-			g_sdlVidMem->egaGfx[1][destOff] = (g_sdlVidMem->egaGfx[1][destOff] & (*srcPtr)) | srcPtr[planesize*2];
-			g_sdlVidMem->egaGfx[2][destOff] = (g_sdlVidMem->egaGfx[2][destOff] & (*srcPtr)) | srcPtr[planesize*3];
-			g_sdlVidMem->egaGfx[3][destOff] = (g_sdlVidMem->egaGfx[3][destOff] & (*srcPtr)) | srcPtr[planesize*4];
+			g_sdlVidMem->egaGfx[0][destOff] = srcPtr[planesize*0];
+			g_sdlVidMem->egaGfx[1][destOff] = srcPtr[planesize*1];
+			g_sdlVidMem->egaGfx[2][destOff] = srcPtr[planesize*2];
+			g_sdlVidMem->egaGfx[3][destOff] = srcPtr[planesize*3];
 			++srcPtr;
 			++destOff;
 			--colsLeft;
@@ -1510,7 +1536,51 @@ void BE_ST_EGAMaskBlockSrcToSrc(int destOff, int linedelta, uint8_t *srcPtr, int
 	} while (height);
 }
 
-// touch control stubs
-void BE_ST_AltControlScheme_InitTouchControlsUI(BE_ST_OnscreenTouchControl *onScreenTouchControls)
+static void BE_ST_EGAMaskBlockMemToScr(int destOff, int linedelta, const uint8_t *backSrcPtr, const uint8_t *foreSrcPtr, int width, int height, int planesize)
 {
+	do
+	{
+		int colsLeft = width;
+		do
+		{
+			g_sdlVidMem->egaGfx[0][destOff] = (backSrcPtr[planesize*0] & (*foreSrcPtr)) | foreSrcPtr[planesize*1];
+			g_sdlVidMem->egaGfx[1][destOff] = (backSrcPtr[planesize*1] & (*foreSrcPtr)) | foreSrcPtr[planesize*2];
+			g_sdlVidMem->egaGfx[2][destOff] = (backSrcPtr[planesize*2] & (*foreSrcPtr)) | foreSrcPtr[planesize*3];
+			g_sdlVidMem->egaGfx[3][destOff] = (backSrcPtr[planesize*3] & (*foreSrcPtr)) | foreSrcPtr[planesize*4];
+			++backSrcPtr;
+			++foreSrcPtr;
+			++destOff;
+			--colsLeft;
+		} while (colsLeft);
+		destOff += linedelta;
+		--height;
+	} while (height);
 }
+
+// RFL_NewTile_EGA
+void BE_ST_EGADrawTile16MemToScr(int destOff, const uint8_t *srcPtr)
+{
+	BE_ST_EGACopyBlockMemToScr(destOff, SCREENWIDTH_EGA-2, srcPtr, 2, 16, 32);
+}
+
+// RFL_NewTile_EGA
+void BE_ST_EGADrawTile16MaskedMemToScr(int destOff, const uint8_t *backSrcPtr, const uint8_t *foreSrcPtr)
+{
+	BE_ST_EGAMaskBlockMemToScr(destOff, SCREENWIDTH_EGA-2, backSrcPtr, foreSrcPtr, 2, 16, 32);
+}
+
+// RFL_UpdateTiles, RFL_UpdateTiles
+void BE_ST_EGADrawTile16ScrToScr(int destOff, int srcOff)
+{
+	BE_ST_EGACopyBlockScrToScr(destOff, SCREENWIDTH_EGA-2, srcOff, SCREENWIDTH_EGA-2, 2, 16);
+}
+
+// RFL_MaskForegroundTiles
+void BE_ST_EGADrawTile16MaskedSrcToScr(int destOff, const uint8_t *srcPtr)
+{
+	BE_ST_EGAMaskBlockSrcToScr(destOff, SCREENWIDTH_EGA-2, srcPtr, 2, 16, 32);
+}
+#endif
+
+#endif
+

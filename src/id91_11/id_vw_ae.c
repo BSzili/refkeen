@@ -295,8 +295,8 @@ void VW_MaskBlock(memptr segm,id0_unsigned_t ofs,id0_unsigned_t dest,
 	id0_unsigned_t wide,id0_unsigned_t height,id0_unsigned_t planesize)
 {
 #ifdef __AMIGA__
-	void BE_ST_EGAMaskBlockSrcToSrc(int destOff, int linedelta, uint8_t *srcPtr, int width, int height, int planesize);
-	BE_ST_EGAMaskBlockSrcToSrc(dest, linewidth-wide, (id0_byte_t *)segm + ofs, wide, height, planesize);
+	void BE_ST_EGAMaskBlockSrcToScr(int destOff, int linedelta, const uint8_t *srcPtr, int width, int height, int planesize);
+	BE_ST_EGAMaskBlockSrcToScr(dest, linewidth-wide, (id0_byte_t *)segm + ofs, wide, height, planesize);
 #else
 	//planemask = 1;
 	planenum = 0;
