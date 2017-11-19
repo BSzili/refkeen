@@ -2707,6 +2707,12 @@ void BE_Cross_StartGame(int gameVerVal, int argc, char **argv, void (*mainFuncPt
 	// Locate the right EXE
 	for (g_be_current_exeFileDetails = g_be_gamever_ptrs[refkeen_current_gamever]->exeFiles; g_be_current_exeFileDetails->mainFuncPtr && (g_be_current_exeFileDetails->mainFuncPtr != mainFuncPtr); ++g_be_current_exeFileDetails)
 		;
+#ifdef __AMIGA__
+	// TODO hack
+	if (!g_be_current_exeFileDetails->mainFuncPtr)
+		g_be_current_exeFileDetails = g_be_gamever_ptrs[refkeen_current_gamever]->exeFiles;
+	//printf("%s:%d %s %p\n", __FUNCTION__, __LINE__, g_be_current_exeFileDetails->exeName, g_be_current_exeFileDetails->mainFuncPtr);
+#endif
 	if (!g_be_current_exeFileDetails->mainFuncPtr)
 		BE_ST_ExitWithErrorMsg("BE_Cross_StartGame - Unrecognized main function!");
 

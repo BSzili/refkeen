@@ -857,6 +857,18 @@ void BE_ST_AltControlScheme_UpdateVirtualMouseCursor(int x, int y)
 	// unused
 }
 
+void BE_ST_AltControlScheme_Reset(void)
+{
+	BEL_ST_AltControlScheme_CleanUp();
+
+	g_sdlControllerMappingPtrsStack.stack[0] = &g_sdlControllerMappingDefault;
+	g_sdlControllerMappingPtrsStack.currPtr = &g_sdlControllerMappingPtrsStack.stack[0];
+	g_sdlControllerMappingPtrsStack.endPtr = &g_sdlControllerMappingPtrsStack.stack[NUM_OF_CONTROLLER_MAPS_IN_STACK];
+	g_sdlControllerMappingActualCurr = g_sdlControllerMappingPtrsStack.stack[0];
+
+	g_sdlControllerSchemeNeedsCleanUp = true;
+}
+
 void BE_ST_SetAppQuitCallback(void (*funcPtr)(void))
 {
 	g_sdlAppQuitCallback = funcPtr;

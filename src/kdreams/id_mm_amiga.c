@@ -44,7 +44,7 @@ void		(* aftersort) (void);
 
 id0_boolean_t		mmstarted;
 id0_boolean_t		bombonerror;
-struct MinList memlist;
+static struct MinList memlist;
 
 void MM_Startup (void)
 {

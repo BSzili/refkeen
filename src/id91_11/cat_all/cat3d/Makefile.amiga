@@ -47,6 +47,7 @@ IDOBJECTS=$(IDOBJ)/id_ca.o \
 BEOBJECTS=$(BEOBJ)/actual_main.o \
           $(BEOBJ)/be_cross.o \
           $(BEOBJ)/be_cross_fs.o \
+          $(BEOBJ)/be_cross_mem_amiga.o \
           $(BEOBJ)/be_st_amiga.o \
           $(BEOBJ)/be_st_amiga_audio_timer.o \
           $(BEOBJ)/be_st_amiga_cd32.o \
@@ -71,7 +72,7 @@ BEOBJECTS+=$(BEOBJ)/c2p1x1_4_c5_bm.o
 endif
 
 INTCXXFLAGS+= $(CXXOPT) -Wall -Wno-missing-braces -Wno-switch -Wno-parentheses -m68020 -msoft-float -std=c99 -noixemul
-INTLDFLAGS= -lm -noixemul
+INTLDFLAGS= -lm -m68020 -msoft-float -noixemul
 ifeq ($(DEBUG),1)
 	INTLDFLAGS+= -ldebug
 endif
