@@ -19,10 +19,15 @@
 #ifndef __HEADS_H__
 #define __HEADS_H__
 
-// Taken off ID_HEADS.H
+/*** VERSIONS RESTORATION ***/
+#include "gamever.h"
+
+// Taken off ID_HEADS.H, WITH POSSIBLE MODIFICATIONS
 
 //#include <ALLOC.H>
-#include <ctype.h>
+// REFKEEN / VERSION RESTORATION - Originally ctype.h was absent on purpose,
+// so the isalpha function would be used instead of a macro in Borland C++.
+//#include <ctype.h>
 //#include <DOS.H>
 #include <errno.h>
 #include <fcntl.h>
@@ -40,14 +45,6 @@
 
 #include "refkeen.h"
 
-#ifdef REFKEEN_VER_CATABYSS
-#define EXTENSION "ABS"
-#elif defined REFKEEN_VER_CATARM
-#define EXTENSION "ARM"
-#elif defined REFKEEN_VER_CATAPOC
-#define EXTENSION "APC"
-#endif
-
 #define GRMODE EGAGR
 
 //
@@ -58,6 +55,11 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+
+
+// REFKEEN - Define these for backwards compatibility
+#define id0_argc g_be_argc
+#define id0_argv g_be_argv
 
 typedef	bool id0_boolean_t;
 
@@ -91,10 +93,6 @@ typedef uint32_t id0_longword_t;
 #define id0_huge
 #define id0_seg
 
-// Initialized before calling vanilla app's (now renamed) main function
-extern int id0_argc;
-extern const char **id0_argv;
-
 // WARNING: THIS IS *DIFFERENT* FROM THE ID_MM.H DEFINITION!!!
 // ... in 16-bit code (far vs segment pointer).
 
@@ -121,5 +119,9 @@ cardtype VideoID (void);
 void SetScreen (id0_unsigned_t CRTC, id0_unsigned_t pelpan);
 void ScreenToScreen(id0_unsigned_t source, id0_unsigned_t dest,
 	id0_unsigned_t wide, id0_unsigned_t height);
+// REFKEEN - Add these
+extern void intro_exe_main(void);
+extern void loadscn_exe_main(void);
+extern void slidecat_exe_main(void);
 
 #endif

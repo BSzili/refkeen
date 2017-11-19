@@ -31,6 +31,7 @@
 #endif
 
 #include "be_cross.h"
+#include "be_st.h" // For BE_ST_ExitWithErrorMsg
 
 // C99
 char *BE_Cross_ultoa_dec(uint32_t n, char *buffer);
@@ -118,9 +119,6 @@ uint16_t BE_Cross_Compat_GetFarPtrRelocationSegOffset(void)
 	return BE_ST_Compat_GetFarPtrRelocationSegOffset();
 }
 #endif
-
-// C99
-int32_t BE_Mem_FarCoreLeft(void);
 
 
 void BE_Cross_Wrapped_Add(uint8_t *segPtr, uint8_t **offInSegPtrPtr, uint16_t count)

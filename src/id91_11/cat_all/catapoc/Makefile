@@ -49,11 +49,13 @@ EXTOBJECTS=$(EXTOBJ)/ext_ca.o \
            $(EXTOBJ)/ext_lzhuf.o \
            $(EXTOBJ)/ext_soft.o \
            $(EXTOBJ)/ext_vw_a.o \
+           $(EXTOBJ)/slidecat.o \
            $(EXTOBJ)/intro.o
 
 BEOBJECTS=$(BEOBJ)/actual_main.o \
           $(BEOBJ)/be_cross.o \
           $(BEOBJ)/be_cross_fs.o \
+          $(BEOBJ)/be_cross_mem.o \
           $(BEOBJ)/be_cross_doszeroseg.o \
           $(BEOBJ)/be_launcher.o \
           $(BEOBJ)/be_st_sdl.o \

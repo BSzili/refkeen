@@ -38,6 +38,8 @@ typedef enum { MOUSEGRAB_AUTO, MOUSEGRAB_OFF, MOUSEGRAB_COMMONLY } MouseGrabSett
 typedef enum { LAUNCHER_WINDOW_DEFAULT, LAUNCHER_WINDOW_FULL, LAUNCHER_WINDOW_SOFTWARE } LauncherWindowSettingType;
 #endif
 
+#define SELECTED_EXE_FILENAME_BUFFERLEN 13
+
 typedef struct
 {
 	bool isFullscreen;
@@ -49,6 +51,7 @@ typedef struct
 	LauncherWindowSettingType launcherWinType;
 	char launcherExeArgs[LAUNCHER_EXE_ARGS_BUFFERLEN];
 #endif
+	char lastSelectedGameExe[SELECTED_EXE_FILENAME_BUFFERLEN];
 	int lastSelectedGameVer;
 	int displayNum;
 	bool rememberDisplayNum;
@@ -62,6 +65,7 @@ typedef struct
 #ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
 	bool absMouseMotion;
 #endif
+	int sndInterThreadBufferRatio;
 	int sndSampleRate;
 	bool sndSubSystem;
 	bool oplEmulation;

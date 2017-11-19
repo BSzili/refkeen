@@ -786,8 +786,8 @@ void Quit (const id0_char_t *error, ...)
 			BE_ST_HandleExit(1);
 		}
 #endif
-		void id0_loadscn_exe_main(void);
-		id0_loadscn_exe_main();
+		void loadscn_exe_main(void);
+		BE_Cross_Bexecv(loadscn_exe_main, id0_argv, NULL, false);
 	}
 #endif
 
@@ -1216,6 +1216,10 @@ void apocgame_exe_main (void)
 //	jabhack();
 
 	BE_Cross_Brandomize();
+
+	// REFKEEN - Alternative controllers support
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback;
+	BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_inackback);
 
 	InitGame ();
 //	CheckMemory ();

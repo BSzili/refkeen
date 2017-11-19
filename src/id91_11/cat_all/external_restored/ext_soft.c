@@ -91,8 +91,19 @@ id0_unsigned_long_t ext_BLoad(const id0_char_t *SourceFile, memptr *DstPtr)
 	//
 
 	if (!BE_Cross_IsFileValid(handle = BE_Cross_open_readonly_for_reading(SourceFile)))
-	//if ((handle = open(SourceFile, O_RDONLY|O_BINARY)) == -1)
+	// REFKEEN - Pick behaviors based on subprogram being run
+{
+if (be_lastSetMainFuncPtr == slidecat_exe_main)
+	{
+		SetScreenMode(1);
+		BE_ST_printf("\n" GAMEVER_SLIDECAT_ERR_STR " : Can't open file. %s\n\n",SourceFile);
+		BE_ST_HandleExit(0);
+	}
+else
 		return(0);
+}
+	//if ((handle = open(SourceFile, O_RDONLY|O_BINARY)) == -1)
+	//	return(0);
 
 	//
 	// Look for JAMPAK headers
@@ -113,9 +124,23 @@ id0_unsigned_long_t ext_BLoad(const id0_char_t *SourceFile, memptr *DstPtr)
 		BE_Cross_readInt32LE(handle, &CompHeader.OrginalLen);
 		//read(handle,(void *)&CompHeader.OrginalLen,4);
 		CompHeader.CompType = ct_LZW;
-		*DstPtr = malloc/*farmalloc*/(CompHeader.OrginalLen);
+		*DstPtr = BE_Cross_Bfarmalloc(CompHeader.OrginalLen);
 		if (!*DstPtr)
+		// REFKEEN - Pick behaviors based on subprogram being run
+{
+if (be_lastSetMainFuncPtr == slidecat_exe_main)
+		{
+			SetScreenMode(1);
+			BE_ST_printf("You need more \"free conventional memory\" in order to view the\n"
+			             "Demo of the Catacomb 3-D Trilogy.  At least 588K free memory\n"
+			             "is required.  Try renaming your AUTOEXEC.BAT and CONFIG.SYS\n"
+			             "files to other names, then reboot your computer, and try again.\n\n\n"
+			);
+			BE_ST_HandleExit(0);
+		}
+else
 			return(0);
+}
 		offset = 8;
 	}
 	else
@@ -137,9 +162,23 @@ id0_unsigned_long_t ext_BLoad(const id0_char_t *SourceFile, memptr *DstPtr)
 		CompHeader.CompressLen = BE_Cross_Swap32LE(CompHeader.CompressLen);
 #endif
 		offset = 14;
-		*DstPtr = malloc/*farmalloc*/(CompHeader.OrginalLen);
+		*DstPtr = BE_Cross_Bfarmalloc(CompHeader.OrginalLen);
 		if (!*DstPtr)
+		// REFKEEN - Pick behaviors based on subprogram being run
+{
+if (be_lastSetMainFuncPtr == slidecat_exe_main)
+		{
+			SetScreenMode(1);
+			BE_ST_printf("You need more \"free conventional memory\" in order to view the\n"
+			             "Demo of the Catacomb 3-D Trilogy.  At least 588K free memory\n"
+			             "is required.  Try renaming your AUTOEXEC.BAT and CONFIG.SYS\n"
+			             "files to other names, then reboot your computer, and try again.\n\n\n"
+			);
+			BE_ST_HandleExit(0);
+		}
+else
 			return(0);
+}
 	}
 	else
 		DstLen = VerifyReadOnly(SourceFile);
@@ -154,7 +193,7 @@ id0_unsigned_long_t ext_BLoad(const id0_char_t *SourceFile, memptr *DstPtr)
 		DstLen = CompHeader.OrginalLen;
 
 		// REFKEEN - Looks like this is an unsigned comparison in original EXE
-		if (((id0_unsigned_long_t)BE_Mem_FarCoreLeft() < 2*SrcLen) && (CompHeader.CompType))
+		if (((id0_unsigned_long_t)BE_Cross_Bfarcoreleft() < 2*SrcLen) && (CompHeader.CompType))
 		{
 			//if (!InitBufferedIO(handle,&lzwBIO))
 			//	TrashProg("No memory for buffered I/O.");
@@ -206,7 +245,7 @@ id0_unsigned_long_t ext_BLoad(const id0_char_t *SourceFile, memptr *DstPtr)
 					TrashProg("BLoad() - Unrecognized/Supported compression");
 				break;
 			}
-			free/*farfree*/(SrcPtr);
+			BE_Cross_Bfarfree(SrcPtr);
 			// REFKEEN - File handle already closed
 			return(DstLen);
 		}
@@ -319,7 +358,7 @@ id0_int_t ext_LoadShape(const id0_char_t *Filename, struct Shape *SHP)
 			ptr += 4;
 			//SwapLong((id0_long_t id0_far *)&size);
 			SHP->BPR = (SHP->bmHdr.w+7) >> 3;
-			SHP->Data = malloc/*farmalloc*/(size);
+			SHP->Data = BE_Cross_Bfarmalloc(size);
 			if (!SHP->Data)
 				goto EXIT_FUNC;
 			//movedata(FP_SEG(ptr),FP_OFF(ptr),FP_SEG(SHP->Data),FP_OFF(SHP->Data),size);
@@ -340,7 +379,7 @@ EXIT_FUNC:;
 	if (IFFfile)
 	{
 //		segptr = (memptr)FP_SEG(IFFfile);
-		free/*farfree*/(IFFfile);
+		BE_Cross_Bfarfree(IFFfile);
 	}
 
 	return (RT_CODE);
@@ -355,7 +394,7 @@ EXIT_FUNC:;
 void ext_FreeShape(struct Shape *shape)
 {
 	if (shape->Data)
-		free/*farfree*/(shape->Data);
+		BE_Cross_Bfarfree(shape->Data);
 }
 
 // (REFKEEN) Functionality equivalant to SwapLong, SwapWord from CATABYSS.EXE's gelib

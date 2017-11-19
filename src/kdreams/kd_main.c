@@ -401,11 +401,6 @@ void Quit (const id0_char_t *error)
 	// Since CATALOG is present only in 1.05, we simply ignore this macro.
 	if (refkeen_current_gamever == BE_GAMEVER_KDREAMSE113)
 	{
-		// REFKEEN - Alternative controllers support
-		extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback;
-		BE_ST_AltControlScheme_Push();
-		BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_inackback);
-
 		id0_argc = 2;
 		id0_argv[1] = "LAST.SHL";
 		id0_argv[2] = "ENDSCN.SCN";
@@ -413,8 +408,8 @@ void Quit (const id0_char_t *error)
 
 		//if (execv("LOADSCN.EXE", _argv) == -1)
 		//	Quit("Couldn't find executable LOADSCN.EXE.\n");
-		void loadscn2_main(int argc, const char **argv);
-		loadscn2_main(id0_argc+1, id0_argv);
+		int loadscn2_main(int argc, const char **argv);
+		BE_Cross_Bexecv((void (*)(void))loadscn2_main, id0_argv, NULL, true); // A kind of a HACK (C++)
 	}
 	else
 	{
@@ -734,21 +729,14 @@ void kdreams_exe_main (void)
 		BE_ST_textbackground(0);
 	}
 
+	// REFKEEN - Alternative controllers support
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback;
+	BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_inackback);
+
 
 
 	InitGame();
 
 	DemoLoop();                                     // DemoLoop calls Quit when everything is done
 	Quit("Demo loop exited???");
-}
-
-// (REFKEEN) Used for loading PIRACY data from DOS EXE (instead of embedding here)
-id0_unsigned_char_t id0_far	*PIRACY;
-
-void RefKeen_Patch_kd_main(void)
-{
-	int PIRACYsize;
-	if (current_gamever_int == 100)
-		if ((PIRACYsize = BE_Cross_load_embedded_rsrc_to_mem("PIRACY.BIN", (memptr *)&PIRACY)) < 0) // Not exactly PIRACY.SCN
-			BE_ST_ExitWithErrorMsg("RefKeen_Patch_kd_main - Failed to load PIRACY file."); // Too early to use Quit here
 }

@@ -25,17 +25,21 @@
 #include "ext_heads.h"
 #include "ext_gelib.h"
 
+// REFKEEN - Re-use functions from intro.c
+#if 0
 static void SetScreenMode (id0_int_t mode);
 static void SetLineWidth (id0_int_t width);
 static id0_boolean_t IsKeyPressed (void);
 static void WaitForKeyRelease (void);
+#endif
 
-static memptr bufferptr;
-static id0_int_t screenmode;
+// REFKEEN Let these variables be static
+static memptr endscreen;
+static struct Shape imagetoshow;
 static cardtype videocard;
-static struct Shape armashape;
+static id0_int_t screenmode;
 
-void id0_loadscn_exe_main (void)
+void loadscn_exe_main (void)
 {
 	id0_int_t step;
 	id0_boolean_t pressedkey = false;
@@ -79,10 +83,13 @@ void id0_loadscn_exe_main (void)
 	screenmode = 3;
 	SetScreenMode(screenmode);
 	SetScreen(0,0);
-	if (ext_LoadShape("ARMAPC.ABS", &armashape))
+	if (ext_LoadShape("ARMAPC.ABS", &imagetoshow))
 		TrashProg("ERROR : Can't load image.");
 	ext_MoveGfxDst(0, 200);
-	UnpackEGAShapeToScreen(&armashape, 0, 0);
+	UnpackEGAShapeToScreen(&imagetoshow, 0, 0);
+	// REFKEEN - Alternative controllers support
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback;
+	BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_inackback);
 #ifndef __AMIGA__
 	// (REFKEEN) Add an artificial delay (screen not shown immediately on older machines)
 	BE_ST_Delay(250);
@@ -101,14 +108,14 @@ void id0_loadscn_exe_main (void)
 #endif
 	if (!pressedkey)
 		BE_ST_BiosScanCode(0);
-	if (!ext_BLoad("LAST.ABS", &bufferptr))
+	if (!ext_BLoad("LAST.ABS", &endscreen))
 		TrashProg("Can't load Compressed Text - Possibly corrupt file!");
 	screenmode = 1;
 	SetScreenMode(screenmode);
 
-	memcpy(BE_ST_GetTextModeMemoryPtr(), (id0_byte_t *)bufferptr+7, 4000);
+	memcpy(BE_ST_GetTextModeMemoryPtr(), (id0_byte_t *)endscreen+7, 4000);
 	BE_ST_MarkGfxForUpdate();
-	//_fmemcpy(MK_FP(0xB800,0), (byte far *)bufferptr+7, 4000);
+	//_fmemcpy(MK_FP(0xB800,0), (byte far *)endscreen+7, 4000);
 	BE_ST_MoveTextCursorTo(0, 23); // gotoxy(1, 24)
 	BE_ST_HandleExit(0);
 }
@@ -133,6 +140,8 @@ void loadscn_TrashProg (const id0_char_t *OutMsg, ...)
 	BE_ST_HandleExit(0);
 }
 
+// REFKEEN - Re-use functions from intro.c
+#if 0
 static void SetScreenMode (id0_int_t mode)
 {
 	switch (mode)
@@ -212,3 +221,4 @@ static void WaitForKeyRelease (void)
 			//getch();
 		}
 }
+#endif // REFKEEN - Re-use functions

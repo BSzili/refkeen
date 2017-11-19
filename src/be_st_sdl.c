@@ -95,6 +95,8 @@ static uint32_t g_sdlOnScreenKeyboardLastDirButtonPressTimeDelay;
 
 static bool g_sdlControllerSchemeNeedsCleanUp;
 
+static BE_ST_ControllerMapping g_sdlControllerMappingDefault;
+
 static struct {
 	const BE_ST_ControllerMapping *stack[NUM_OF_CONTROLLER_MAPS_IN_STACK];
 	const BE_ST_ControllerMapping **currPtr;
@@ -102,9 +104,8 @@ static struct {
 } g_sdlControllerMappingPtrsStack;
 
 // Current mapping, doesn't have to be *(g_sdlControllerMappingPtrsStack.currPtr) as game code can change this (e.g., helper keys)
-const BE_ST_ControllerMapping *g_sdlControllerMappingActualCurr;
+const BE_ST_ControllerMapping *g_sdlControllerMappingActualCurr = &g_sdlControllerMappingDefault;
 
-static BE_ST_ControllerMapping g_sdlControllerMappingDefault;
 // HACK - These "mappings" are used for identification of on-screen keyboards (using pointers comparisons)
 BE_ST_ControllerMapping g_beStControllerMappingTextInput;
 BE_ST_ControllerMapping g_beStControllerMappingDebugKeys;
@@ -236,13 +237,7 @@ void BE_ST_PrepareForGameStartupWithoutAudio(void)
 	//BE_ST_InitAudio(); // Not yet, need to select game version (so have gfx ready for possible errors), and then check if we want digi audio output
 	BE_ST_InitTiming();
 
-	// Preparing a controller scheme (with no special UI) in case the relevant feature is enabled
-	g_sdlControllerMappingPtrsStack.stack[0] = &g_sdlControllerMappingDefault;
-	g_sdlControllerMappingPtrsStack.currPtr = &g_sdlControllerMappingPtrsStack.stack[0];
-	g_sdlControllerMappingPtrsStack.endPtr = &g_sdlControllerMappingPtrsStack.stack[NUM_OF_CONTROLLER_MAPS_IN_STACK];
-	g_sdlControllerMappingActualCurr = g_sdlControllerMappingPtrsStack.stack[0];
-
-	g_sdlControllerSchemeNeedsCleanUp = false;
+	//g_sdlControllerSchemeNeedsCleanUp = false;
 
 	memset(g_sdlControllersButtonsStates, 0, sizeof(g_sdlControllersButtonsStates));
 	memset(g_sdlControllersAxesStates, 0, sizeof(g_sdlControllersAxesStates));
@@ -449,6 +444,11 @@ static void BEL_ST_ParseSetting_LauncherExeArgs(const char *keyprefix, const cha
 }
 #endif
 
+static void BEL_ST_ParseSetting_LastSelectedGameExe(const char *keyprefix, const char *buffer)
+{
+	BE_Cross_safeandfastcstringcopy(g_refKeenCfg.lastSelectedGameExe, g_refKeenCfg.lastSelectedGameExe+sizeof(g_refKeenCfg.lastSelectedGameExe), buffer);
+}
+
 static void BEL_ST_ParseSetting_LastSelectedGameVer(const char *keyprefix, const char *buffer)
 {
 	for (int i = 0; i < BE_GAMEVER_LAST; ++i)
@@ -578,6 +578,13 @@ static void BEL_ST_ParseSetting_AbsMouseMotion(const char *keyprefix, const char
 	}
 }
 #endif
+
+static void BEL_ST_ParseSetting_SndInterThreadBufferRatio(const char *keyprefix, const char *buffer)
+{
+	g_refKeenCfg.sndInterThreadBufferRatio = atoi(buffer);
+	if (g_refKeenCfg.sndInterThreadBufferRatio <= 0)
+		g_refKeenCfg.sndInterThreadBufferRatio = 8;
+}
 
 static void BEL_ST_ParseSetting_SndSampleRate(const char *keyprefix, const char *buffer)
 {
@@ -788,6 +795,7 @@ static BESDLCfgEntry g_sdlCfgEntries[] = {
 	{"launcherwindowtype=", &BEL_ST_ParseSetting_LauncherWindowType},
 	{"launcherexeargs=", &BEL_ST_ParseSetting_LauncherExeArgs},
 #endif
+	{"lastselectedgameexe=", &BEL_ST_ParseSetting_LastSelectedGameExe},
 	{"lastselectedgamever=", &BEL_ST_ParseSetting_LastSelectedGameVer},
 	{"displaynum=", &BEL_ST_ParseSetting_DisplayNum},
 	{"rememberdisplaynum=", &BEL_ST_ParseSetting_RememberDisplayNum},
@@ -801,6 +809,7 @@ static BESDLCfgEntry g_sdlCfgEntries[] = {
 #ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
 	{"absmousemotion=", &BEL_ST_ParseSetting_AbsMouseMotion},
 #endif
+	{"sndinterthreadbufferratio=", &BEL_ST_ParseSetting_SndInterThreadBufferRatio},
 	{"sndsamplerate=", &BEL_ST_ParseSetting_SndSampleRate},
 	{"sndsubsystem=", &BEL_ST_ParseSetting_SoundSubSystem},
 	{"oplemulation=", &BEL_ST_ParseSetting_OPLEmulation},
@@ -865,6 +874,7 @@ static void BEL_ST_ParseConfig(void)
 	g_refKeenCfg.launcherExeArgs[0] = '\0';
 	g_refKeenCfg.launcherWinType = LAUNCHER_WINDOW_DEFAULT;
 #endif
+	g_refKeenCfg.lastSelectedGameExe[0] = '\0';
 	g_refKeenCfg.lastSelectedGameVer = BE_GAMEVER_LAST;
 	g_refKeenCfg.displayNum = 0;
 	g_refKeenCfg.rememberDisplayNum = true;
@@ -878,6 +888,7 @@ static void BEL_ST_ParseConfig(void)
 #ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
 	g_refKeenCfg.absMouseMotion = false;
 #endif
+	g_refKeenCfg.sndInterThreadBufferRatio = 8;
 	g_refKeenCfg.sndSampleRate = 48000; // 49716 may lead to unexpected behaviors on Android
 	g_refKeenCfg.sndSubSystem = true;
 	g_refKeenCfg.oplEmulation = true;
@@ -973,7 +984,13 @@ static void BEL_ST_SaveConfig(void)
 	fprintf(fp, "launcherwindowtype=%s\n", g_refKeenCfg.launcherWinType == LAUNCHER_WINDOW_DEFAULT ? "default" : (g_refKeenCfg.launcherWinType == LAUNCHER_WINDOW_FULL ? "full" : "software"));
 	fprintf(fp, "launcherexeargs=%s\n", g_refKeenCfg.launcherExeArgs);
 #endif
+	fprintf(fp, "lastselectedgameexe=%s\n", g_refKeenCfg.lastSelectedGameExe);
 	fprintf(fp, "lastselectedgamever=%s\n", (g_refKeenCfg.lastSelectedGameVer != BE_GAMEVER_LAST) ? refkeen_gamever_strs[g_refKeenCfg.lastSelectedGameVer] : "");
+
+	// g_sdlWindow shouldn't be NULL, but just in case...
+	if (g_refKeenCfg.rememberDisplayNum && g_sdlWindow)
+		g_refKeenCfg.displayNum = SDL_GetWindowDisplayIndex(g_sdlWindow);
+
 	fprintf(fp, "displaynum=%d\n", g_refKeenCfg.displayNum);
 	fprintf(fp, "rememberdisplaynum=%s\n", g_refKeenCfg.rememberDisplayNum ? "true" : "false");
 	if (g_refKeenCfg.sdlRendererDriver < 0)
@@ -995,6 +1012,7 @@ static void BEL_ST_SaveConfig(void)
 #ifdef BE_ST_SDL_ENABLE_ABSMOUSEMOTION_SETTING
 	fprintf(fp, "absmousemotion=%s\n", g_refKeenCfg.absMouseMotion ? "true" : "false");
 #endif
+	fprintf(fp, "sndinterthreadbufferratio=%d\n", g_refKeenCfg.sndInterThreadBufferRatio);
 	fprintf(fp, "sndsamplerate=%d\n", g_refKeenCfg.sndSampleRate);
 	fprintf(fp, "sndsubsystem=%s\n", g_refKeenCfg.sndSubSystem ? "true" : "false");
 	fprintf(fp, "oplemulation=%s\n", g_refKeenCfg.oplEmulation ? "true" : "false");
@@ -1710,6 +1728,18 @@ void BE_ST_AltControlScheme_Pop(void)
 	g_sdlControllerSchemeNeedsCleanUp = true;
 }
 
+void BE_ST_AltControlScheme_Reset(void)
+{
+	BEL_ST_AltControlScheme_CleanUp();
+
+	g_sdlControllerMappingPtrsStack.stack[0] = &g_sdlControllerMappingDefault;
+	g_sdlControllerMappingPtrsStack.currPtr = &g_sdlControllerMappingPtrsStack.stack[0];
+	g_sdlControllerMappingPtrsStack.endPtr = &g_sdlControllerMappingPtrsStack.stack[NUM_OF_CONTROLLER_MAPS_IN_STACK];
+	g_sdlControllerMappingActualCurr = g_sdlControllerMappingPtrsStack.stack[0];
+
+	g_sdlControllerSchemeNeedsCleanUp = true;
+}
+
 void BE_ST_AltControlScheme_PrepareControllerMapping(const BE_ST_ControllerMapping *mapping)
 {
 	//if (!g_refKeenCfg.altControlScheme.isEnabled && (g_refKeenCfg.touchInputToggle == TOUCHINPUT_OFF))
@@ -2279,12 +2309,16 @@ void BE_ST_PollEvents(void)
 		}
 	}
 
+#if BE_ST_FILL_AUDIO_IN_MAIN_THREAD
+	BE_ST_PrepareForManualAudioCallbackCall();
+#else
 	// HACK - If audio subsystem is disabled we still want to at least
 	// make the sound callback run (so e.g., no loop gets stuck waiting
 	// for sound playback to complete)
 	extern bool g_sdlAudioSubsystemUp;
 	if (!g_sdlAudioSubsystemUp)
 		BE_ST_PrepareForManualAudioCallbackCall();
+#endif
 }
 
 #ifdef REFKEEN_CONFIG_EVENTS_CALLBACK

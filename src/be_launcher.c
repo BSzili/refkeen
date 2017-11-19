@@ -906,7 +906,7 @@ void BE_Launcher_Start(void)
 	BE_ST_Launcher_RunEventLoop();
 }
 
-static void BEL_Launcher_DoLaunchGame(int gameVer)
+static void BEL_Launcher_DoLaunchGame(int gameVer, void (*mainFuncPtr)(void))
 {
 	BE_ST_Launcher_Shutdown();
 	int argc = 0;
@@ -915,8 +915,7 @@ static void BEL_Launcher_DoLaunchGame(int gameVer)
 	memcpy(argsCopy, g_refKeenCfg.launcherExeArgs, sizeof(argsCopy));
 	char *argv[sizeof(argsCopy)/2+1];
 
-	static char someEXEName[] = "proxy";
-	argv[argc++] = someEXEName;
+	argv[argc++] = NULL; // Currently unused
 
 	char *srcPtr = argsCopy;
 	while (*srcPtr)	
@@ -933,12 +932,12 @@ static void BEL_Launcher_DoLaunchGame(int gameVer)
 				*srcPtr++ = '\0'; // Separate the arguments
 		}
 	}
-	BE_Cross_StartGame(gameVer, argc, argv, 0);
+	BE_Cross_StartGame(gameVer, argc, argv, mainFuncPtr);
 }
 
 void BE_Launcher_Handler_LastGameVerLaunch(BEMenuItem **menuItemP)
 {
-	BEL_Launcher_DoLaunchGame(g_refKeenCfg.lastSelectedGameVer);
+	BEL_Launcher_DoLaunchGame(g_refKeenCfg.lastSelectedGameVer, BE_Cross_GetAccessibleMainFuncPtrForGameVer(g_refKeenCfg.lastSelectedGameExe, g_refKeenCfg.lastSelectedGameVer));
 }
 
 
@@ -1027,9 +1026,22 @@ void BE_Launcher_Handler_SetArgumentsForGame(BEMenuItem **menuItemP)
 	BEL_Launcher_SetCurrentMenu(g_be_launcher_currMenu);
 }
 
+
+static int g_lastGameVerSelectedInMenu;
+
 void BE_Launcher_Handler_GameLaunch(BEMenuItem **menuItemP)
 {
-	BEL_Launcher_DoLaunchGame(BE_Cross_GetGameVerFromInstallation(menuItemP - g_be_launcher_currMenu->menuItems));
+	g_lastGameVerSelectedInMenu = menuItemP - g_be_launcher_currMenu->menuItems;
+	int nOfExes = BE_Cross_GetAccessibleEXEsCountForGameVer(g_lastGameVerSelectedInMenu);
+	if (nOfExes == 1)
+		BEL_Launcher_DoLaunchGame(BE_Cross_GetGameVerFromInstallation(g_lastGameVerSelectedInMenu), BE_Cross_GetAccessibleEXEFuncPtrForGameVerByIndex(0, g_lastGameVerSelectedInMenu));
+	else
+		BE_ST_Launcher_RefreshAndShowSelectGameExeMenuContents(g_lastGameVerSelectedInMenu, nOfExes);
+}
+
+void BE_Launcher_Handler_GameLaunchWithChosenExe(BEMenuItem **menuItemP)
+{
+	BEL_Launcher_DoLaunchGame(BE_Cross_GetGameVerFromInstallation(g_lastGameVerSelectedInMenu), BE_Cross_GetAccessibleEXEFuncPtrForGameVerByIndex((menuItemP - g_be_launcher_currMenu->menuItems), g_lastGameVerSelectedInMenu));
 }
 
 

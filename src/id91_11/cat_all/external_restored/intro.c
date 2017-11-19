@@ -28,13 +28,21 @@
 #include "ext_heads.h"
 #include "ext_gelib.h"
 
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
+#define EXTENSION "ABS"
+#elif defined GAMEVER_CATARM
+#define EXTENSION "ARM"
+#elif defined GAMEVER_CATAPOC
+#define EXTENSION "APC"
+#endif
+
+#ifdef GAMEVER_CATABYSS
 #define GAMEEXE_MAIN_FUNCNAME abysgame_exe_main
-//#define GAMEEXE_FILENAME "ABYSGAME.EXE" // "CATABYSS.EXE for v1.13
-#elif defined REFKEEN_VER_CATARM
+//#define GAMEEXE_FILENAME "ABYSGAME.EXE" // CATABYSS.EXE for v1.13
+#elif (defined GAMEVER_CATARM)
 #define GAMEEXE_MAIN_FUNCNAME armgame_exe_main
 //#define GAMEEXE_FILENAME "ARMGAME.EXE"
-#elif defined REFKEEN_VER_CATAPOC
+#elif (defined GAMEVER_CATAPOC)
 #define GAMEEXE_MAIN_FUNCNAME apocgame_exe_main
 //#define GAMEEXE_FILENAME "APOCGAME.EXE"
 #endif
@@ -48,10 +56,11 @@ extern const char *refkeen_compat_intro_framebot_str;
 extern const char *refkeen_compat_intro_version_title_str;
 extern const char *refkeen_compat_intro_version_rev_str;
 
-static void SetScreenMode (id0_int_t mode);
-static void SetLineWidth (id0_int_t width);
-static id0_boolean_t IsKeyPressed (void);
-static void WaitForKeyRelease (void);
+// REFKEEN - Functions are shared with other sources now, so they aren't static
+/*static*/ void SetScreenMode (id0_int_t mode);
+/*static*/ void SetLineWidth (id0_int_t width);
+/*static*/ id0_boolean_t IsKeyPressed (void);
+/*static*/ void WaitForKeyRelease (void);
 static void FreeAllShapes();
 
 static id0_int_t screenmode;
@@ -64,7 +73,7 @@ static id0_boolean_t havebeep = false;
 
 static struct Shape app_start_shape,
                     page_1_shape, page_2_shape, page_3_shape, page_4_shape, page_5_shape,  
-#ifndef REFKEEN_VER_CATABYSS
+#ifndef GAMEVER_CATABYSS
                     page_6_shape, page_7_shape,
 #endif
                     before_skill_choice_shape, after_loadgame_choice_shape,
@@ -85,6 +94,21 @@ static void Beep(void)
 
 // HACK
 void GAMEEXE_MAIN_FUNCNAME (void);
+
+#ifdef GAMEVER_CATABYSS
+// REFKEEN - New function passed to BE_Cross_Bexecv
+static void intro_exe_main_reverter(void)
+{
+	// Skip "constant" version-specific vars like refkeen_compat_intro_frametop_str
+	screenmode = 0;
+	videocard = (cardtype)0;
+	// REFKEEN - Always set to false anyway, but mention this to be pedantic
+	//havebeep = false;
+	// REFKEEN - No need to free shapes, their fields get refilled,
+	// and, if memory was allocated by e.g., BE_Cross_Bfarmalloc,
+	// it gets deallocated from BE_Cross_Bexecv automatically
+}
+#endif
 
 void intro_exe_main(void)
 {
@@ -131,7 +155,8 @@ void intro_exe_main(void)
 	// REFKEEN difference from vanilla Catacomb Abyss (Shareware release):
 	// Role of ^(a@&r` for INTRO.EXE has been flipped. No need to pass it
 	// (or use start), but if ^(a@&r` is added then you get this message.
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
+//#ifdef GAMEVER_SHAREWARE
 	if (refkeen_current_gamever == BE_GAMEVER_CATABYSS113)
 	{
 		if (!BE_Cross_strcasecmp(id0_argv[1], "^(a@&r`"))
@@ -149,7 +174,7 @@ void intro_exe_main(void)
 	SetScreen(0,0);
 
 	// Prepare to enter the CATACOMB...
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
 	if (ext_LoadShape("SHP05."EXTENSION, &app_start_shape))
 #else
 	if (ext_LoadShape("SHP8."EXTENSION, &app_start_shape))
@@ -165,7 +190,7 @@ void intro_exe_main(void)
 #endif
 	WaitForKeyRelease();
 
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
 	if (ext_LoadShape("SHP01."EXTENSION, &page_2_shape))
 		TrashProg("ERROR : Can't load image.");
 	WaitForKeyRelease();
@@ -256,7 +281,7 @@ void intro_exe_main(void)
 	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_intro;
 	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_intro_skillselection;
 	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_intro_skillconfirm;
-	BE_ST_AltControlScheme_Push();
+	extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback;
 
 	do
 	{
@@ -302,7 +327,7 @@ void intro_exe_main(void)
 				ext_MoveGfxDst(0, 200);
 				UnpackEGAShapeToScreen(&page_5_shape, 0, 0);
 				ScreenToScreen(8000, 0, 40, 200);
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
 				current_page = 0;
 #else
 				++current_page;
@@ -310,7 +335,7 @@ void intro_exe_main(void)
 				// REFKEEN havebeep is always false (and code was removed for Apocalypse)
 				//Beep();
 				break;
-#ifndef REFKEEN_VER_CATABYSS
+#ifndef GAMEVER_CATABYSS
 			case 5: // Credits #3
 				ext_MoveGfxDst(0, 200);
 				UnpackEGAShapeToScreen(&page_6_shape, 0, 0);
@@ -329,7 +354,7 @@ void intro_exe_main(void)
 				break;
 #endif
 			}
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
 			if (current_page == 2)
 				init_sequence_iters_upperbound = 150;
 			else
@@ -346,12 +371,10 @@ void intro_exe_main(void)
 				last_key = TryGetScanCode();
 				if (last_key == 0x1/*0x11B*/) // ESC
 				{
-					// REFKEEN - Alternative controllers support
-					BE_ST_AltControlScheme_Pop();
-
 					FreeAllShapes();
 					SetScreenMode(1);
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
+//#ifdef GAMEVER_SHAREWARE
 					if (refkeen_current_gamever == BE_GAMEVER_CATABYSS113)
 					{
 						id0_argc = 2;
@@ -359,9 +382,8 @@ void intro_exe_main(void)
 						id0_argv[2] = "ENDSCN.SCN";
 						id0_argv[3] = NULL;
 
-						id0_argv[0] = "LOADSCN.EXE";
-						void id0_loadscn_exe_main(void);
-						id0_loadscn_exe_main();
+						void loadscn_exe_main(void);
+						BE_Cross_Bexecv(loadscn_exe_main, id0_argv, intro_exe_main_reverter, false);
 #if 0
 						if (execv("LOADSCN.EXE", id0_argv) == -1)
 						{
@@ -388,21 +410,20 @@ void intro_exe_main(void)
 					select_saved_game = true;
 					general_loop_var = 600;
 				}
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
+//#ifdef GAMEVER_SHAREWARE
 				else if ((refkeen_current_gamever == BE_GAMEVER_CATABYSS113) && (last_key == 0x44/*0x4400*/)) // F10 (Demo)
 				{
-					// REFKEEN - Alternative controllers support
-					extern BE_ST_ControllerMapping g_ingame_altcontrol_mapping_inackback;
-					BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_inackback);
-
 					SetScreenMode(1);
-					// REFKEEN: This is currently unsupported
-					BE_ST_printf("ERROR : Can't find executable.\nOr rather, the \"Demo\" feature is unsupported in this source port.\n");
-					BE_ST_BiosScanCode(0);
-					SetScreenMode(3);
-					general_loop_var = 600;
 
-					BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_intro); // REFKEEN - Alternative controllers support
+					// REFKEEN difference from vanilla Catacomb Abyss (Shareware release):
+					// Role of ^(a@&r` for INTRO.EXE has been flipped. No need to pass it
+					// (or use start), but if ^(a@&r` is added then you get this message.
+					//
+					// However, originally, DEMOCAT.EXE needed it, so it knows to go back
+					// to INTRO.EXE. So let's change the argument.
+					id0_argv[1] = "^(a@&r`";
+					BE_Cross_Bexecv(slidecat_exe_main, id0_argv, intro_exe_main_reverter, false);
 #if 0
 					if (execv("DEMOCAT.EXE", id0_argv) == -1)
 					{
@@ -418,9 +439,6 @@ void intro_exe_main(void)
 		{
 			if (select_saved_game) // Launch CATABYSS.EXE and select saved game
 			{
-				// REFKEEN - Alternative controllers support
-				BE_ST_AltControlScheme_Pop();
-
 				if (!id0_argv[3])
 				{
 					id0_argv[id0_argc++] = "1";
@@ -494,7 +512,7 @@ void intro_exe_main(void)
 							UnpackEGAShapeToScreen(&app_start_shape, 0, 0);
 							ScreenToScreen(8000, 0, 40, 200);
 							// REFKEEN - Alternative controllers support
-							BE_ST_AltControlScheme_Pop();
+							BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_inackback);
 							// REFKEEN havebeep is always false (and code was removed for Apocalypse)
 							//Beep();
 							BE_ST_BiosScanCode(0);
@@ -534,7 +552,7 @@ void intro_exe_main(void)
 							UnpackEGAShapeToScreen(&app_start_shape, 0, 0);
 							ScreenToScreen(8000, 0, 40, 200);
 							// REFKEEN - Alternative controllers support
-							BE_ST_AltControlScheme_Pop();
+							BE_ST_AltControlScheme_PrepareControllerMapping(&g_ingame_altcontrol_mapping_inackback);
 							// REFKEEN havebeep is always false (and code was removed for Apocalypse)
 							//Beep();
 							BE_ST_BiosScanCode(0);
@@ -545,7 +563,8 @@ void intro_exe_main(void)
 					{
 						leave_pre_skill_selection = true;
 						leave_skill_selection = true;
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
+//#ifdef GAMEVER_SHAREWARE
 						current_page = (refkeen_current_gamever == BE_GAMEVER_CATABYSS113) ? 1 : 2;
 #else
 						current_page = 2;
@@ -586,7 +605,7 @@ void intro_TrashProg (const id0_char_t *OutMsg, ...)
 		id0_argv[id0_argc++] = "/NODR";
 		id0_argv[id0_argc] = NULL;
 
-		GAMEEXE_MAIN_FUNCNAME ();
+		BE_Cross_Bexecv(GAMEEXE_MAIN_FUNCNAME, id0_argv, NULL, false);
 #if 0
 		if (execv(GAMEEXE_FILENAME, id0_argv) == -1)
 		{
@@ -611,7 +630,9 @@ void intro_TrashProg (const id0_char_t *OutMsg, ...)
 	BE_ST_HandleExit(0);
 }
 
-static void SetScreenMode (id0_int_t mode)
+// REFKEEN - Functions are shared with other sources now, so they aren't static
+// (applies to SetScreenMode, as well as a few other functions below)
+/*static*/ void SetScreenMode (id0_int_t mode)
 {
 	switch (mode)
 	{
@@ -638,7 +659,7 @@ static void SetScreenMode (id0_int_t mode)
 ====================
 */
 
-static void SetLineWidth (id0_int_t width)
+/*static*/ void SetLineWidth (id0_int_t width)
 {
   id0_int_t i,offset;
 
@@ -666,7 +687,7 @@ static void SetLineWidth (id0_int_t width)
 
 //===========================================================================
 
-static id0_boolean_t IsKeyPressed (void)
+/*static*/ id0_boolean_t IsKeyPressed (void)
 {
 	return BE_ST_KbHit();
 #if 0
@@ -681,7 +702,7 @@ is_pressed:
 #endif
 }
 
-static void WaitForKeyRelease (void)
+/*static*/ void WaitForKeyRelease (void)
 {
 	if (IsKeyPressed())
 		while (IsKeyPressed())
@@ -693,7 +714,7 @@ static void WaitForKeyRelease (void)
 
 static void FreeAllShapes()
 {
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
 	ext_FreeShape(&page_3_shape);
 	ext_FreeShape(&page_2_shape);
 	ext_FreeShape(&page_4_shape);
@@ -727,7 +748,7 @@ void RefKeen_Patch_intro(void)
 {
 	switch (refkeen_current_gamever)
 	{
-#ifdef REFKEEN_VER_CATABYSS
+#ifdef GAMEVER_CATABYSS
 	case BE_GAMEVER_CATABYSS113:
 		refkeen_compat_intro_frametop_str = "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n";
 
@@ -753,7 +774,7 @@ void RefKeen_Patch_intro(void)
 		refkeen_compat_intro_version_rev_str = " version 1.06  (Rev 1) ";
 		break;
 #endif
-#ifdef REFKEEN_VER_CATARM
+#ifdef GAMEVER_CATARM
 	case BE_GAMEVER_CATARM102:
 		refkeen_compat_intro_frametop_str = "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n";
 
@@ -767,7 +788,7 @@ void RefKeen_Patch_intro(void)
 		refkeen_compat_intro_version_rev_str = " VERSION 1.04   (REV 1)";
 		break;
 #endif
-#ifdef REFKEEN_VER_CATAPOC
+#ifdef GAMEVER_CATAPOC
 	case BE_GAMEVER_CATAPOC101:
 		refkeen_compat_intro_frametop_str = "\xD5\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB8\r\n";
 

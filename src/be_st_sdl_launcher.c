@@ -103,7 +103,8 @@ extern const int g_sdlJoystickAxisBinaryThreshold, g_sdlJoystickAxisDeadZone, g_
 extern int g_sdlLastReportedWindowWidth, g_sdlLastReportedWindowHeight;
 // The window and renderer are shared ON PURPOSE:
 // - For seamless transition from launcher to game, if an SDL_WINDOW_FULLSCREEN_DESKTOP window is used with same features.
-// - Additionaly, the renderer is shared since SDL_Texture ** pointers are managed from be_st_sdl_graphics.c (in case textures should be recreated).
+// - Additionally, the renderer is shared since SDL_Texture ** pointers are managed from be_st_sdl_graphics.c (in case textures should be recreated).
+// - Also used to fetch the window's display number on quit, if g_refKeenCfg.rememberDisplayNum == true.
 extern SDL_Window *g_sdlWindow;
 extern SDL_Renderer *g_sdlRenderer;
 // Similarly, this is also shared *on purpose* - for a HACK (guess if touch controls should be shown when game is started)
@@ -152,7 +153,7 @@ static const char *g_be_settingsChoices_boolean[] = {"No","Yes",NULL};
 
 /*** Main menu ***/
 
-BEMENUITEM_DEF_HANDLER_LABELVAR(g_beMainMenuItem_PlayLastChosenGameVer,	60/* HACK to have enough room for string*/, &BE_Launcher_Handler_LastGameVerLaunch)
+BEMENUITEM_DEF_HANDLER_LABELVAR(g_beMainMenuItem_PlayLastChosenGameVer,	79/* HACK to have enough room for string*/, &BE_Launcher_Handler_LastGameVerLaunch)
 BEMENUITEM_DEF_TARGETMENU(g_beMainMenuItem_SelectGame, "Select game", &g_beSelectGameMenu)
 BEMENUITEM_DEF_HANDLER(g_beMainMenuItem_SetArguments, "Set arguments for game *CURRENTLY SET*", &BE_Launcher_Handler_SetArgumentsForGame)
 BEMENUITEM_DEF_TARGETMENU(g_beMainMenuItem_Settings, "Settings", &g_beSettingsMenu)
@@ -177,9 +178,9 @@ BEMenu g_beMainMenu = {
 
 /*** Select game menu ***/
 
-/*static*/ BEMenuItem g_beSelectGameMenuItems[BE_GAMEVER_LAST];
-/*static*/ char g_beSelectGameMenuItemsStrs[BE_GAMEVER_LAST][78]; // Should be MUTABLE strings for layout preparation
-/*static*/ BEMenuItem *g_beSelectGameMenuItemsPtrs[BE_GAMEVER_LAST+4];
+static BEMenuItem g_beSelectGameMenuItems[BE_GAMEVER_LAST];
+static char g_beSelectGameMenuItemsStrs[BE_GAMEVER_LAST][78]; // Should be MUTABLE strings for layout preparation
+static BEMenuItem *g_beSelectGameMenuItemsPtrs[BE_GAMEVER_LAST+4];
 
 BEMENUITEM_DEF_TARGETMENU(g_beSelectGameMenuItem_DisappearedGameHelp, "Help! An installed game disappeared from the list!", &g_beDisappearedGameHelpMenu)
 BEMENUITEM_DEF_TARGETMENU(g_beSelectGameMenuItem_ShowSupportedGameVersions, "Show supported game versions", &g_beSupportedGameVersionsMenu)
@@ -192,11 +193,26 @@ BEMenu g_beSelectGameMenu = {
 	// Ignore the rest
 };
 
+/*** Select game EXE menu ***/
+
+#define MAX_NUM_OF_DISPLAYED_GAME_EXES_PER_VER 4
+
+static BEMenuItem g_beSelectGameExeMenuItems[MAX_NUM_OF_DISPLAYED_GAME_EXES_PER_VER];
+static char g_beSelectGameExeMenuItemsStrs[MAX_NUM_OF_DISPLAYED_GAME_EXES_PER_VER][78]; // Should be MUTABLE strings for layout preparation
+static BEMenuItem *g_beSelectGameExeMenuItemsPtrs[MAX_NUM_OF_DISPLAYED_GAME_EXES_PER_VER];
+
+BEMenu g_beSelectGameExeMenu = {
+	"Choose what to start",
+	&g_beSelectGameMenu,
+	g_beSelectGameExeMenuItemsPtrs, // Array of menu items
+	// Ignore the rest
+};
+
+/*** Disappeared game menu ***/
+
 BEMENUITEM_DEF_STATIC(g_beDisappearedGameHelpMenuItem_Explanation,
 "Reflection Keen can detect compatible DOS game versions from certain installations, including the Catacombs games from GOG.com. Once such a game installation is updated in any minor way, Reflection Keen may fail to locate it. These are the expected behaviors.\nAs an alternative, you can manually add a compatible game installation (if not yet listed)."
 );
-
-/*** Disappeared game menu ***/
 
 BEMenu g_beDisappearedGameHelpMenu = {
 	"Where may a game disappear",
@@ -712,7 +728,11 @@ void BE_ST_Launcher_Prepare(void)
 	for (i = 0; i < g_be_gameinstallations_num; ++i)
 		if (g_refKeenCfg.lastSelectedGameVer == BE_Cross_GetGameVerFromInstallation(i))
 		{
-			snprintf(g_beMainMenuItem_PlayLastChosenGameVer_label, sizeof(g_beMainMenuItem_PlayLastChosenGameVer_label), "Play %s", BE_Cross_GetGameInstallationDescription(i));
+			const char *exeDesc = BE_Cross_GetEXEFileDescriptionStrForGameVer(g_refKeenCfg.lastSelectedGameExe, g_refKeenCfg.lastSelectedGameVer);
+			if (exeDesc)
+				snprintf(g_beMainMenuItem_PlayLastChosenGameVer_label, sizeof(g_beMainMenuItem_PlayLastChosenGameVer_label), "Play %s\n%s", BE_Cross_GetGameInstallationDescription(i), exeDesc);
+			else
+				snprintf(g_beMainMenuItem_PlayLastChosenGameVer_label, sizeof(g_beMainMenuItem_PlayLastChosenGameVer_label), "Play %s", BE_Cross_GetGameInstallationDescription(i));
 			break;
 		}
 	if (i == g_be_gameinstallations_num)
@@ -1041,6 +1061,35 @@ void BE_ST_Launcher_RefreshSelectGameMenuContents(void)
 	g_beSelectGameMenuItemsPtrs[i] = NULL;
 }
 
+void BEL_Launcher_SetCurrentMenu(BEMenu *menu);
+
+void BE_ST_Launcher_RefreshAndShowSelectGameExeMenuContents(int verId, int nOfExes)
+{
+	if (nOfExes > MAX_NUM_OF_DISPLAYED_GAME_EXES_PER_VER)
+	{
+		char error[88];
+		snprintf(error, sizeof(error), "BE_Launcher_RefreshAndShowSelectGameExeMenuContents: Too many EXEs!\n%d", nOfExes);
+		BE_ST_ExitWithErrorMsg(error);
+	}
+
+	const char *exesPtrs[MAX_NUM_OF_DISPLAYED_GAME_EXES_PER_VER];
+	BE_Cross_FillAccessibleEXEFileNamesForGameVer(verId, exesPtrs);
+
+	int i;
+	for (i = 0; i < nOfExes; ++i)
+	{
+		g_beSelectGameExeMenuItemsPtrs[i] = &g_beSelectGameExeMenuItems[i];
+		g_beSelectGameExeMenuItems[i].handler = &BE_Launcher_Handler_GameLaunchWithChosenExe;
+		snprintf(g_beSelectGameExeMenuItemsStrs[i], sizeof(g_beSelectGameExeMenuItemsStrs[i]), "%s", exesPtrs[i]);
+		g_beSelectGameExeMenuItems[i].label = g_beSelectGameExeMenuItemsStrs[i];
+		g_beSelectGameExeMenuItems[i].type = BE_MENUITEM_TYPE_HANDLER;
+	}
+	g_beSelectGameExeMenuItemsPtrs[i] = NULL;
+
+	BE_Launcher_PrepareMenu(&g_beSelectGameExeMenu);
+	BEL_Launcher_SetCurrentMenu(&g_beSelectGameExeMenu);
+}
+
 
 #ifdef BE_LAUNCHER_ENABLE_FULLSCREEN_RES_MENUITEM
 static void BEL_ST_Launcher_ResetDisplayModes(int displayNum)
@@ -1089,8 +1138,6 @@ void BEL_ST_Launcher_RefreshSetArgumentsMenuItemLabel(void)
 /*** SPECIAL - An extra SDL(2)-specific handler not defined in be_launcher.c ***/
 
 #ifdef REFKEEN_CONFIG_CHECK_FOR_STEAM_INSTALLATION
-void BEL_Launcher_SetCurrentMenu(BEMenu *menu);
-
 /* FIXME - This is incomplete! Go over mappings
  * from Steam config *and* refkeen mapping file,
  * and ask the user if it overwrite anything.
@@ -1239,7 +1286,7 @@ static void BEL_ST_Launcher_SetGfxOutputRects(void)
 	{
 		int displayNum = SDL_GetWindowDisplayIndex(g_sdlWindow);
 		// HUGE FIXME - Bad idea!!!
-		if (displayNum < sizeof(g_be_videoSettingsChoices_displayNums)/sizeof(*g_be_videoSettingsChoices_displayNums)) // Ignore last NULL entry
+		if (displayNum < (int)(sizeof(g_be_videoSettingsChoices_displayNums)/sizeof(*g_be_videoSettingsChoices_displayNums))) // Ignore last NULL entry
 			if (1/*g_beVideoSettingsMenuItem_DisplayNum.choice != displayNum*/)
 			{
 				extern BEMenu *g_be_launcher_currMenu;

@@ -203,15 +203,34 @@ int BE_Cross_GetGameVerFromInstallation(int num);
 extern int g_be_gameinstallations_num;
 
 // gameVer should be BE_GAMEVER_LAST if no specific version is desired
-void BE_Cross_StartGame(int gameVerVal, int argc, char **argv, int misc);
+void BE_Cross_StartGame(int gameVerVal, int argc, char **argv, void (*mainFuncPtr)(void));
 
-// Use for game versions selection
+/*** Use for game versions selection ***/
+
 int BE_Cross_DirSelection_GetNumOfRootPaths(void);
 const char **BE_Cross_DirSelection_GetRootPathsNames(void);
 const char **BE_Cross_DirSelection_Start(int rootPathIndex, int *outNumOfSubDirs); // Start dir selection
 void BE_Cross_DirSelection_Finish(void); // Finish dir selection
 const char **BE_Cross_DirSelection_GetNext(int dirIndex, int *outNumOfSubDirs); // Enter dir by index into last array
 const char **BE_Cross_DirSelection_GetPrev(int *outNumOfSubDirs); // Go up in the filesystem hierarchy
+
+
+/*** Use for game EXEs (main functions) selection ***/
+
+// Gets matching description string (AS A C STRING LITERAL), if found, otherwise returns NULL.
+const char *BE_Cross_GetEXEFileDescriptionStrForGameVer(const char *exeFileName, int verId);
+// Gets matching main function pointer, if accessible by the user, otherwise returns default function pointer for game version
+void (*BE_Cross_GetAccessibleMainFuncPtrForGameVer(const char *exeFileName, int verId))(void);
+// Returns the amount of main functions accessible by the user, for the given game version
+int BE_Cross_GetAccessibleEXEsCountForGameVer(int verId);
+// Fills array with C STRING LITERALS consisting of descriptions of the accessible main functions.
+//
+// *** WARNING ***
+// The outStrs array *must* have at least BE_Cross_GetAccessibleEXEsCountForGameVer(verId) pointers.
+void BE_Cross_FillAccessibleEXEFileNamesForGameVer(int verId, const char **outStrs);
+// Returns main function pointer for the given version id, indexed by "index", in the same
+// order in which BE_Cross_FillAccessibleEXEFileNamesForGameVer fills the descriptive strings.
+void (*BE_Cross_GetAccessibleEXEFuncPtrForGameVerByIndex(int index, int verId))(void);
 
 // If select game version has digitized sounds with a common sample rate,
 // then this rate is returned, otherwise 0 is returned.
@@ -379,17 +398,118 @@ int16_t BE_Cross_Brandom(int16_t num);
 // (Internally it uses localtime, which isn't thread-safe on Linux.)
 void BE_Cross_GetLocalDate_UNSAFE(int *y, int *m, int *d);
 
-// Hack for Catacomb Abyss' INTRO and LOADSCN
+/*** Memory management functions - used as alternatives to     ***/
+/*** Borland C++ functions/macros in 16-bit real-mode codebase ***/
+
+void *BE_Cross_Bmalloc(uint16_t size);
+void *BE_Cross_Bfarmalloc(uint32_t size);
+void BE_Cross_Bfree(void *ptr);
+void BE_Cross_Bfarfree(void *ptr);
+
 #ifdef __AMIGA__
 static
 #endif
-inline int32_t BE_Mem_FarCoreLeft(void)
+inline uint16_t BE_Cross_Bcoreleft(void)
 {
-	return 500000;
+	extern uint16_t g_nearBytesLeft;
+	return g_nearBytesLeft;
 }
+
+#ifdef __AMIGA__
+static
+#endif
+inline uint32_t BE_Cross_Bfarcoreleft(void)
+{
+	extern uint32_t g_farBytesLeft;
+	return g_farBytesLeft;
+}
+
+// Use **ONLY* with memory allocated by BE_Cross_Bmalloc/BE_Cross_Bfarmalloc:
+//
+// Somewhat similar to FP_SEG, *but* returns the segment of
+// the *normalized* pointer's form (where the offset is < 16)
+#ifdef __AMIGA__
+static
+#endif
+inline uint16_t BE_Cross_GetPtrNormalizedSeg(void *ptr)
+{
+	extern uint8_t g_be_emulatedMemSpace[];
+	return ((uint8_t *)ptr-g_be_emulatedMemSpace)/16;
+}
+
+// Use **ONLY* with memory allocated by BE_Cross_Bmalloc/BE_Cross_Bfarmalloc:
+//
+// Somewhat similar to FP_OFF, *but* returns the offset of
+// the *normalized* pointer's form (which is always < 16)
+#ifdef __AMIGA__
+static
+#endif
+inline uint16_t BE_Cross_GetPtrNormalizedOff(void *ptr)
+{
+	extern uint8_t g_be_emulatedMemSpace[];
+	return ((uint8_t *)ptr-g_be_emulatedMemSpace)%16;
+}
+
+// Use **ONLY* with memory allocated by BE_Cross_Bmalloc/BE_Cross_Bfarmalloc:
+// Converts segment to given pointer (like MK_FP(seg, 0))
+#ifdef __AMIGA__
+static
+#endif
+inline void *BE_Cross_BGetPtrFromSeg(uint16_t seg)
+{
+	extern uint8_t g_be_emulatedMemSpace[];
+	return g_be_emulatedMemSpace + seg*16;
+}
+
+// Use **ONLY* with memory allocated by BE_Cross_Bmalloc/BE_Cross_Bfarmalloc:
+// A kind of a MK_FP replacement.
+#ifdef __AMIGA__
+static
+#endif
+inline void *BE_Cross_BMK_FP(uint16_t seg, uint16_t off)
+{
+	extern uint8_t g_be_emulatedMemSpace[];
+	return g_be_emulatedMemSpace + seg*16 + off;
+}
+
+// Used ONLY before calling a main function - this loads a piece of
+// an original (DOS) EXE (a chunk of data) to near memory.
+//
+// This can be done AS LONG AS a copy of the UNCOMPRESSED EXE IMAGE
+// is internally loaded to memory.
+void *BE_Cross_BmallocFromEmbeddedData(const char *name, uint16_t *pSize);
+
+// Same as above, but loads data to far memory
+void *BE_Cross_BfarmallocFromEmbeddedData(const char *name, uint32_t *pSize);
 
 // Use this in cases an original DOS program attempts to access contents of
 // segment no. 0 for some reason
 extern uint8_t g_be_cross_dosZeroSeg[];
+
+// Variables set before calling a main function
+extern const char **g_be_argv;
+extern int g_be_argc;
+
+extern void (*be_lastSetMainFuncPtr)(void);
+
+// Roughly a replacement for execv, with a few exceptions/notes:
+// - There's NO GUARANTEE the calling "program" (e.g., a game)
+// will be ready in its EXACT original case, once its "main" function
+// is called again.
+// - If, for any reason, memory management was manually done with
+// functions like malloc (rather than, say, BE_Cross_Bmalloc),
+// such memory is NOT cleaned up automatically.
+// - Being optional, a finalizer function pointer can be passed, used
+// to RESTORE the calling "program" to its original state, in terms
+// of e.g., values of global and static variables. Note that while
+// managed memory (e.g., memory allocated by BE_Cross_Bmalloc) may be
+// automatically freed by BE_Cross_Bexecv, the pointer VARIABLES still
+// have to be restored. Furthermore, again, non-managed memory allocated
+// by malloc or another function may remain as a memory leak.
+// - The input main function pointer is assumed to point to a function
+// that does NOT accept any argument. These can be separatedly accessed.
+// - Finally, the last parameter tells if mainFunc expects the argc and argv
+// arguments, or not (they're still stored in global variables).
+void BE_Cross_Bexecv(void (*mainFunc)(void), const char **argv, void (*finalizer)(void), bool passArgsToMainFunc);
 
 #endif // BE_CROSS_H
