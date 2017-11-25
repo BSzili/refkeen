@@ -4224,6 +4224,12 @@ US_CheckHighScore(id0_long_t score,id0_word_t other)
 				n;
 	HighScore	myscore;
 
+#ifdef __AMIGA__
+	// CD32 mode
+	if (g_refKeenCfg.isBilinear)
+		return;
+#endif
+
 	strcpy(myscore.name,"");
 	myscore.score = score;
 	myscore.completed = other;
