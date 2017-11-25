@@ -771,7 +771,14 @@ void 	SetupGameLevel (id0_boolean_t loadnow)
 		CalcInactivate ();
 	}
 
-
+#ifdef __AMIGA__
+	if (!mapon)
+	{
+		// CD32 mode
+		void BE_ST_CompressState(void);
+		BE_ST_CompressState();
+	}
+#endif
 }
 
 //==========================================================================

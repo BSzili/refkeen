@@ -426,17 +426,12 @@ USL_CheckSavedGames(void)
 		if (g_refKeenCfg.isBilinear)
 		{
 			int BE_ST_SaveExists(char *filename);
-			int num = 0;
+			void BE_ST_BuildSaveName(char *name, size_t size);
 
-			if ((num = BE_ST_SaveExists(filename)))
+			if (BE_ST_SaveExists(filename))
 			{
 				ok = true;
-#ifdef REFKEEN_VER_CAT3D
-				extern const id0_char_t *levelnames[];
-				snprintf(game->name, sizeof(game->name), "%d. %s", num, levelnames[num-1]);
-#else
-				snprintf(game->name, sizeof(game->name), "Level %d", num);
-#endif
+				BE_ST_BuildSaveName(game->name, sizeof(game->name));
 			}
 		}
 		else

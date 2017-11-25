@@ -1372,6 +1372,9 @@ SDL_ShutDevice(void)
 		SDL_ShutPC();
 		break;
 	case sdm_AdLib:
+#ifdef __AMIGA__
+		BEL_ST_FreeDigiSounds();
+#endif
 		SDL_ShutAL();
 		break;
 #if REFKEEN_SD_ENABLE_SOUNDBLASTER
@@ -1399,6 +1402,9 @@ SDL_StartDevice(void)
 	switch (SoundMode)
 	{
 	case sdm_AdLib:
+#ifdef __AMIGA__
+		BEL_ST_LoadDigiSounds();
+#endif
 		SDL_StartAL();
 		break;
 #if REFKEEN_SD_ENABLE_SOUNDBLASTER
@@ -1806,6 +1812,9 @@ SD_PlaySound(id0_word_t sound)
 		//SDL_PCPlaySound((void id0_far *)s);
 		break;
 	case sdm_AdLib:
+#ifdef __AMIGA__
+		BE_ST_PlaySound(sound);
+#endif
 		SDL_ALPlaySound((AdLibSound id0_far *)s);
 		//SDL_ALPlaySound((void id0_far *)s);
 		break;
@@ -1886,6 +1895,9 @@ SD_StopSound(void)
 		SDL_PCStopSound();
 		break;
 	case sdm_AdLib:
+#ifdef __AMIGA__
+		BE_ST_StopSound();
+#endif
 		SDL_ALStopSound();
 		break;
 #if REFKEEN_SD_ENABLE_SOUNDBLASTER

@@ -42,6 +42,11 @@ char *BE_Cross_itoa_dec(int16_t n, char *buffer);
 void BE_Cross_LogMessage(BE_Log_Message_Class_T msgClass, const char *format, ...)
 {
 	// TODO: For now we simply do this.
+#ifdef __AMIGA__
+	// CD32 mode
+	if (g_refKeenCfg.isBilinear)
+		return;
+#endif
 	va_list args;
 	va_start(args, format);
 	switch (msgClass)

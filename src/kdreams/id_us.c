@@ -449,6 +449,22 @@ USL_CheckSavedGames(void)
 	{
 		filename = USL_GiveSaveName(i);
 		ok = false;
+#ifdef __AMIGA__
+		// CD32 mode
+		if (g_refKeenCfg.isBilinear)
+		{
+			int BE_ST_SaveExists(char *filename);
+			void BE_ST_BuildSaveName(char *name, size_t size);
+
+			if (BE_ST_SaveExists(filename))
+			{
+				ok = true;
+				//snprintf(game->name, sizeof(game->name), "Save %d bombs %d", i, num-1);
+				BE_ST_BuildSaveName(game->name, sizeof(game->name));
+			}
+		}
+		else
+#endif
 		if (BE_Cross_IsFileValid(file = BE_Cross_open_rewritable_for_reading(filename)))
 		//if ((file = open(filename,O_BINARY | O_RDONLY)) != -1)
 		{
@@ -3062,6 +3078,36 @@ USL_CtlDLButtonCustom(UserCall call,id0_word_t i,id0_word_t n)
 		VW_UpdateScreen();
 
 		err = 0;
+#ifdef __AMIGA__
+		// CD32 mode
+		if (g_refKeenCfg.isBilinear)
+		{
+			bool BE_ST_RestoreState(char *filename);
+			void BE_ST_DecompressState(void);
+			void SetupGameLevel (id0_boolean_t loadnow);
+
+			if (BE_ST_RestoreState(filename))
+			{
+				BE_ST_DecompressState();
+				SetupGameLevel(true);
+				loadedgame = true;
+				Paused = true;
+			}
+			else
+			{
+				//err = -1;
+				abortgame = true;
+				//Communication = uc_None;
+				//CtlPanelDone = false;
+				USL_HandleError(-1);
+			}
+			//USL_DrawCtlPanel();
+			VW_ShowCursor();
+			US_RestoreWindow(&wr);
+			//return;
+			break;
+		}
+#endif
 		if (BE_Cross_IsFileValid(file = BE_Cross_open_rewritable_for_reading(filename)))
 		//if ((file = open(filename,O_BINARY | O_RDONLY)) != -1)
 		{
@@ -3131,6 +3177,35 @@ USL_CtlDSButtonCustom(UserCall call,id0_word_t i,id0_word_t n)
 	if (ip->sel & ui_Disabled)
 		return(false);
 
+#ifdef __AMIGA__
+	// CD32 mode
+	if (g_refKeenCfg.isBilinear)
+	{
+		int BE_ST_SaveState(char *filename);
+		void BE_ST_BuildSaveName(char *name, size_t size);
+
+		filename = USL_GiveSaveName(n/2);
+		strcpy(game->name,filename);
+		//USL_ShowLoadSave("Saving",game->name);
+
+		if (BE_ST_SaveState(filename))
+		{
+			//snprintf(game->name, sizeof(game->name), "Save %d bombs %d", n/2, num-1);
+			BE_ST_BuildSaveName(game->name, sizeof(game->name));
+			game->present = true;
+			//GameIsDirty = false;
+			(ip - 1)->sel &= ~ui_Disabled;
+		}
+		else
+		{
+			USL_HandleError(ENOMEM);
+		}
+		//USL_SetupCard();
+		//return;
+		USL_DrawItem(i,n - 1);
+		return(true);
+	}
+#endif
 	FlushHelp = true;
 	fontcolor = F_SECONDCOLOR;
 	USL_ShowHelp("Enter Game Name / Escape Aborts");
@@ -3471,6 +3546,14 @@ USL_CtlDEButtonCustom(UserCall call,id0_word_t i,id0_word_t n)
 	switch (call)
 	{
 	case uic_Hit:
+#ifdef __AMIGA__
+		// CD32 mode
+		if (g_refKeenCfg.isBilinear)
+		{
+			abortgame = true;
+			break;
+		}
+#endif
 		QuitToDos = true;
 		break;
 	case uic_Draw:

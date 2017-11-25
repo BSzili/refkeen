@@ -174,6 +174,15 @@ static void BEL_ST_PrepareBitmap(struct BitMap *BM, uint16_t firstByte)
 	BM->Planes[3] = &g_sdlVidMem->egaGfx[3][firstByte];
 }
 
+static void BEL_ST_UpdateBitmap(struct BitMap *bm, uint16_t firstByte)
+{
+	bm->BytesPerRow = g_sdlLineWidth;
+	bm->Planes[0] = &g_sdlVidMem->egaGfx[0][firstByte];
+	bm->Planes[1] = &g_sdlVidMem->egaGfx[1][firstByte];
+	bm->Planes[2] = &g_sdlVidMem->egaGfx[2][firstByte];
+	bm->Planes[3] = &g_sdlVidMem->egaGfx[3][firstByte];
+}
+
 static void BEL_ST_CloseScreen(void)
 {
 	D(bug("%s()\n", __FUNCTION__));
@@ -224,7 +233,9 @@ static void BEL_ST_ReopenScreen(void)
 	CloseLibrary(OpenLibrary("freeanim.library", 0)); 
 
 	g_currentBitMap = 0;
-	BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], 0);
+	//BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], 0);
+	BEL_ST_PrepareBitmap(&g_screenBitMaps[0], 0);
+	BEL_ST_PrepareBitmap(&g_screenBitMaps[1], 0);
 
 	if ((g_amigaScreen = OpenScreenTags(NULL, 
 		SA_DisplayID, modeid,
@@ -428,7 +439,8 @@ void BE_ST_SetScreenStartAddress(uint16_t crtc)
 	{
 		g_sdlScreenStartAddress = crtc;
 		g_currentBitMap ^= 1;
-		BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], g_sdlScreenStartAddress);
+		//BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], g_sdlScreenStartAddress);
+		BEL_ST_UpdateBitmap(&g_screenBitMaps[g_currentBitMap], g_sdlScreenStartAddress);
 		ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
 		WaitTOF();
 		//WaitBOVP(&g_amigaScreen->ViewPort);
@@ -441,14 +453,17 @@ void BE_ST_SetScreenStartAddressAndPelPanning(uint16_t crtc, uint8_t panning)
 	D(bug("%s(%u,%u)\n", __FUNCTION__, crtc, panning));
 
 #if 1
-	uint16_t newScreenStartAddress = (crtc & (uint16_t)~1);
+	//uint16_t newScreenStartAddress = (crtc & (uint16_t)~1);
+	//uint8_t newPelPanning = panning + (crtc & 1) * 8;
+	uint16_t newScreenStartAddress = (crtc / 2)*2;
 	uint8_t newPelPanning = panning + (crtc % 2)*8;
 
 	if (g_sdlScreenStartAddress != newScreenStartAddress || g_sdlPelPanning != newPelPanning)
 	{
 		g_sdlScreenStartAddress = newScreenStartAddress;
 		g_currentBitMap ^= 1;
-		BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], newScreenStartAddress);
+		//BEL_ST_PrepareBitmap(&g_screenBitMaps[g_currentBitMap], newScreenStartAddress);
+		BEL_ST_UpdateBitmap(&g_screenBitMaps[g_currentBitMap], newScreenStartAddress);
 		//ChangeVPBitMap(&g_amigaScreen->ViewPort, &g_screenBitMaps[g_currentBitMap], dbuf);
 		g_amigaScreen->ViewPort.RasInfo->BitMap = &g_screenBitMaps[g_currentBitMap];
 		g_sdlPelPanning = newPelPanning;

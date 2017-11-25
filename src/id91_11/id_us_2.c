@@ -1163,20 +1163,15 @@ USL_DoSaveGame(UserItem id0_far *item)
 	if (g_refKeenCfg.isBilinear)
 	{
 		int BE_ST_SaveState(char *filename);
-		int num;
+		void BE_ST_BuildSaveName(char *name, size_t size);
 
 		filename = USL_GiveSaveName(n);
 		strcpy(game->name,filename);
 		USL_ShowLoadSave("Saving",game->name);
 
-		if ((num = BE_ST_SaveState(filename)))
+		if (BE_ST_SaveState(filename))
 		{
-#ifdef REFKEEN_VER_CAT3D
-			extern const id0_char_t *levelnames[];
-			snprintf(game->name, sizeof(game->name), "%d. %s", num, levelnames[num-1]);
-#else
-			snprintf(game->name, sizeof(game->name), "Level %d", num);
-#endif
+			BE_ST_BuildSaveName(game->name, sizeof(game->name));
 			game->present = true;
 			//GameIsDirty = false;
 		}

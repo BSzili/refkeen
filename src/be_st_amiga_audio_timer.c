@@ -104,30 +104,57 @@ static void BEL_ST_RemTimerInt(void)
 }
 
 #ifdef USE_DIGI_SOUND
-static void BEL_ST_LoadDigiSounds(void)
+typedef struct
+{
+	uint32_t magic; /* magic number */
+	uint32_t hdr_size; /* size of this header */ 
+	uint32_t data_size; /* length of data (optional) */ 
+	uint32_t encoding; /* data encoding format */
+	uint32_t sample_rate; /* samples per second */
+	uint32_t channels; /* number of interleaved channels */
+} Audio_filehdr;
+
+#define AUDIO_FILE_MAGIC ((uint32_t)0x2e736e64) /* Define the magic number */  
+#define AUDIO_FILE_ENCODING_LINEAR_8 (2) /* 8-bit linear PCM */
+
+/*static*/ void BEL_ST_LoadDigiSounds(void)
 {
 	char filename[256];
 	BE_FILE_T fp;
 
 	for (int i = 0; i < LASTSOUND; i++)
 	{
-		snprintf(filename, sizeof(filename), "asound%02d.raw", i);
+		snprintf(filename, sizeof(filename), "sound%02d.au", i);
 		if ((fp = BE_Cross_open_readonly_for_reading(filename)))
 		//if ((fp = fopen(filename, "rb")))
 		{
-			int32_t nbyte = BE_Cross_FileLengthFromHandle(fp);
-			if ((g_digiSounds[i] = AllocVec(nbyte, MEMF_CHIP|MEMF_PUBLIC)))
+			Audio_filehdr header;
+			int32_t rbyte = BE_Cross_readInt8LEBuffer(fp, &header, sizeof(header));
+			// TODO check if the sample is OPL_SAMPLE_RATE
+			if (rbyte == sizeof(header) &&
+				header.magic == AUDIO_FILE_MAGIC &&
+				header.encoding == AUDIO_FILE_ENCODING_LINEAR_8 &&
+				header.channels == 1)
 			{
-				BE_Cross_readInt8LEBuffer(fp, g_digiSounds[i], nbyte);
-				g_digiSoundSamples[i] = nbyte;
-				g_sdlEmulatedOPLChipReady = true;
+				int32_t nbyte = header.data_size;
+				if (nbyte == -1)
+				{
+					nbyte = BE_Cross_FileLengthFromHandle(fp);
+					nbyte -= header.hdr_size;
+				}
+				if ((g_digiSounds[i] = AllocVec(nbyte, MEMF_CHIP|MEMF_PUBLIC)))
+				{
+					BE_Cross_readInt8LEBuffer(fp, g_digiSounds[i], nbyte);
+					g_digiSoundSamples[i] = nbyte;
+					g_sdlEmulatedOPLChipReady = true;
+				}
 			}
 			BE_Cross_close(fp);
 		}
 	}
 }
 
-static void BEL_ST_FreeDigiSounds(void)
+/*static*/ void BEL_ST_FreeDigiSounds(void)
 {
 	for (int i = 0; i < LASTSOUND; i++)
 	{
@@ -135,6 +162,7 @@ static void BEL_ST_FreeDigiSounds(void)
 		g_digiSounds[i] = NULL;
 		g_digiSoundSamples[i] = 0;
 	}
+	g_sdlEmulatedOPLChipReady = false;
 }
 #endif
 
@@ -142,11 +170,12 @@ void BE_ST_ShutdownAudio(void);
 
 void BE_ST_InitAudio(void)
 {
-	//UBYTE whichannel[] = {1, 2, 4, 8};
-	UBYTE whichannel[] = {3, 5, 10, 12};
+	UBYTE whichannel[] = {1, 2, 4, 8};
+	//UBYTE whichannel[] = {3, 5, 10, 12};
 
 	g_sdlTimeCount = 0;
-	g_sdlEmulatedOPLChipReady = false;
+	//g_sdlEmulatedOPLChipReady = false;
+	g_sdlEmulatedOPLChipReady = true;
 
 	if (GfxBase->DisplayFlags & PAL)
 		g_audioClock = 3546895;
@@ -168,9 +197,11 @@ void BE_ST_InitAudio(void)
 				{
 					g_squareWave[0] = 127;
 					g_squareWave[1] = -127;
+					/*
 #ifdef USE_DIGI_SOUND
 					BEL_ST_LoadDigiSounds();
 #endif
+					*/
 #ifdef NO_FILTER
 					// turn off the 3.2 kHz low-pass filter
 					g_restoreFilter = !(ciaa->ciapra & CIAF_LED) ? true : false;
@@ -186,17 +217,23 @@ void BE_ST_InitAudio(void)
 
 void BE_ST_ShutdownAudio(void)
 {
+	/*
 #ifdef USE_DIGI_SOUND
 	BEL_ST_FreeDigiSounds();
 #endif
+	*/
 
 	if (g_audioReq)
 	{
 		// Should I free the channel here?
 		/*g_audioReq->ioa_Request.io_Command = ADCMD_FREE;
 		DoIO((struct IORequest *)g_audioReq);*/
-		/*AbortIO((struct IORequest *)g_audioReq);
-		WaitIO((struct IORequest *)g_audioReq);*/
+		if (g_audioReq->ioa_Request.io_Command != ADCMD_ALLOCATE &&
+			!CheckIO((struct IORequest *)g_audioReq))
+		{
+			AbortIO((struct IORequest *)g_audioReq);
+			WaitIO((struct IORequest *)g_audioReq);
+		}
 		CloseDevice((struct IORequest *)g_audioReq);
 		DeleteIORequest((struct IORequest *)g_audioReq);
 		g_audioReq = NULL;
@@ -313,20 +350,6 @@ void BE_ST_PCSpeakerOn(uint16_t spkVal)
 	if (!g_squareWave)
 		return;
 
-	/*
-	g_audioReq->ioa_Request.io_Command = CMD_FLUSH;
-	DoIO((struct IORequest *)g_audioReq);
-	//AbortIO((struct IORequest *)g_audioReq);
-
-	g_audioReq->ioa_Request.io_Command = CMD_WRITE;
-	g_audioReq->ioa_Request.io_Flags = ADIOF_PERVOL;
-	g_audioReq->ioa_Data = (UBYTE *)g_squareWave;
-	g_audioReq->ioa_Length = SQUARE_SAMPLES;
-	g_audioReq->ioa_Period = g_audioClock / (SQUARE_SAMPLES * (PC_PIT_RATE / spkVal));
-	g_audioReq->ioa_Volume = 64;
-	g_audioReq->ioa_Cycles = 0;
-	BeginIO((struct IORequest *)g_audioReq);
-	*/
 	BEL_ST_PlaySample(g_squareWave, SQUARE_SAMPLES, 0, SQUARE_SAMPLES * (PC_PIT_RATE / spkVal));
 }
 
@@ -335,12 +358,6 @@ void BE_ST_PCSpeakerOff(void)
 	if (!g_squareWave)
 		return;
 
-	/*
-	g_audioReq->ioa_Request.io_Command = CMD_STOP;
-	BeginIO((struct IORequest *)g_audioReq);
-	g_audioReq->ioa_Request.io_Command = CMD_RESET;
-	BeginIO((struct IORequest *)g_audioReq);
-	*/
 	BEL_ST_StopSample();
 }
 
@@ -381,45 +398,6 @@ uint32_t BE_ST_GetTimeCount(void)
 {
 	return g_sdlTimeCount;
 }
-
-/*
-void BE_ST_SetTimeCount(uint32_t newcount)
-{
-	Forbid();
-	g_sdlTimeCount = newcount;
-	Permit();
-}
-
-void BE_ST_TimeCountWaitForDest(uint32_t dsttimecount)
-{
-#ifdef TIMER_SIGNAL
-	if (g_sdlTimeCount >= dsttimecount)
-		return;
-
-	SetSignal(0, SIGBREAKF_CTRL_F);
-	g_dstTimeCount = dsttimecount;
-	Wait(SIGBREAKF_CTRL_F);
-#else
-	while (g_sdlTimeCount<dsttimecount)
-		BE_ST_ShortSleep();
-#endif
-}
-
-void BE_ST_TimeCountWaitFromSrc(uint32_t srctimecount, int16_t timetowait)
-{
-#ifdef TIMER_SIGNAL
-	if (g_sdlTimeCount >= srctimecount+timetowait)
-		return;
-//printf("BE_ST_TimeCountWaitFromSrc %u %d %u\n", srctimecount, timetowait, g_sdlTimeCount);
-	SetSignal(0, SIGBREAKF_CTRL_F);
-	g_dstTimeCount = srctimecount+timetowait;
-	Wait(SIGBREAKF_CTRL_F);
-#else
-	while (g_sdlTimeCount-srctimecount<timetowait)
-		BE_ST_ShortSleep();
-#endif
-}
-*/
 
 void BE_ST_WaitForNewVerticalRetraces(int16_t number)
 {

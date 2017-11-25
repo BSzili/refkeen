@@ -45,6 +45,7 @@ BEOBJECTS=$(BEOBJ)/actual_main.o \
           $(BEOBJ)/be_cross_fs.o \
           $(BEOBJ)/be_cross_mem_amiga.o \
           $(BEOBJ)/be_st_amiga.o \
+          $(BEOBJ)/be_st_amiga_cd32.o \
           $(BEOBJ)/be_st_amiga_audio_timer.o \
           $(BEOBJ)/be_st_amiga_graphics.o \
           $(BEOBJ)/crc32.o \

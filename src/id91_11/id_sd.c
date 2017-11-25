@@ -821,7 +821,6 @@ asm	out	dx,al
 	HackCount++;
 
 #if USE_MUSIC
-//#ifndef __AMIGA__
 	if (MusicMode == smm_AdLib)
 	{
 		SDL_ALService();
@@ -846,7 +845,6 @@ asm	out	dx,al
 		}
 	}
 	else
-//#endif
 #endif
 	{
 		if (!(++count & 1))
@@ -906,6 +904,9 @@ SDL_ShutDevice(void)
 		SDL_ShutPC();
 		break;
 	case sdm_AdLib:
+#ifdef __AMIGA__
+		BEL_ST_FreeDigiSounds();
+#endif
 		SDL_ShutAL();
 		break;
 	}
@@ -935,6 +936,9 @@ SDL_StartDevice(void)
 	switch (SoundMode)
 	{
 	case sdm_AdLib:
+#ifdef __AMIGA__
+		BEL_ST_LoadDigiSounds();
+#endif
 		SDL_StartAL();
 		break;
 	}
@@ -1253,10 +1257,9 @@ SD_PlaySound(soundnames sound)
 	case sdm_AdLib:
 #ifdef __AMIGA__
 		BE_ST_PlaySound(sound);
-#else
+#endif
 		SDL_ALPlaySound((AdLibSound id0_far *)s);
 		//SDL_ALPlaySound((void id0_far *)s);
-#endif
 		break;
 	}
 
@@ -1281,11 +1284,7 @@ SD_SoundPlaying(void)
 		result = pcSound? true : false;
 		break;
 	case sdm_AdLib:
-#ifdef __AMIGA__
-		result = BE_ST_SoundPlaying();
-#else
 		result = alSound? true : false;
-#endif
 		break;
 	}
 
@@ -1311,9 +1310,8 @@ SD_StopSound(void)
 	case sdm_AdLib:
 #ifdef __AMIGA__
 		BE_ST_StopSound();
-#else
-		SDL_ALStopSound();
 #endif
+		SDL_ALStopSound();
 		break;
 	}
 
